@@ -5,6 +5,8 @@ namespace NapisyPL.Core.ContextResolution;
 
 public static class GenderReviewProtocol
 {
+    public const double MinimumCorrectionConfidence = 0.75;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -23,7 +25,9 @@ public static class GenderReviewProtocol
             pair => pair.Key,
             pair => new
             {
-                gender = pair.Value.Gender.ToString().ToLowerInvariant(),
+                gender = pair.Value.Confidence >= MinimumCorrectionConfidence
+                    ? pair.Value.Gender.ToString().ToLowerInvariant()
+                    : "unknown",
                 confidence = pair.Value.Confidence
             });
 
@@ -31,11 +35,14 @@ public static class GenderReviewProtocol
         {
             cueSpeakers.TryGetValue(pair.First.Index, out var speaker);
             context.Lines.TryGetValue(pair.First.Index, out var lineContext);
+            var trustedAddressee = lineContext is { Confidence: >= MinimumCorrectionConfidence }
+                ? lineContext.Addressee
+                : null;
             return new
             {
                 id = pair.First.Index,
                 speaker,
-                addressee = lineContext?.Addressee,
+                addressee = trustedAddressee,
                 addresseeConfidence = lineContext?.Confidence,
                 source = pair.First.Text,
                 polish = pair.Second.Text
@@ -47,7 +54,7 @@ public static class GenderReviewProtocol
         You are a conservative Polish subtitle grammar reviewer.
         Review ONLY grammatical gender and singular/plural agreement that can be supported by the supplied speaker/addressee metadata and English source.
         Do NOT restyle, paraphrase, censor, improve tone, alter names, or rewrite already-correct lines.
-        If evidence is uncertain, leave the line unchanged.
+        Treat unknown gender or a missing addressee as insufficient evidence. If evidence is uncertain, leave the line unchanged.
         Return ONLY a JSON array containing CHANGED lines. If nothing should change, return [].
         Exact output shape: [{"id":123,"text":"corrected Polish subtitle"}]
         Never output explanations or chain of thought.
