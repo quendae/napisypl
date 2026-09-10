@@ -22,7 +22,7 @@ public sealed class SpeakerDiarizationService(
         var threadCount = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
         var config = new OfflineSpeakerDiarizationConfig();
         config.Segmentation.Pyannote.Model = options.SegmentationModelPath;
-        config.Segmentation.Pyannote.WindowShiftRatio = 0.1f;
+        // sherpa-onnx 1.13.5 uses the pyannote default window shift ratio (0.1).
         config.Segmentation.NumThreads = threadCount;
         config.Segmentation.Provider = "cpu";
         config.Embedding.Model = options.EmbeddingModelPath;
