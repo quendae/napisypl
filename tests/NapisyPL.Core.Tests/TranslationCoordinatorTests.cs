@@ -79,6 +79,8 @@ public sealed class TranslationCoordinatorTests
     private sealed class FakeProvider : ITranslationProvider
     {
         public string DisplayName => "fake";
+        public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.LlmDefault;
+
         public Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
         {
             IReadOnlyDictionary<int, string> result = segments.ToDictionary(x => x.Id, x => "PL: " + x.Text);
@@ -89,6 +91,8 @@ public sealed class TranslationCoordinatorTests
     private sealed class MissingSegmentProvider : ITranslationProvider
     {
         public string DisplayName => "missing";
+        public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.LlmDefault;
+
         public Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
         {
             IReadOnlyDictionary<int, string> result = new Dictionary<int, string> { [1] = "Jeden" };
