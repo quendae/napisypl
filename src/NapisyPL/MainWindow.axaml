@@ -58,7 +58,7 @@
             <TextBlock Text="Klucz API" FontWeight="SemiBold" />
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Klucz jest używany tylko w tej sesji" />
-              <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż" VerticalAlignment="Center" Checked="OnRevealKeyChanged" Unchecked="OnRevealKeyChanged" />
+              <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż" VerticalAlignment="Center" IsCheckedChanged="OnRevealKeyChanged" />
             </Grid>
             <TextBlock x:Name="ApiKeyHintText" Text="Klucz nie jest zapisywany na dysku." FontSize="12" Foreground="{DynamicResource MutedBrush}" />
           </StackPanel>
