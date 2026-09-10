@@ -22,5 +22,23 @@ public sealed class FfprobeParserTests
         Assert.True(tracks[0].IsText);
         Assert.Equal("eng", tracks[0].Language);
         Assert.False(tracks[1].IsText);
+        Assert.Same(tracks[0], FfprobeParser.ChooseDefault(tracks));
+    }
+
+    [Fact]
+    public void ChooseDefault_PrefersFirstTextTrackWhenLanguageIsMissing()
+    {
+        const string json = """
+        {
+          "streams": [
+            { "index": 1, "codec_name": "hdmv_pgs_subtitle" },
+            { "index": 3, "codec_name": "ass", "tags": { "title": "Signs" } }
+          ]
+        }
+        """;
+
+        var tracks = FfprobeParser.Parse(json);
+
+        Assert.Equal(3, FfprobeParser.ChooseDefault(tracks)?.StreamIndex);
     }
 }
