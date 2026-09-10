@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using NapisyPL.Core.Models;
@@ -13,7 +12,7 @@ public sealed class AnthropicProvider(HttpClient httpClient, string apiKey, stri
     public async Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/v1/messages");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
         request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
         request.Content = JsonContent.Create(new
         {
