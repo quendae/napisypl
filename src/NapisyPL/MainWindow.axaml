@@ -1,9 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NapisyPL.MainWindow"
-        Title="NapisyPL"
-        Width="820" Height="720"
-        MinWidth="680" MinHeight="600"
+        Title="SubFlow"
+        Width="820" Height="800"
+        MinWidth="680" MinHeight="640"
         Background="{DynamicResource CanvasBrush}">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="34,28,34,34" Spacing="18">
@@ -16,8 +16,8 @@
       </Border>
 
       <StackPanel Spacing="4">
-        <TextBlock Text="NapisyPL" FontSize="28" FontWeight="SemiBold" />
-        <TextBlock Text="Wyciągnij angielskie napisy z filmu lub otwórz plik napisów, a potem przetłumacz je na polski." Foreground="{DynamicResource MutedBrush}" FontSize="15" TextWrapping="Wrap" />
+        <TextBlock Text="SubFlow" FontSize="28" FontWeight="SemiBold" />
+        <TextBlock Text="Wyciągnij angielskie napisy z filmu, otwórz plik napisów albo przetłumacz cały folder na polski." Foreground="{DynamicResource MutedBrush}" FontSize="15" TextWrapping="Wrap" />
       </StackPanel>
 
       <Border x:Name="DropZone" Classes="dropzone"
@@ -27,9 +27,12 @@
               DragDrop.DragOver="OnDragOver"
               DragDrop.Drop="OnDrop">
         <StackPanel Spacing="10" HorizontalAlignment="Center">
-          <TextBlock Text="Upuść film lub napisy" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <TextBlock Text="Upuść film, napisy lub folder" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
           <TextBlock x:Name="SelectedFileText" Text="MKV, MP4, MOV, AVI, WebM · SRT, ASS, SSA, VTT, TXT" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" TextWrapping="Wrap" />
-          <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" HorizontalAlignment="Center" Padding="16,8" />
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" Padding="16,8" />
+            <Button x:Name="ChooseFolderButton" Content="Wybierz folder" Click="OnChooseFolderClick" Padding="16,8" />
+          </StackPanel>
         </StackPanel>
       </Border>
 
@@ -79,10 +82,21 @@
             <Button x:Name="TranslateButton" Classes="primary" Content="Tłumacz na polski" Click="OnTranslateClick" IsEnabled="False" />
             <Button x:Name="CancelButton" Grid.Column="1" Content="Anuluj" Click="OnCancelClick" IsVisible="False" MinWidth="88" />
           </Grid>
+
           <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="6" Value="0" />
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <TextBlock x:Name="StatusText" Text="Wybierz plik, aby rozpocząć." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+
+          <Border x:Name="LiveProgressPanel" Background="#F4F5F7" BorderBrush="#D8DDE5" BorderThickness="1" CornerRadius="6" Padding="12,10" IsVisible="False">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="BatchTitleText" Text="Tłumaczenie" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}" />
+              <TextBlock x:Name="BatchCurrentText" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock x:Name="BatchDetailText" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBlock x:Name="StatusText" Text="Wybierz plik lub folder, aby rozpocząć." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
             <Button x:Name="OpenFolderButton" Grid.Column="1" Content="Pokaż plik" Click="OnOpenFolderClick" IsVisible="False" />
+            <Button x:Name="OpenLogButton" Grid.Column="2" Content="Otwórz log" Click="OnOpenLogClick" />
           </Grid>
         </StackPanel>
       </Border>
