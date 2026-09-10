@@ -8,6 +8,7 @@ public sealed class LocalContextRuntimeManager(
     LocalContextRuntimeOptions options) : IAsyncDisposable
 {
     private Process? _process;
+    private CancellationTokenSource? _lifetimeCancellation;
     private Task? _stdoutDrain;
     private Task? _stderrDrain;
 
@@ -23,7 +24,7 @@ public sealed class LocalContextRuntimeManager(
         await assetManager.EnsureAvailableAsync(status, cancellationToken);
 
         if (_process is { HasExited: false })
-            KillProcess();
+            await StopProcessAsync();
 
         status?.Report("Enhanced: uruchamiam lokalny resolver kontekstu…");
 
@@ -44,8 +45,9 @@ public sealed class LocalContextRuntimeManager(
             throw new InvalidOperationException("Nie udało się uruchomić lokalnego resolvera kontekstu.");
 
         _process = process;
-        _stdoutDrain = DrainAsync(process.StandardOutput, cancellationToken);
-        _stderrDrain = DrainAsync(process.StandardError, cancellationToken);
+        _lifetimeCancellation = new CancellationTokenSource();
+        _stdoutDrain = DrainAsync(process.StandardOutput, _lifetimeCancellation.Token);
+        _stderrDrain = DrainAsync(process.StandardError, _lifetimeCancellation.Token);
 
         try
         {
@@ -54,7 +56,7 @@ public sealed class LocalContextRuntimeManager(
         }
         catch
         {
-            KillProcess();
+            await StopProcessAsync();
             throw;
         }
     }
@@ -123,30 +125,28 @@ public sealed class LocalContextRuntimeManager(
         }
     }
 
-    private void KillProcess()
+    private async Task StopProcessAsync()
     {
         var process = _process;
         _process = null;
-        if (process is null)
-            return;
 
-        try
+        _lifetimeCancellation?.Cancel();
+
+        if (process is not null)
         {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-        }
-        finally
-        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+            }
+
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch { }
             process.Dispose();
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        KillProcess();
 
         var drains = new[] { _stdoutDrain, _stderrDrain }.Where(task => task is not null).Cast<Task>().ToArray();
         if (drains.Length > 0)
@@ -157,5 +157,9 @@ public sealed class LocalContextRuntimeManager(
 
         _stdoutDrain = null;
         _stderrDrain = null;
+        _lifetimeCancellation?.Dispose();
+        _lifetimeCancellation = null;
     }
+
+    public async ValueTask DisposeAsync() => await StopProcessAsync();
 }
