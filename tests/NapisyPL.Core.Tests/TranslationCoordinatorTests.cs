@@ -48,13 +48,27 @@ public sealed class TranslationCoordinatorTests
 
         await new TranslationCoordinator().TranslateCuesAsync(cues, new FakeProvider(), progress);
 
-        var started = Assert.Single(reports.Where(x => x.BatchIndex == 1 && x.WaitingForProvider));
-        var completed = Assert.Single(reports.Where(x => x.BatchIndex == 1 && !x.WaitingForProvider));
+        var started = Assert.Single(reports, x => x.BatchIndex == 1 && x.WaitingForProvider);
+        var completed = Assert.Single(reports, x => x.BatchIndex == 1 && !x.WaitingForProvider);
         Assert.Equal(0, started.CompletedSegments);
         Assert.Equal(2, completed.CompletedSegments);
         Assert.Equal(2, completed.TotalSegments);
         Assert.Equal(1, completed.BatchCount);
         Assert.Equal(started.BatchStartedAt, completed.BatchStartedAt);
+    }
+
+    [Fact]
+    public async Task TranslateCuesAsync_UsesProviderBatchPolicy()
+    {
+        var cues = Enumerable.Range(1, 5)
+            .Select(index => new SubtitleCue(index, TimeSpan.FromSeconds(index), TimeSpan.FromSeconds(index + 1), $"Line {index}"))
+            .ToArray();
+        var provider = new CountingProvider(new TranslationBatchPolicy(2, 1000));
+
+        var result = await new TranslationCoordinator().TranslateCuesAsync(cues, provider);
+
+        Assert.Equal(5, result.Count);
+        Assert.Equal(3, provider.CallCount);
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
@@ -78,6 +92,20 @@ public sealed class TranslationCoordinatorTests
         public Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
         {
             IReadOnlyDictionary<int, string> result = new Dictionary<int, string> { [1] = "Jeden" };
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class CountingProvider(TranslationBatchPolicy batchPolicy) : ITranslationProvider
+    {
+        public int CallCount { get; private set; }
+        public string DisplayName => "counting";
+        public TranslationBatchPolicy BatchPolicy => batchPolicy;
+
+        public Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            IReadOnlyDictionary<int, string> result = segments.ToDictionary(x => x.Id, x => "PL: " + x.Text);
             return Task.FromResult(result);
         }
     }
