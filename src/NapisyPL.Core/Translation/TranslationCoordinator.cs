@@ -4,9 +4,6 @@ namespace NapisyPL.Core.Translation;
 
 public sealed class TranslationCoordinator
 {
-    private const int MaxSegmentsPerBatch = 40;
-    private const int MaxCharactersPerBatch = 12000;
-
     public Task<IReadOnlyList<SubtitleCue>> TranslateCuesAsync(
         IReadOnlyList<SubtitleCue> cues,
         ITranslationProvider provider,
@@ -40,7 +37,7 @@ public sealed class TranslationCoordinator
         if (cues.Count == 0)
             return [];
 
-        var batches = BuildCueBatches(cues).ToArray();
+        var batches = BuildCueBatches(cues, provider.BatchPolicy).ToArray();
         var translated = new List<SubtitleCue>(cues.Count);
         var completed = 0;
 
@@ -104,7 +101,7 @@ public sealed class TranslationCoordinator
             return lines;
 
         var segments = nonEmpty.Select(x => new TranslationSegment(x.index + 1, x.text)).ToArray();
-        var batches = BuildTextBatches(segments).ToArray();
+        var batches = BuildTextBatches(segments, provider.BatchPolicy).ToArray();
         var output = lines.ToArray();
         var completed = 0;
 
@@ -131,13 +128,15 @@ public sealed class TranslationCoordinator
         return output;
     }
 
-    private static IEnumerable<IReadOnlyList<SubtitleCue>> BuildCueBatches(IReadOnlyList<SubtitleCue> cues)
+    private static IEnumerable<IReadOnlyList<SubtitleCue>> BuildCueBatches(
+        IReadOnlyList<SubtitleCue> cues,
+        TranslationBatchPolicy policy)
     {
         var batch = new List<SubtitleCue>();
         var characters = 0;
         foreach (var cue in cues)
         {
-            if (batch.Count > 0 && (batch.Count >= MaxSegmentsPerBatch || characters + cue.Text.Length > MaxCharactersPerBatch))
+            if (batch.Count > 0 && (batch.Count >= policy.MaxSegments || characters + cue.Text.Length > policy.MaxCharacters))
             {
                 yield return batch.ToArray();
                 batch.Clear();
@@ -150,13 +149,15 @@ public sealed class TranslationCoordinator
             yield return batch.ToArray();
     }
 
-    private static IEnumerable<IReadOnlyList<TranslationSegment>> BuildTextBatches(IReadOnlyList<TranslationSegment> segments)
+    private static IEnumerable<IReadOnlyList<TranslationSegment>> BuildTextBatches(
+        IReadOnlyList<TranslationSegment> segments,
+        TranslationBatchPolicy policy)
     {
         var batch = new List<TranslationSegment>();
         var characters = 0;
         foreach (var segment in segments)
         {
-            if (batch.Count > 0 && (batch.Count >= MaxSegmentsPerBatch || characters + segment.Text.Length > MaxCharactersPerBatch))
+            if (batch.Count > 0 && (batch.Count >= policy.MaxSegments || characters + segment.Text.Length > policy.MaxCharacters))
             {
                 yield return batch.ToArray();
                 batch.Clear();
