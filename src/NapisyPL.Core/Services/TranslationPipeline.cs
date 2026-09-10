@@ -8,7 +8,7 @@ public sealed class TranslationPipeline(
     SrtParser srtParser,
     SubtitleWriter writer,
     SubtitleExtractionService extractionService,
-    TranslationCoordinator coordinator)
+    TranslationCoordinator coordinator) : ITranslationPipeline
 {
     public static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,7 +26,7 @@ public sealed class TranslationPipeline(
         return VideoExtensions.Contains(ext) || SubtitleExtensions.Contains(ext);
     }
 
-    public async Task<TranslationResult> TranslateAsync(
+    public Task<TranslationResult> TranslateAsync(
         string inputPath,
         SubtitleTrack? selectedTrack,
         ITranslationProvider provider,
@@ -34,6 +34,36 @@ public sealed class TranslationPipeline(
         IProgress<double>? translationProgress = null,
         IProgress<string>? status = null,
         CancellationToken cancellationToken = default)
+    {
+        IProgress<TranslationProgress>? structuredProgress = translationProgress is null
+            ? null
+            : new InlineProgress<TranslationProgress>(value =>
+            {
+                if (!value.WaitingForProvider && value.TotalSegments > 0)
+                    translationProgress.Report((double)value.CompletedSegments / value.TotalSegments);
+            });
+
+        return TranslateCoreAsync(inputPath, selectedTrack, provider, exportTxt, structuredProgress, status, cancellationToken);
+    }
+
+    Task<TranslationResult> ITranslationPipeline.TranslateAsync(
+        string inputPath,
+        SubtitleTrack? selectedTrack,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress,
+        IProgress<string>? status,
+        CancellationToken cancellationToken) =>
+        TranslateCoreAsync(inputPath, selectedTrack, provider, exportTxt, translationProgress, status, cancellationToken);
+
+    private async Task<TranslationResult> TranslateCoreAsync(
+        string inputPath,
+        SubtitleTrack? selectedTrack,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(inputPath);
         if (extension.Equals(".txt", StringComparison.OrdinalIgnoreCase))
@@ -74,7 +104,9 @@ public sealed class TranslationPipeline(
                 throw new InvalidDataException("Nie udało się odczytać żadnych kwestii z napisów.");
 
             status?.Report($"Tłumaczę {cues.Count} kwestii…");
-            var translated = await coordinator.TranslateCuesAsync(cues, provider, translationProgress, cancellationToken);
+            var translated = translationProgress is null
+                ? await coordinator.TranslateCuesAsync(cues, provider, progress: (IProgress<double>?)null, cancellationToken)
+                : await coordinator.TranslateCuesAsync(cues, provider, translationProgress, cancellationToken);
             var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
@@ -101,17 +133,24 @@ public sealed class TranslationPipeline(
     private async Task<TranslationResult> TranslateTextFileAsync(
         string inputPath,
         ITranslationProvider provider,
-        IProgress<double>? progress,
+        IProgress<TranslationProgress>? progress,
         IProgress<string>? status,
         CancellationToken cancellationToken)
     {
         var lines = await File.ReadAllLinesAsync(inputPath, Encoding.UTF8, cancellationToken);
         status?.Report($"Tłumaczę {lines.Count(line => !string.IsNullOrWhiteSpace(line))} linii…");
-        var translated = await coordinator.TranslateTextLinesAsync(lines, provider, progress, cancellationToken);
+        var translated = progress is null
+            ? await coordinator.TranslateTextLinesAsync(lines, provider, progress: (IProgress<double>?)null, cancellationToken)
+            : await coordinator.TranslateTextLinesAsync(lines, provider, progress, cancellationToken);
         var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
         var stem = Path.GetFileNameWithoutExtension(inputPath);
         var output = Path.Combine(directory, stem + ".pl.txt");
         await writer.WriteTxtAsync(output, translated, cancellationToken);
         return new TranslationResult(output, output, translated.Count(line => !string.IsNullOrWhiteSpace(line)));
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 }
