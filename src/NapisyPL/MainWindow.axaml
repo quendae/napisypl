@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NapisyPL.MainWindow"
+        Title="NapisyPL"
+        Width="820" Height="720"
+        MinWidth="680" MinHeight="600"
+        Background="{DynamicResource CanvasBrush}">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="34,28,34,34" Spacing="18">
+      <Border Background="#161A22" CornerRadius="7" Padding="12,8">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <TextBlock Text="00:00:00,000" FontFamily="Consolas" FontSize="12" Foreground="#AEB6C3" VerticalAlignment="Center" />
+          <Border Grid.Column="1" Height="1" Margin="14,0" Background="#394150" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="2" Text="EN  →  PL" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource SubtitleYellowBrush}" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
+
+      <StackPanel Spacing="4">
+        <TextBlock Text="NapisyPL" FontSize="28" FontWeight="SemiBold" />
+        <TextBlock Text="Wyciągnij angielskie napisy z filmu lub otwórz plik napisów, a potem przetłumacz je na polski." Foreground="{DynamicResource MutedBrush}" FontSize="15" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <Border x:Name="DropZone" Classes="dropzone"
+              DragDrop.AllowDrop="True"
+              DragDrop.DragEnter="OnDragEnter"
+              DragDrop.DragLeave="OnDragLeave"
+              DragDrop.DragOver="OnDragOver"
+              DragDrop.Drop="OnDrop">
+        <StackPanel Spacing="10" HorizontalAlignment="Center">
+          <TextBlock Text="Upuść film lub napisy" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <TextBlock x:Name="SelectedFileText" Text="MKV, MP4, MOV, AVI, WebM · SRT, ASS, SSA, VTT, TXT" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" TextWrapping="Wrap" />
+          <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" HorizontalAlignment="Center" Padding="16,8" />
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="TrackPanel" Classes="card" IsVisible="False">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Ścieżka napisów" FontWeight="SemiBold" />
+          <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" />
+          <TextBlock x:Name="TrackHintText" Text="Automatycznie wybieramy angielską ścieżkę tekstową, jeśli jest oznaczona w pliku." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="14">
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Tłumacz" FontWeight="SemiBold" />
+              <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="6">
+              <TextBlock Text="Model" FontWeight="SemiBold" />
+              <TextBox x:Name="ModelTextBox" PlaceholderText="np. gemini-3.8-flash" />
+            </StackPanel>
+          </Grid>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Klucz API" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Klucz jest używany tylko w tej sesji" />
+              <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż" VerticalAlignment="Center" IsCheckedChanged="OnRevealKeyChanged" />
+            </Grid>
+            <TextBlock x:Name="ApiKeyHintText" Text="Klucz nie jest zapisywany na dysku." FontSize="12" Foreground="{DynamicResource MutedBrush}" />
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Base URL" FontWeight="SemiBold" />
+            <TextBox x:Name="BaseUrlTextBox" />
+            <TextBlock x:Name="BaseUrlHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <CheckBox x:Name="ExportTxtCheckBox" Content="Zapisz dodatkowo plik TXT" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="12">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <Button x:Name="TranslateButton" Classes="primary" Content="Tłumacz na polski" Click="OnTranslateClick" IsEnabled="False" />
+            <Button x:Name="CancelButton" Grid.Column="1" Content="Anuluj" Click="OnCancelClick" IsVisible="False" MinWidth="88" />
+          </Grid>
+          <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="6" Value="0" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock x:Name="StatusText" Text="Wybierz plik, aby rozpocząć." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button x:Name="OpenFolderButton" Grid.Column="1" Content="Pokaż plik" Click="OnOpenFolderClick" IsVisible="False" />
+          </Grid>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

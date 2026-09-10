@@ -18,9 +18,9 @@ NapisyPL to prosta aplikacja desktopowa Windows do wyciągania tekstowych ście�
 
 ## UX
 
-Główne okno jest jedynym ekranem roboczym. Użytkownik przeciąga plik albo wybiera go przyciskiem. Po analizie widzi nazwę pliku i, dla wideo, listę ścieżek napisów. Niżej wybiera providera, wpisuje klucz API (jeśli wymagany), model oraz opcjonalny Base URL. Kliknięcie `Tłumacz na polski` uruchamia cały pipeline. Pasek postępu i jednozdaniowy status pokazują aktualny etap. Po sukcesie aplikacja pokazuje ścieżkę pliku wynikowego i przycisk otwarcia folderu.
+Główne okno jest jedynym ekranem roboczym. Użytkownik przeciąga plik albo wybiera go przyciskiem. Po analizie widzi nazwę pliku i, dla wideo, listę ścieżek napisów. Niżej wybiera providera, wpisuje klucz API (jeśli wymagany), model oraz opcjonalny Base URL. Kliknięcie `Tłumacz na polski` uruchamia cały pipeline. Pasek postępu i jednozdaniowy status pokazują aktualny etap. Po sukcesie aplikacja pokazuje ścieżkę pliku wynikowego i przycisk pokazania pliku w folderze.
 
-Ustawienia providera są zapisywane w `%LocalAppData%/NapisyPL/settings.json`. Klucz API jest zapisywany tylko wtedy, gdy użytkownik zaznaczy `Zapamiętaj klucz`; w przeciwnym razie żyje tylko w pamięci procesu.
+Ustawienia providera są zapisywane w `%LocalAppData%/NapisyPL/settings.json`. Klucz API jest celowo tylko w pamięci procesu i nigdy nie jest zapisywany na dysku.
 
 ## Architektura
 
@@ -34,7 +34,7 @@ Ustawienia providera są zapisywane w `%LocalAppData%/NapisyPL/settings.json`. K
 
 `ITranslationProvider` ma jeden kontrakt: przyjmuje ponumerowane segmenty tekstu i zwraca mapę `id → przetłumaczony tekst`. `TranslationCoordinator` dzieli materiał na paczki, zachowuje kolejność, waliduje kompletność odpowiedzi i raportuje postęp.
 
-Providerzy LLM otrzymują JSON z ID segmentów oraz instrukcję zwrotu wyłącznie poprawnego JSON. Odpowiedź jest walidowana; brakujące ID powodują błąd danej paczki zamiast cichego uszkodzenia wyniku. DeepL używa natywnego endpointu tłumaczeniowego bez promptu.
+Providerzy LLM otrzymują JSON z ID segmentów oraz instrukcję zwrotu wyłącznie poprawnego JSON. Odpowiedź jest walidowana; brakujące lub zduplikowane ID przerywają operację zamiast cicho uszkadzać wynik. DeepL używa natywnego endpointu tłumaczeniowego bez promptu.
 
 `SubtitleWriter` składa przetłumaczony SRT z oryginalnymi timestampami i zapisuje go w UTF-8. TXT zawiera tylko przetłumaczone kwestie w kolejności.
 
@@ -42,7 +42,7 @@ Providerzy LLM otrzymują JSON z ID segmentów oraz instrukcję zwrotu wyłączn
 
 Aplikacja najpierw szuka `ffmpeg.exe` i `ffprobe.exe` w swoim katalogu danych. Jeśli ich nie ma, pobiera Windows ZIP z wcześniej zdefiniowanego źródła buildów wskazywanego przez ffmpeg.org, rozpakowuje wymagane EXE i zapamiętuje lokalną kopię. Po pierwszym pobraniu ekstrakcja działa offline.
 
-Downloader używa katalogu tymczasowego, timeoutu, sprawdzania statusu HTTP i atomowego podmienienia plików. Awaria pobierania nie usuwa działającej starszej kopii.
+Downloader używa katalogu tymczasowego, timeoutu i sprawdzania statusu HTTP. FFmpeg pozostaje osobnym komponentem i nie jest przechowywany w repozytorium.
 
 ## Formaty i ograniczenia
 
@@ -52,16 +52,16 @@ TXT jako wejście nie ma timestampów, więc wynik jest wyłącznie TXT.
 
 ## Błędy
 
-Błędy są klasyfikowane jako: brak napisów, bitmapowe napisy, FFmpeg niedostępny/pobranie nieudane, błędny klucz/API, timeout/rate limit, niepoprawna odpowiedź modelu, nieobsługiwany format, błąd zapisu. UI pokazuje krótki komunikat, a szczegóły techniczne trafiają do `%LocalAppData%/NapisyPL/logs/`.
+Błędy obejmują: brak napisów, bitmapowe napisy, FFmpeg niedostępny/pobranie nieudane, błędny klucz/API, timeout/rate limit, niepoprawną odpowiedź modelu, nieobsługiwany format i błąd zapisu. UI pokazuje krótki komunikat w stałym obszarze statusu bez modalnych alertów.
 
 ## Testy
 
-- Parser SRT: multiline, CRLF/LF, polskie znaki, tagi, puste linie.
-- Writer SRT: zachowanie indeksów i timestampów, UTF-8.
-- ffprobe JSON: wykrywanie języka, tytułu, kodeku i bitmapowych ścieżek.
-- TranslationCoordinator: batching, zachowanie ID i progress.
-- Provider HTTP: testy bez prawdziwych kluczy tam, gdzie ma to sens.
-- Smoke build na `windows-latest` w GitHub Actions.
+- Parser SRT: multiline, CRLF/LF, polskie znaki i timing.
+- Writer SRT: zachowanie timestampów i UTF-8.
+- ffprobe JSON: wykrywanie języka, kodeku i bitmapowych ścieżek oraz wybór angielskiej ścieżki.
+- TranslationCoordinator: zachowanie timingów, kompletność ID i progress.
+- Protokół LLM JSON: code fences oraz duplikaty ID.
+- Build/test/publish na `windows-latest` w GitHub Actions.
 
 ## Poza MVP
 
