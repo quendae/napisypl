@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NapisyPL.MainWindow"
         Title="SubFlow"
-        Width="820" Height="800"
+        Width="820" Height="840"
         MinWidth="680" MinHeight="640"
         Background="{DynamicResource CanvasBrush}">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -73,6 +73,19 @@
           </StackPanel>
 
           <CheckBox x:Name="ExportTxtCheckBox" Content="Zapisz dodatkowo plik TXT" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <CheckBox x:Name="EnhancedCheckBox"
+                    Content="Enhanced — analizuj audio i kontekst rozmówców"
+                    FontWeight="SemiBold"
+                    IsCheckedChanged="OnEnhancedChanged" />
+          <TextBlock Text="Opcjonalnie: lokalnie wykrywa mówców i używa małego modelu do poprawy rodzaju gramatycznego/adresata. Pierwsze uruchomienie pobierze ok. 1,4 GB. Działa dla filmów; bez wysyłania audio do chmury."
+                     Foreground="{DynamicResource MutedBrush}"
+                     FontSize="12"
+                     TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
