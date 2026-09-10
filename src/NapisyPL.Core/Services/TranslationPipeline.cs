@@ -20,6 +20,9 @@ public sealed class TranslationPipeline(
         ".srt", ".ass", ".ssa", ".vtt", ".txt"
     };
 
+    public bool UseEnhanced { get; set; }
+    public ITranslationPipeline? EnhancedPipeline { get; set; }
+
     public static bool IsSupportedInput(string path)
     {
         var ext = Path.GetExtension(path);
@@ -66,6 +69,19 @@ public sealed class TranslationPipeline(
         CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(inputPath);
+
+        if (UseEnhanced && EnhancedPipeline is not null && VideoExtensions.Contains(extension))
+        {
+            return await EnhancedPipeline.TranslateAsync(
+                inputPath,
+                selectedTrack,
+                provider,
+                exportTxt,
+                translationProgress,
+                status,
+                cancellationToken);
+        }
+
         if (extension.Equals(".txt", StringComparison.OrdinalIgnoreCase))
             return await TranslateTextFileAsync(inputPath, provider, translationProgress, status, cancellationToken);
 
