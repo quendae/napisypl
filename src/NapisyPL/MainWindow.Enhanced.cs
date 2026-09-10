@@ -66,7 +66,8 @@ public partial class MainWindow
             diarization,
             _enhancedRuntimeManager,
             contextResolver,
-            contextCoordinator);
+            contextCoordinator,
+            _appLogger);
         var genderReview = new LocalGenderReviewService(
             _enhancedHttpClient,
             runtimeOptions.BaseUrl,
