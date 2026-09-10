@@ -82,7 +82,8 @@ public partial class MainWindow
             new TranslationCoordinator(),
             contextAnalysis,
             _enhancedRuntimeManager,
-            genderReview);
+            genderReview,
+            _appLogger);
 
         _pipeline.EnhancedPipeline = enhancedPipeline;
         _enhancedConfigured = true;
