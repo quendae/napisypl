@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
@@ -12,7 +14,8 @@ public sealed class EnhancedContextAnalysisService(
     SpeakerDiarizationService diarization,
     LocalContextRuntimeManager runtimeManager,
     IContextResolver resolver,
-    ContextResolutionCoordinator coordinator)
+    ContextResolutionCoordinator coordinator,
+    IAppLogger? logger = null)
 {
     public async Task<EnhancedContextAnalysisResult> AnalyzeAsync(
         string mediaPath,
@@ -25,15 +28,21 @@ public sealed class EnhancedContextAnalysisService(
         if (cues.Count == 0)
             throw new ArgumentException("Enhanced analysis requires subtitle cues.", nameof(cues));
 
+        var file = Path.GetFileName(mediaPath);
         string? temporaryWave = null;
         try
         {
+            var timer = Stopwatch.StartNew();
             temporaryWave = await audioExtraction.ExtractTemporaryMono16KhzWaveAsync(mediaPath, status, cancellationToken);
+            logger?.Info("enhanced_phase", ("file", file), ("stage", "audio_extract"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
+
+            timer.Restart();
             var segments = await diarization.AnalyzeAsync(
                 temporaryWave,
                 diarizationProgress,
                 status,
                 cancellationToken);
+            logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization"), ("elapsedMs", timer.ElapsedMilliseconds), ("segmentCount", segments.Count), ("result", "success"));
 
             if (segments.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się wykryć żadnego mówcy w ścieżce audio.");
@@ -46,15 +55,24 @@ public sealed class EnhancedContextAnalysisService(
                 null)).ToArray();
 
             status?.Report("Enhanced: uruchamiam lokalną analizę kontekstu…");
+            timer.Restart();
             await runtimeManager.EnsureRunningAsync(status, cancellationToken);
+            logger?.Info("enhanced_phase", ("file", file), ("stage", "resolver_startup"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
 
+            timer.Restart();
             var context = await coordinator.ResolveAsync(
                 contextCues,
                 resolver,
                 resolverProgress,
                 cancellationToken);
+            logger?.Info("enhanced_phase", ("file", file), ("stage", "context_resolver"), ("elapsedMs", timer.ElapsedMilliseconds), ("segmentCount", cues.Count), ("result", "success"));
 
             return new EnhancedContextAnalysisResult(context, cueSpeakers, segments.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.Error("enhanced_failed", ("file", file), ("stage", "context_analysis"), ("category", ex.GetType().Name), ("result", "failed"));
+            throw;
         }
         finally
         {
