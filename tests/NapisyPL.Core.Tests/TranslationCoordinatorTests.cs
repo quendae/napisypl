@@ -35,6 +35,33 @@ public sealed class TranslationCoordinatorTests
             new TranslationCoordinator().TranslateCuesAsync(cues, new MissingSegmentProvider()));
     }
 
+    [Fact]
+    public async Task TranslateCuesAsync_ReportsProviderWaitLifecycle()
+    {
+        var cues = new[]
+        {
+            new SubtitleCue(1, TimeSpan.Zero, TimeSpan.FromSeconds(1), "Hello"),
+            new SubtitleCue(2, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), "World")
+        };
+        var reports = new List<TranslationProgress>();
+        var progress = new InlineProgress<TranslationProgress>(reports.Add);
+
+        await new TranslationCoordinator().TranslateCuesAsync(cues, new FakeProvider(), progress);
+
+        var started = Assert.Single(reports.Where(x => x.BatchIndex == 1 && x.WaitingForProvider));
+        var completed = Assert.Single(reports.Where(x => x.BatchIndex == 1 && !x.WaitingForProvider));
+        Assert.Equal(0, started.CompletedSegments);
+        Assert.Equal(2, completed.CompletedSegments);
+        Assert.Equal(2, completed.TotalSegments);
+        Assert.Equal(1, completed.BatchCount);
+        Assert.Equal(started.BatchStartedAt, completed.BatchStartedAt);
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
+
     private sealed class FakeProvider : ITranslationProvider
     {
         public string DisplayName => "fake";
