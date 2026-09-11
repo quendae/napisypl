@@ -29,12 +29,49 @@ public static class DialogueAddresseeResolver
 
         var previous = FindPreviousOtherSpeaker(cues, cueSpeakers, position, currentSpeaker!);
         var next = FindNextOtherSpeaker(cues, cueSpeakers, position, currentSpeaker!);
+        if (previous is null || next is null || !string.Equals(previous, next, StringComparison.Ordinal))
+            return null;
 
-        return previous is not null &&
-               next is not null &&
-               string.Equals(previous, next, StringComparison.Ordinal)
+        var localOtherSpeakers = CollectLocalOtherSpeakers(cues, cueSpeakers, position, currentSpeaker!);
+        return localOtherSpeakers is not null &&
+               localOtherSpeakers.Count == 1 &&
+               localOtherSpeakers.Contains(previous)
             ? previous
             : null;
+    }
+
+    private static HashSet<string>? CollectLocalOtherSpeakers(
+        IReadOnlyList<SubtitleCue> cues,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        int position,
+        string currentSpeaker)
+    {
+        var current = cues[position];
+        var speakers = new HashSet<string>(StringComparer.Ordinal);
+        var start = Math.Max(0, position - MaxCueDistance);
+        var end = Math.Min(cues.Count - 1, position + MaxCueDistance);
+
+        for (var i = start; i <= end; i++)
+        {
+            if (i == position)
+                continue;
+
+            var candidate = cues[i];
+            var gap = candidate.End <= current.Start
+                ? current.Start - candidate.End
+                : candidate.Start >= current.End
+                    ? candidate.Start - current.End
+                    : TimeSpan.Zero;
+            if (gap > MaxTurnGap)
+                continue;
+
+            if (!cueSpeakers.TryGetValue(candidate.Index, out var speaker) || string.IsNullOrWhiteSpace(speaker))
+                return null;
+            if (!string.Equals(speaker, currentSpeaker, StringComparison.Ordinal))
+                speakers.Add(speaker!);
+        }
+
+        return speakers;
     }
 
     private static string? FindPreviousOtherSpeaker(
