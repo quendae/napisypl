@@ -37,8 +37,39 @@ jobs:
       - name: Smoke test Argos helper
         shell: pwsh
         run: |
-          python -c "import subprocess; p=subprocess.Popen([r'dist/SubFlow.ArgosHelper.exe'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8'); out,err=p.communicate('{\"type\":\"shutdown\"}\n',timeout=30); print(out); print(err); raise SystemExit(p.returncode)"
+          $output = '{"type":"shutdown"}' | & .\dist\SubFlow.ArgosHelper.exe 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if ($exitCode -ne 0) { throw "Argos helper smoke test failed with exit code $exitCode" }
           Get-Item dist/SubFlow.ArgosHelper.exe | Select-Object Name,Length
+
+      - name: Integration test Argos EN to PL
+        if: github.ref == 'refs/heads/feature/local-translator-batch-v2'
+        shell: pwsh
+        run: |
+          $modelPath = Join-Path $PWD 'translate-en_pl-1_9.argosmodel'
+          Invoke-WebRequest `
+            -Uri 'https://data.argosopentech.com/argospm/v1/translate-en_pl-1_9.argosmodel' `
+            -OutFile $modelPath
+          $jsonModelPath = $modelPath -replace '\\','/'
+          $load = @{ type = 'load'; modelPath = $jsonModelPath } | ConvertTo-Json -Compress
+          $translate = @{
+            type = 'translate'
+            jobId = 'smoke'
+            segments = @(@{ id = 1; text = 'Hello, how are you?' })
+          } | ConvertTo-Json -Depth 5 -Compress
+          $shutdown = '{"type":"shutdown"}'
+          $output = @($load, $translate, $shutdown) | & .\dist\SubFlow.ArgosHelper.exe 2> argos-smoke.err
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if (Test-Path argos-smoke.err) { Get-Content argos-smoke.err | Write-Host }
+          if ($exitCode -ne 0) { throw "Argos integration smoke test failed with exit code $exitCode" }
+          $events = @($output | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($events | Where-Object { $_.type -eq 'error' }) { throw 'Argos helper returned an error event.' }
+          if (-not ($events | Where-Object { $_.type -eq 'ready' })) { throw 'Argos helper did not emit ready.' }
+          $segment = $events | Where-Object { $_.type -eq 'segment' -and $_.jobId -eq 'smoke' } | Select-Object -First 1
+          if ($null -eq $segment -or [string]::IsNullOrWhiteSpace($segment.text)) { throw 'Argos helper did not return translated text.' }
+          Write-Host "Argos smoke translation: $($segment.text)"
 
       - name: Publish Windows x64
         shell: pwsh
