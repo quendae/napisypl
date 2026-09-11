@@ -34,7 +34,7 @@ public sealed class SpeakerGenderEvidenceTests
     }
 
     [Fact]
-    public void Evaluate_LowAbsoluteButDirectionalEvidence_ReportsLowCombinedReason()
+    public void Evaluate_RealisticLowAbsoluteButStrongDirectionalEvidence_ReturnsMale()
     {
         var result = SpeakerGenderEvidenceAggregator.Evaluate(
         [
@@ -43,10 +43,24 @@ public sealed class SpeakerGenderEvidenceTests
             new SpeakerGenderObservation(0.025, 0.004, 1.5)
         ]);
 
-        Assert.Equal(SpeakerVoiceGender.Unknown, result.Evidence.Gender);
-        Assert.Equal(SpeakerGenderUnknownReason.LowCombinedEvidence, result.UnknownReason);
+        Assert.Equal(SpeakerVoiceGender.Male, result.Evidence.Gender);
+        Assert.Equal(SpeakerGenderUnknownReason.None, result.UnknownReason);
         Assert.InRange(result.CombinedEvidence, 0.03, 0.05);
         Assert.True(result.NormalizedWinnerConfidence > 0.85);
+    }
+
+    [Fact]
+    public void Evaluate_VeryWeakDirectionalEvidence_RemainsUnknown()
+    {
+        var result = SpeakerGenderEvidenceAggregator.Evaluate(
+        [
+            new SpeakerGenderObservation(0.014, 0.001, 3.0),
+            new SpeakerGenderObservation(0.011, 0.001, 2.0),
+            new SpeakerGenderObservation(0.009, 0.001, 1.5)
+        ]);
+
+        Assert.Equal(SpeakerVoiceGender.Unknown, result.Evidence.Gender);
+        Assert.Equal(SpeakerGenderUnknownReason.LowCombinedEvidence, result.UnknownReason);
     }
 
     [Fact]
