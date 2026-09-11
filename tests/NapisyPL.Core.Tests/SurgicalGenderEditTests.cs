@@ -1,0 +1,57 @@
+using NapisyPL.Core.ContextResolution;
+using NapisyPL.Core.Models;
+
+namespace NapisyPL.Core.Tests;
+
+public sealed class SurgicalGenderEditTests
+{
+    [Fact]
+    public void Apply_ReplacesOnlySmallExactFragment()
+    {
+        var cue = Cue(45, "Nazwałeś ją \"biznatch\"?");
+        var edit = new SurgicalGenderEdit(45, "Nazwałeś", "Nazwałaś", 0.96);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed);
+
+        Assert.True(result);
+        Assert.Equal("Nazwałaś ją \"biznatch\"?", changed.Text);
+    }
+
+    [Fact]
+    public void Apply_RejectsWholeSentenceRewrite()
+    {
+        var cue = Cue(45, "Nazwałeś ją \"biznatch\"?");
+        var edit = new SurgicalGenderEdit(45, "Nazwałeś ją \"biznatch\"?", "Za to, co zrobiłeś...", 0.99);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed);
+
+        Assert.False(result);
+        Assert.Equal(cue.Text, changed.Text);
+    }
+
+    [Fact]
+    public void Apply_RejectsLowConfidenceOrMissingFragment()
+    {
+        var cue = Cue(7, "Byłem gotowy.");
+
+        Assert.False(SurgicalGenderEditApplier.TryApply(cue, new SurgicalGenderEdit(7, "Byłem", "Byłam", 0.70), out _));
+        Assert.False(SurgicalGenderEditApplier.TryApply(cue, new SurgicalGenderEdit(7, "Byłeś", "Byłaś", 0.99), out _));
+    }
+
+    [Fact]
+    public void ParseResponse_ReadsFindReplaceAndConfidence()
+    {
+        var edits = SurgicalGenderEditProtocol.ParseResponse("""
+            [{"id":7,"find":"Byłem","replace":"Byłam","confidence":0.94}]
+            """);
+
+        var edit = Assert.Single(edits);
+        Assert.Equal(7, edit.Id);
+        Assert.Equal("Byłem", edit.Find);
+        Assert.Equal("Byłam", edit.Replace);
+        Assert.Equal(0.94, edit.Confidence, 3);
+    }
+
+    private static SubtitleCue Cue(int id, string text) =>
+        new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
+}
