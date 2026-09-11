@@ -14,6 +14,8 @@ public sealed class AppLogger : IAppLogger
         "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "topK",
         "genderSampleCount", "maleTagSampleCount", "femaleTagSampleCount", "anyGenderTagSampleCount",
         "maleScoreMaxPermille", "femaleScoreMaxPermille", "combinedScoreMeanPermille", "combinedScoreMaxPermille",
+        "speaker", "sampleCount", "voiceGender", "maleMeanPermille", "femaleMeanPermille",
+        "combinedMeanPermille", "normalizedWinnerPermille", "winnerCount", "oppositeCount", "requiredWinnerCount",
         "dropped", "finishReason", "proposed", "backend", "device",
         "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
