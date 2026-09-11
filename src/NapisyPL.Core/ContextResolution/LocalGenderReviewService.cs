@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
@@ -47,6 +48,9 @@ public sealed class LocalGenderReviewService(
                     model,
                     temperature = 0.0,
                     max_tokens = 1400,
+                    reasoning_effort = "none",
+                    chat_template_kwargs = new { enable_thinking = false },
+                    response_format = LlamaJsonSchemas.ReviewResponseFormat,
                     messages = new object[]
                     {
                         new
@@ -87,11 +91,14 @@ public sealed class LocalGenderReviewService(
         try
         {
             using var document = JsonDocument.Parse(body);
-            var content = document.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
+            var choice = document.RootElement.GetProperty("choices")[0];
+            var finishReason = choice.TryGetProperty("finish_reason", out var finishReasonElement)
+                ? finishReasonElement.GetString()
+                : null;
+            if (string.Equals(finishReason, "length", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Local gender reviewer przerwał odpowiedź przez limit tokenów.");
+
+            var content = choice.GetProperty("message").GetProperty("content").GetString();
             if (string.IsNullOrWhiteSpace(content))
                 throw new InvalidDataException("Local gender reviewer returned no content.");
             return GenderReviewProtocol.ParseResponse(content);
