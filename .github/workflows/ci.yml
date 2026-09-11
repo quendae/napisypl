@@ -28,7 +28,7 @@ jobs:
       - name: Build Argos helper
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check argostranslate==1.11.1 pyinstaller
+          python -m pip install --disable-pip-version-check argostranslate==1.11.0 pyinstaller
           python -m PyInstaller --noconfirm --clean --onefile --name SubFlow.ArgosHelper `
             --collect-all argostranslate `
             --collect-all ctranslate2 `
