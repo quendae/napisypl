@@ -61,7 +61,7 @@ public sealed record LocalContextRuntimeOptions(
                 "Qwen 3.5 9B Q4_K_M",
                 "~5.6 GB"),
             LocalContextModelKind.GptOss20B => new LocalContextModelProfile(
-                "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-mxfp4.gguf?download=true",
+                "https://huggingface.co/recursechat/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-mxfp4.gguf?download=true",
                 "gpt-oss-20b-mxfp4.gguf",
                 "gpt-oss-20b",
                 "GPT-OSS 20B MXFP4",
