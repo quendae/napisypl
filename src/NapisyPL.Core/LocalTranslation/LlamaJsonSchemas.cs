@@ -48,7 +48,9 @@ public static class LlamaJsonSchemas
 
     public static object TranslationResponseFormat => BuildChangedLineArrayFormat();
 
-    public static object ReviewResponseFormat => new
+    public static object ReviewResponseFormat => BuildChangedLineArrayFormat();
+
+    public static object SurgicalReviewResponseFormat => new
     {
         type = "json_schema",
         schema = new
