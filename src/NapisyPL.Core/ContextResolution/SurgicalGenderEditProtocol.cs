@@ -195,7 +195,8 @@ public static partial class GenderAgreementTargetClassifier
 public static partial class SurgicalGenderEditApplier
 {
     public const double MinimumConfidence = 0.85;
-    private const int MaxWordsPerSide = 3;
+    private const int MaxFragmentWordsPerSide = 6;
+    private const int MaxChangedWords = 3;
     private const int MaxCharsPerSide = 60;
 
     private static readonly HashSet<(string Left, string Right)> AllowedEndingPairs = BuildAllowedEndingPairs();
@@ -265,7 +266,7 @@ public static partial class SurgicalGenderEditApplier
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > MaxCharsPerSide || value.Contains('\n') || value.Contains('\r'))
             return false;
-        return WordRegex().Matches(value).Count is > 0 and <= MaxWordsPerSide;
+        return WordRegex().Matches(value).Count is > 0 and <= MaxFragmentWordsPerSide;
     }
 
     private static bool LooksLikeInflectionOnly(string find, string replace)
@@ -299,7 +300,7 @@ public static partial class SurgicalGenderEditApplier
                 return false;
         }
 
-        return changedWordCount is > 0 and <= MaxWordsPerSide;
+        return changedWordCount is > 0 and <= MaxChangedWords;
     }
 
     private static HashSet<(string Left, string Right)> BuildAllowedEndingPairs()
