@@ -170,7 +170,9 @@ public sealed class LocalTargetedGenderReviewService(
                     httpStatus,
                     body.Length,
                     ex.GetType().Name,
-                    ex is HttpRequestException ? "http_error" : "invalid_response");
+                    ex is HttpRequestException
+                        ? "http_error"
+                        : ClassifyInvalidResponse((InvalidDataException)ex));
                 progress?.Report((double)oneBasedBatch / batches.Count);
                 status?.Report($"Enhanced: paczka {oneBasedBatch} zwróciła błąd — zachowuję bazowe tłumaczenie tej paczki i kontynuuję.");
                 continue;
@@ -178,25 +180,39 @@ public sealed class LocalTargetedGenderReviewService(
 
             var applied = 0;
             var dropped = 0;
+            var droppedOutsideBatch = 0;
+            var droppedMissingSpeaker = 0;
+            var droppedContextGuard = 0;
+            var droppedApplyGuard = 0;
             foreach (var edit in parsed.Edits)
             {
                 if (!allowedIds.Contains(edit.Id) || !outputPositionById.TryGetValue(edit.Id, out var position))
                 {
                     dropped++;
+                    droppedOutsideBatch++;
                     continue;
                 }
 
                 cueSpeakers.TryGetValue(edit.Id, out var currentSpeaker);
                 probableAddressees.TryGetValue(edit.Id, out var probableAddressee);
+                if (string.IsNullOrWhiteSpace(currentSpeaker))
+                {
+                    dropped++;
+                    droppedMissingSpeaker++;
+                    continue;
+                }
+
                 if (!SurgicalGenderContextGuard.CanApply(edit, currentSpeaker, probableAddressee))
                 {
                     dropped++;
+                    droppedContextGuard++;
                     continue;
                 }
 
                 if (!SurgicalGenderEditApplier.TryApply(output[position], edit, out var changed))
                 {
                     dropped++;
+                    droppedApplyGuard++;
                     continue;
                 }
 
@@ -216,8 +232,13 @@ public sealed class LocalTargetedGenderReviewService(
                 ("promptTokens", parsed.PromptTokens),
                 ("completionTokens", parsed.CompletionTokens),
                 ("finishReason", parsed.FinishReason),
+                ("proposed", parsed.Edits.Count),
                 ("completed", applied),
                 ("dropped", dropped),
+                ("dropOutsideBatch", droppedOutsideBatch),
+                ("dropMissingSpeaker", droppedMissingSpeaker),
+                ("dropContextGuard", droppedContextGuard),
+                ("dropApplyGuard", droppedApplyGuard),
                 ("result", "success"));
 
             progress?.Report((double)oneBasedBatch / batches.Count);
@@ -247,6 +268,22 @@ public sealed class LocalTargetedGenderReviewService(
             ("category", category),
             ("reasonCode", reasonCode),
             ("result", "fallback"));
+    }
+
+    private static string ClassifyInvalidResponse(InvalidDataException exception)
+    {
+        var message = exception.Message;
+        if (message.Contains("token limit", StringComparison.OrdinalIgnoreCase))
+            return "review_token_limit";
+        if (message.Contains("no content", StringComparison.OrdinalIgnoreCase))
+            return "review_no_content";
+        if (message.Contains("API JSON", StringComparison.OrdinalIgnoreCase))
+            return "review_api_json";
+        if (message.Contains("agreement target", StringComparison.OrdinalIgnoreCase))
+            return "review_target_schema";
+        if (message.Contains("JSON", StringComparison.OrdinalIgnoreCase))
+            return "review_edit_json";
+        return "invalid_response";
     }
 
     private static TimeSpan ValidateTimeout(TimeSpan timeout)
@@ -303,7 +340,7 @@ public sealed class LocalTargetedGenderReviewService(
             }
 
             return new ParsedReviewResponse(
-                SurgicalGenderEditProtocol.ParseResponse(content),
+                ParseReviewEdits(content),
                 finishReason,
                 promptTokens,
                 completionTokens);
@@ -311,6 +348,27 @@ public sealed class LocalTargetedGenderReviewService(
         catch (JsonException ex)
         {
             throw new InvalidDataException("Targeted gender review returned invalid API JSON.", ex);
+        }
+    }
+
+    private static IReadOnlyList<SurgicalGenderEdit> ParseReviewEdits(string content)
+    {
+        try
+        {
+            return SurgicalGenderEditProtocol.ParseResponse(content);
+        }
+        catch (InvalidDataException)
+        {
+            var firstArray = content.IndexOf('[', StringComparison.Ordinal);
+            var lastArray = content.LastIndexOf(']');
+            if (firstArray < 0 || lastArray <= firstArray)
+                throw;
+
+            var extracted = content[firstArray..(lastArray + 1)];
+            if (string.Equals(extracted.Trim(), content.Trim(), StringComparison.Ordinal))
+                throw;
+
+            return SurgicalGenderEditProtocol.ParseResponse(extracted);
         }
     }
 
