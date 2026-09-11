@@ -114,7 +114,7 @@ public sealed class LocalTargetedGenderReviewService(
                         max_tokens = 400,
                         reasoning_effort = "none",
                         chat_template_kwargs = new { enable_thinking = false },
-                        response_format = LlamaJsonSchemas.ReviewResponseFormat,
+                        response_format = LlamaJsonSchemas.SurgicalReviewResponseFormat,
                         messages = new object[]
                         {
                             new
