@@ -90,6 +90,17 @@ jobs:
             -o artifacts/win-x64
           Copy-Item dist/SubFlow.ArgosHelper.exe artifacts/win-x64/SubFlow.ArgosHelper.exe
 
+      - name: Smoke test desktop startup
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath .\artifacts\win-x64\NapisyPL.exe -PassThru
+          Start-Sleep -Seconds 3
+          $process.Refresh()
+          if ($process.HasExited) {
+            throw "SubFlow exited during startup smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
