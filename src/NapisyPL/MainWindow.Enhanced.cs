@@ -13,7 +13,6 @@ public partial class MainWindow
 
     private async void OnEnhancedChanged(object? sender, RoutedEventArgs e)
     {
-        // XAML events may fire during InitializeComponent, before the main constructor wires _pipeline.
         if (_pipeline is null)
             return;
 
@@ -22,7 +21,7 @@ public partial class MainWindow
             EnsureEnhancedConfigured();
             _pipeline.UseEnhanced = true;
             SetStatus(
-                "Enhanced włączony — audio rozpozna rozmówców, a mały Qwen sprawdzi tylko podejrzane formy po tłumaczeniu.",
+                "Enhanced włączony — audio rozpozna rozmówców, a lokalny model sprawdzi tylko podejrzane formy po tłumaczeniu.",
                 StatusKind.Normal);
         }
         else
@@ -59,7 +58,12 @@ public partial class MainWindow
         var diarizationOptions = SpeakerDiarizationOptions.CreateDefault();
         var diarizationAssets = new SpeakerDiarizationAssetManager(_enhancedHttpClient, diarizationOptions);
         var diarization = new SpeakerDiarizationService(diarizationAssets, diarizationOptions);
-        var speakerAnalysis = new SpeakerDiarizationAnalysisService(audioExtraction, diarization, _appLogger);
+        var diarizationCache = SpeakerDiarizationCache.CreateDefault();
+        var speakerAnalysis = new SpeakerDiarizationAnalysisService(
+            audioExtraction,
+            diarization,
+            _appLogger,
+            diarizationCache);
 
         var runtimeOptions = LocalContextRuntimeOptions.CreateDefault();
         var runtimeAssets = new LocalContextAssetManager(_enhancedHttpClient, runtimeOptions);
@@ -69,8 +73,10 @@ public partial class MainWindow
             _enhancedHttpClient,
             runtimeOptions.BaseUrl,
             "qwen3-1.7b",
-            contextRadius: 3,
-            logger: _appLogger);
+            contextRadius: 2,
+            logger: _appLogger,
+            maxCandidatesPerBatch: 10,
+            maxContextCuesPerBatch: 50);
 
         var enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
