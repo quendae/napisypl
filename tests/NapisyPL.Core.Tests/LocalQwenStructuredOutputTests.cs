@@ -21,8 +21,12 @@ public sealed class LocalQwenStructuredOutputTests
         using var request = JsonDocument.Parse(handler.LastRequestBody!);
         var responseFormat = request.RootElement.GetProperty("response_format");
         Assert.Equal("json_schema", responseFormat.GetProperty("type").GetString());
-        Assert.Equal("subflow_context", responseFormat.GetProperty("json_schema").GetProperty("name").GetString());
+        var schema = responseFormat.GetProperty("schema");
+        Assert.Equal("object", schema.GetProperty("type").GetString());
+        Assert.True(schema.GetProperty("properties").TryGetProperty("speakers", out _));
+        Assert.True(schema.GetProperty("properties").TryGetProperty("lines", out _));
         Assert.Equal(0, request.RootElement.GetProperty("temperature").GetDouble());
+        Assert.Equal("none", request.RootElement.GetProperty("reasoning_effort").GetString());
     }
 
     [Fact]
@@ -50,8 +54,10 @@ public sealed class LocalQwenStructuredOutputTests
         using var request = JsonDocument.Parse(handler.LastRequestBody!);
         var responseFormat = request.RootElement.GetProperty("response_format");
         Assert.Equal("json_schema", responseFormat.GetProperty("type").GetString());
-        Assert.Equal("subflow_translation", responseFormat.GetProperty("json_schema").GetProperty("name").GetString());
+        var schema = responseFormat.GetProperty("schema");
+        Assert.Equal("array", schema.GetProperty("type").GetString());
         Assert.Equal(0, request.RootElement.GetProperty("temperature").GetDouble());
+        Assert.Equal("none", request.RootElement.GetProperty("reasoning_effort").GetString());
     }
 
     private sealed class CapturingHandler(string responseJson) : HttpMessageHandler
