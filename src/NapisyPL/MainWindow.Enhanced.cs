@@ -20,6 +20,7 @@ public partial class MainWindow
 
         if (EnhancedCheckBox.IsChecked == true)
         {
+            SyncLocalProviderModelWithEnhanced();
             EnsureEnhancedConfigured();
             _pipeline.UseEnhanced = true;
             SetStatus(
@@ -30,6 +31,8 @@ public partial class MainWindow
         {
             _pipeline.UseEnhanced = false;
             await ResetEnhancedConfigurationAsync();
+            if (ProviderComboBox.SelectedItem as string == "Local Qwen (offline)")
+                ModelTextBox.Text = "qwen3-1.7b";
             SetStatus("Enhanced wyłączony — używany jest tryb Standard.", StatusKind.Normal);
         }
 
@@ -39,6 +42,7 @@ public partial class MainWindow
     private async void OnEnhancedConfigChanged(object? sender, SelectionChangedEventArgs e)
     {
         UpdateEnhancedHint();
+        SyncLocalProviderModelWithEnhanced();
         if (_pipeline is null || _busy || !_enhancedConfigured)
             return;
 
@@ -56,6 +60,17 @@ public partial class MainWindow
 
     private async Task EnsureLocalQwenRunningAsync(CancellationToken cancellationToken)
     {
+        if (EnhancedCheckBox.IsChecked != true)
+        {
+            if (EnhancedModelComboBox.SelectedIndex != 2)
+                EnhancedModelComboBox.SelectedIndex = 2;
+            ModelTextBox.Text = "qwen3-1.7b";
+        }
+        else
+        {
+            SyncLocalProviderModelWithEnhanced();
+        }
+
         EnsureEnhancedConfigured();
         await _enhancedRuntimeManager!.EnsureRunningAsync(
             new Progress<string>(message => SetStatus(message, StatusKind.Normal)),
@@ -158,6 +173,16 @@ public partial class MainWindow
         2 => "CPU",
         _ => "Auto (Vulkan → CPU)"
     };
+
+    private void SyncLocalProviderModelWithEnhanced()
+    {
+        if (ProviderComboBox.SelectedItem as string != "Local Qwen (offline)" || EnhancedCheckBox.IsChecked != true)
+            return;
+
+        var options = GetSelectedEnhancedOptions();
+        ModelTextBox.Text = options.ModelAlias;
+        BaseUrlTextBox.Text = options.BaseUrl;
+    }
 
     private void UpdateEnhancedHint()
     {
