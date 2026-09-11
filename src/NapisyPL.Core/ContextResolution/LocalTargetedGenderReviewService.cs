@@ -30,7 +30,8 @@ public sealed class LocalTargetedGenderReviewService(
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IProgress<double>? progress = null,
         IProgress<string>? status = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence = null)
     {
         if (source.Count != translated.Count)
             throw new ArgumentException("Source and translated cue counts must match.");
@@ -83,13 +84,17 @@ public sealed class LocalTargetedGenderReviewService(
             var speakerSamples = allSpeakerSamples
                 .Where(pair => relevantSpeakerIds.Contains(pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+            var relevantGenderEvidence = (speakerGenderEvidence ?? new Dictionary<string, SpeakerGenderEvidence>())
+                .Where(pair => relevantSpeakerIds.Contains(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             var prompt = TargetedGenderReviewProtocol.BuildPrompt(
                 sourceWindow,
                 translatedWindow,
                 allowedIds,
                 cueSpeakers,
                 speakerSamples,
-                probableAddressees);
+                probableAddressees,
+                relevantGenderEvidence);
 
             var oneBasedBatch = batchIndex + 1;
             _logger.Info(
@@ -100,6 +105,7 @@ public sealed class LocalTargetedGenderReviewService(
                 ("cueCount", sourceWindow.Count),
                 ("candidateCount", allowedIds.Count),
                 ("speakerCount", speakerSamples.Count),
+                ("genderEvidenceCount", relevantGenderEvidence.Count),
                 ("promptChars", prompt.Length));
             status?.Report($"Enhanced: model sprawdza paczkę {oneBasedBatch} / {batches.Count}…");
 
@@ -115,6 +121,12 @@ public sealed class LocalTargetedGenderReviewService(
                 object chatTemplateKwargs = isGptOss
                     ? new { reasoning_effort = "low" }
                     : new { enable_thinking = false };
+                object responseFormat = isGptOss
+                    ? new { type = "json_object" }
+                    : LlamaJsonSchemas.SurgicalReviewResponseFormat;
+                var systemMessage = isGptOss
+                    ? "Return one JSON object with exactly one top-level property named edits. edits must be an array of tiny exact Polish gender/number replacements with id, find, replace, confidence, and target. Never rewrite subtitle lines. Example empty result: {\"edits\":[]}."
+                    : "Return only tiny exact Polish gender/number replacements. Label every edit target as speaker or addressee. Never rewrite subtitle lines.";
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
                 {
@@ -125,19 +137,11 @@ public sealed class LocalTargetedGenderReviewService(
                         max_tokens = 400,
                         reasoning_effort = isGptOss ? "low" : "none",
                         chat_template_kwargs = chatTemplateKwargs,
-                        response_format = LlamaJsonSchemas.SurgicalReviewResponseFormat,
+                        response_format = responseFormat,
                         messages = new object[]
                         {
-                            new
-                            {
-                                role = "system",
-                                content = "Return only tiny exact Polish gender/number replacements. Label every edit target as speaker or addressee. Never rewrite subtitle lines."
-                            },
-                            new
-                            {
-                                role = "user",
-                                content = prompt
-                            }
+                            new { role = "system", content = systemMessage },
+                            new { role = "user", content = prompt }
                         }
                     })
                 };
@@ -148,19 +152,12 @@ public sealed class LocalTargetedGenderReviewService(
                 if (!response.IsSuccessStatusCode)
                     throw new HttpRequestException($"Local targeted review returned HTTP {(int)response.StatusCode}.");
 
-                parsed = ParseApiResponse(body);
+                parsed = ParseApiResponse(body, isGptOss);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 stopwatch.Stop();
-                LogWindowError(
-                    oneBasedBatch,
-                    batches.Count,
-                    stopwatch.Elapsed.TotalMilliseconds,
-                    httpStatus,
-                    body.Length,
-                    nameof(TimeoutException),
-                    "review_timeout");
+                LogWindowError(oneBasedBatch, batches.Count, stopwatch.Elapsed.TotalMilliseconds, httpStatus, body.Length, nameof(TimeoutException), "review_timeout");
                 progress?.Report((double)oneBasedBatch / batches.Count);
                 status?.Report($"Enhanced: paczka {oneBasedBatch} przekroczyła limit czasu — pomijam ją i kontynuuję.");
                 continue;
@@ -175,9 +172,7 @@ public sealed class LocalTargetedGenderReviewService(
                     httpStatus,
                     body.Length,
                     ex.GetType().Name,
-                    ex is HttpRequestException
-                        ? "http_error"
-                        : ClassifyInvalidResponse((InvalidDataException)ex));
+                    ex is HttpRequestException ? "http_error" : ClassifyInvalidResponse((InvalidDataException)ex));
                 progress?.Report((double)oneBasedBatch / batches.Count);
                 status?.Report($"Enhanced: paczka {oneBasedBatch} zwróciła błąd — zachowuję bazowe tłumaczenie tej paczki i kontynuuję.");
                 continue;
@@ -228,27 +223,13 @@ public sealed class LocalTargetedGenderReviewService(
                     droppedApplyGuard++;
                     switch (rejectReason)
                     {
-                        case SurgicalGenderEditRejectReason.CueMismatch:
-                            droppedApplyCueMismatch++;
-                            break;
-                        case SurgicalGenderEditRejectReason.LowConfidence:
-                            droppedApplyConfidence++;
-                            break;
-                        case SurgicalGenderEditRejectReason.InvalidFragment:
-                            droppedApplyFragment++;
-                            break;
-                        case SurgicalGenderEditRejectReason.Unchanged:
-                            droppedApplyUnchanged++;
-                            break;
-                        case SurgicalGenderEditRejectReason.NotInflectionOnly:
-                            droppedApplyInflection++;
-                            break;
-                        case SurgicalGenderEditRejectReason.FindMissing:
-                            droppedApplyFindMissing++;
-                            break;
-                        case SurgicalGenderEditRejectReason.FindAmbiguous:
-                            droppedApplyFindAmbiguous++;
-                            break;
+                        case SurgicalGenderEditRejectReason.CueMismatch: droppedApplyCueMismatch++; break;
+                        case SurgicalGenderEditRejectReason.LowConfidence: droppedApplyConfidence++; break;
+                        case SurgicalGenderEditRejectReason.InvalidFragment: droppedApplyFragment++; break;
+                        case SurgicalGenderEditRejectReason.Unchanged: droppedApplyUnchanged++; break;
+                        case SurgicalGenderEditRejectReason.NotInflectionOnly: droppedApplyInflection++; break;
+                        case SurgicalGenderEditRejectReason.FindMissing: droppedApplyFindMissing++; break;
+                        case SurgicalGenderEditRejectReason.FindAmbiguous: droppedApplyFindAmbiguous++; break;
                     }
                     continue;
                 }
@@ -292,14 +273,7 @@ public sealed class LocalTargetedGenderReviewService(
         return output;
     }
 
-    private void LogWindowError(
-        int windowIndex,
-        int windowCount,
-        double elapsedMs,
-        int? httpStatus,
-        int responseChars,
-        string category,
-        string reasonCode)
+    private void LogWindowError(int windowIndex, int windowCount, double elapsedMs, int? httpStatus, int responseChars, string category, string reasonCode)
     {
         _logger.Error(
             "review_window_error",
@@ -317,16 +291,11 @@ public sealed class LocalTargetedGenderReviewService(
     private static string ClassifyInvalidResponse(InvalidDataException exception)
     {
         var message = exception.Message;
-        if (message.Contains("token limit", StringComparison.OrdinalIgnoreCase))
-            return "review_token_limit";
-        if (message.Contains("no content", StringComparison.OrdinalIgnoreCase))
-            return "review_no_content";
-        if (message.Contains("API JSON", StringComparison.OrdinalIgnoreCase))
-            return "review_api_json";
-        if (message.Contains("agreement target", StringComparison.OrdinalIgnoreCase))
-            return "review_target_schema";
-        if (message.Contains("JSON", StringComparison.OrdinalIgnoreCase))
-            return "review_edit_json";
+        if (message.Contains("token limit", StringComparison.OrdinalIgnoreCase)) return "review_token_limit";
+        if (message.Contains("no content", StringComparison.OrdinalIgnoreCase)) return "review_no_content";
+        if (message.Contains("API JSON", StringComparison.OrdinalIgnoreCase)) return "review_api_json";
+        if (message.Contains("agreement target", StringComparison.OrdinalIgnoreCase)) return "review_target_schema";
+        if (message.Contains("JSON", StringComparison.OrdinalIgnoreCase)) return "review_edit_json";
         return "invalid_response";
     }
 
@@ -356,7 +325,7 @@ public sealed class LocalTargetedGenderReviewService(
                 StringComparer.Ordinal);
     }
 
-    private static ParsedReviewResponse ParseApiResponse(string body)
+    private static ParsedReviewResponse ParseApiResponse(string body, bool gptOssWrappedObject)
     {
         try
         {
@@ -383,15 +352,32 @@ public sealed class LocalTargetedGenderReviewService(
                     completionTokens = parsedCompletionTokens;
             }
 
-            return new ParsedReviewResponse(
-                ParseReviewEdits(content),
-                finishReason,
-                promptTokens,
-                completionTokens);
+            var edits = gptOssWrappedObject
+                ? ParseWrappedReviewEdits(content)
+                : ParseReviewEdits(content);
+            return new ParsedReviewResponse(edits, finishReason, promptTokens, completionTokens);
         }
         catch (JsonException ex)
         {
             throw new InvalidDataException("Targeted gender review returned invalid API JSON.", ex);
+        }
+    }
+
+    private static IReadOnlyList<SurgicalGenderEdit> ParseWrappedReviewEdits(string content)
+    {
+        var json = StripFence(content.Trim());
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("edits", out var edits) ||
+                edits.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException("Gender reviewer returned invalid wrapped JSON.");
+            return SurgicalGenderEditProtocol.ParseResponse(edits.GetRawText());
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("Gender reviewer returned invalid wrapped JSON.", ex);
         }
     }
 
@@ -414,6 +400,17 @@ public sealed class LocalTargetedGenderReviewService(
 
             return SurgicalGenderEditProtocol.ParseResponse(extracted);
         }
+    }
+
+    private static string StripFence(string text)
+    {
+        if (!text.StartsWith("```", StringComparison.Ordinal))
+            return text;
+        var firstNewLine = text.IndexOf('\n');
+        var lastFence = text.LastIndexOf("```", StringComparison.Ordinal);
+        return firstNewLine >= 0 && lastFence > firstNewLine
+            ? text[(firstNewLine + 1)..lastFence].Trim()
+            : text;
     }
 
     private sealed record ParsedReviewResponse(
