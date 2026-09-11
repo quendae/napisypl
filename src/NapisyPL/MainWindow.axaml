@@ -2,13 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NapisyPL.MainWindow"
         Title="SubFlow"
-        Width="820" Height="840"
-        MinWidth="680" MinHeight="640"
+        Width="1220" Height="780"
+        MinWidth="920" MinHeight="640"
         Background="{DynamicResource CanvasBrush}"
         Opened="OnArgosWindowOpened"
         Closed="OnArgosWindowClosed">
-  <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Margin="34,28,34,34" Spacing="18">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="28,22,28,26" Spacing="14">
       <Border Background="#161A22" CornerRadius="7" Padding="12,8">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <TextBlock Text="00:00:00,000" FontFamily="Consolas" FontSize="12" Foreground="#AEB6C3" VerticalAlignment="Center" />
@@ -17,100 +17,128 @@
         </Grid>
       </Border>
 
-      <StackPanel Spacing="4">
-        <TextBlock Text="SubFlow" FontSize="28" FontWeight="SemiBold" />
-        <TextBlock Text="Wyciągnij angielskie napisy z filmu, otwórz plik napisów albo przetłumacz cały folder na polski." Foreground="{DynamicResource MutedBrush}" FontSize="15" TextWrapping="Wrap" />
-      </StackPanel>
-
-      <Border x:Name="DropZone" Classes="dropzone"
-              DragDrop.AllowDrop="True"
-              DragDrop.DragEnter="OnDragEnter"
-              DragDrop.DragLeave="OnDragLeave"
-              DragDrop.DragOver="OnDragOver"
-              DragDrop.Drop="OnDrop">
-        <StackPanel Spacing="10" HorizontalAlignment="Center">
-          <TextBlock Text="Upuść film, napisy lub folder" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
-          <TextBlock x:Name="SelectedFileText" Text="MKV, MP4, MOV, AVI, WebM · SRT, ASS, SSA, VTT, TXT" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-            <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" Padding="16,8" />
-            <Button x:Name="ChooseFolderButton" Content="Wybierz folder" Click="OnChooseFolderClick" Padding="16,8" />
-          </StackPanel>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+        <StackPanel Spacing="2">
+          <TextBlock Text="SubFlow" FontSize="27" FontWeight="SemiBold" />
+          <TextBlock Text="Angielskie napisy → polskie. Pojedynczy film, plik napisów albo cały folder."
+                     Foreground="{DynamicResource MutedBrush}" FontSize="14" TextWrapping="Wrap" />
         </StackPanel>
-      </Border>
+        <TextBlock Grid.Column="1" Text="offline + cloud" Foreground="{DynamicResource MutedBrush}"
+                   FontSize="12" VerticalAlignment="Center" />
+      </Grid>
 
-      <Border x:Name="TrackPanel" Classes="card" IsVisible="False">
-        <StackPanel Spacing="8">
-          <TextBlock Text="Ścieżka napisów" FontWeight="SemiBold" />
-          <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" />
-          <TextBlock x:Name="TrackHintText" Text="Automatycznie wybieramy angielską ścieżkę tekstową, jeśli jest oznaczona w pliku." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
-        </StackPanel>
-      </Border>
-
-      <Border Classes="card">
+      <Grid ColumnDefinitions="1.05*,0.95*" ColumnSpacing="16">
         <StackPanel Spacing="14">
-          <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
-            <StackPanel Spacing="6">
-              <TextBlock Text="Tłumacz" FontWeight="SemiBold" />
-              <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Spacing="6">
-              <TextBlock Text="Model" FontWeight="SemiBold" />
-              <TextBox x:Name="ModelTextBox" PlaceholderText="np. gemini-3.8-flash" />
-            </StackPanel>
-          </Grid>
-
-          <StackPanel Spacing="6">
-            <TextBlock Text="Klucz API" FontWeight="SemiBold" />
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-              <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Klucz jest używany tylko w tej sesji" />
-              <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż" VerticalAlignment="Center" IsCheckedChanged="OnRevealKeyChanged" />
-            </Grid>
-            <TextBlock x:Name="ApiKeyHintText" Text="Klucz nie jest zapisywany na dysku." FontSize="12" Foreground="{DynamicResource MutedBrush}" />
-          </StackPanel>
-
-          <StackPanel Spacing="6">
-            <TextBlock Text="Base URL" FontWeight="SemiBold" />
-            <TextBox x:Name="BaseUrlTextBox" />
-            <TextBlock x:Name="BaseUrlHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
-          </StackPanel>
-
-          <CheckBox x:Name="ExportTxtCheckBox" Content="Zapisz dodatkowo plik TXT" />
-        </StackPanel>
-      </Border>
-
-      <Border Classes="card">
-        <StackPanel Spacing="8">
-          <CheckBox x:Name="EnhancedCheckBox"
-                    Content="Enhanced — analizuj audio i kontekst rozmówców"
-                    FontWeight="SemiBold"
-                    IsCheckedChanged="OnEnhancedChanged" />
-          <TextBlock Text="Opcjonalnie: lokalnie wykrywa mówców, a mały Qwen sprawdza tylko podejrzane formy rodzaju/liczby po właściwym tłumaczeniu. Pierwsze użycie Qwena pobierze ok. 1,4 GB. Audio nie jest wysyłane do chmury."
-                     Foreground="{DynamicResource MutedBrush}"
-                     FontSize="12"
-                     TextWrapping="Wrap" />
-        </StackPanel>
-      </Border>
-
-      <Border Classes="card">
-        <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-            <Button x:Name="TranslateButton" Classes="primary" Content="Tłumacz na polski" Click="OnTranslateClick" IsEnabled="False" />
-            <Button x:Name="CancelButton" Grid.Column="1" Content="Anuluj" Click="OnCancelClick" IsVisible="False" MinWidth="88" />
-          </Grid>
-
-          <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="6" Value="0" />
-
-          <Border x:Name="LiveProgressPanel" Background="#F4F5F7" BorderBrush="#D8DDE5" BorderThickness="1" CornerRadius="6" Padding="12,10" IsVisible="False">
-            <StackPanel Spacing="4">
-              <TextBlock x:Name="BatchTitleText" Text="Tłumaczenie" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}" />
-              <TextBlock x:Name="BatchCurrentText" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock x:Name="BatchDetailText" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+          <Border x:Name="DropZone" Classes="dropzone" MinHeight="235"
+                  DragDrop.AllowDrop="True"
+                  DragDrop.DragEnter="OnDragEnter"
+                  DragDrop.DragLeave="OnDragLeave"
+                  DragDrop.DragOver="OnDragOver"
+                  DragDrop.Drop="OnDrop">
+            <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock Text="Upuść film, napisy lub folder" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+              <TextBlock x:Name="SelectedFileText"
+                         Text="MKV, MP4, MOV, AVI, WebM · SRT, ASS, SSA, VTT, TXT"
+                         Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" TextWrapping="Wrap"
+                         MaxWidth="500" />
+              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" Padding="16,8" />
+                <Button x:Name="ChooseFolderButton" Content="Wybierz folder" Click="OnChooseFolderClick" Padding="16,8" />
+              </StackPanel>
             </StackPanel>
           </Border>
 
+          <Border x:Name="TrackPanel" Classes="card" IsVisible="False">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Ścieżka napisów" FontWeight="SemiBold" />
+              <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" />
+              <TextBlock x:Name="TrackHintText"
+                         Text="Automatycznie wybieramy angielską ścieżkę tekstową, jeśli jest oznaczona w pliku."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Spacing="14">
+          <Border Classes="card">
+            <StackPanel Spacing="11">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Tłumacz bazowy" FontWeight="SemiBold" />
+                <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged" />
+                <TextBlock x:Name="ProviderHintText" Foreground="{DynamicResource MutedBrush}"
+                           FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <StackPanel x:Name="ModelPanel" Spacing="6">
+                <TextBlock Text="Model" FontWeight="SemiBold" />
+                <TextBox x:Name="ModelTextBox" PlaceholderText="np. gemini-3.8-flash" />
+              </StackPanel>
+
+              <StackPanel x:Name="ApiKeyPanel" Spacing="6">
+                <TextBlock Text="Klucz API" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                  <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Klucz API" />
+                  <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż"
+                            VerticalAlignment="Center" IsCheckedChanged="OnRevealKeyChanged" />
+                </Grid>
+                <CheckBox x:Name="RememberKeyCheckBox" Content="Zapamiętaj klucz na tym komputerze"
+                          IsCheckedChanged="OnRememberKeyChanged" />
+                <TextBlock x:Name="ApiKeyHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <StackPanel x:Name="BaseUrlPanel" Spacing="6">
+                <TextBlock Text="Base URL" FontWeight="SemiBold" />
+                <TextBox x:Name="BaseUrlTextBox" />
+                <TextBlock x:Name="BaseUrlHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <CheckBox x:Name="ExportTxtCheckBox" Content="Zapisz dodatkowo plik TXT" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel Spacing="7">
+              <CheckBox x:Name="EnhancedCheckBox"
+                        Content="Enhanced — analizuj audio i kontekst rozmówców"
+                        FontWeight="SemiBold"
+                        IsCheckedChanged="OnEnhancedChanged" />
+              <TextBlock Text="Korekta kontekstu: Qwen 1.7B. Qwen sprawdza tylko podejrzane formy rodzaju/liczby po tłumaczeniu bazowym — nie tłumaczy całego tekstu."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="Audio jest analizowane lokalnie. Pierwsze użycie korektora pobierze ok. 1,4 GB."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+
+      <Border Classes="card">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
+            <Button x:Name="TranslateButton" Classes="primary" Content="Tłumacz na polski"
+                    Click="OnTranslateClick" IsEnabled="False" MinWidth="155" />
+            <Button x:Name="CancelButton" Grid.Column="1" Content="Anuluj" Click="OnCancelClick"
+                    IsVisible="False" MinWidth="88" />
+            <ProgressBar x:Name="ProgressBar" Grid.Column="2" Minimum="0" Maximum="100"
+                         Height="6" Value="0" VerticalAlignment="Center" />
+          </Grid>
+
+          <Border x:Name="LiveProgressPanel" Background="#F4F5F7" BorderBrush="#D8DDE5"
+                  BorderThickness="1" CornerRadius="6" Padding="12,9" IsVisible="False">
+            <Grid ColumnDefinitions="170,*,Auto" ColumnSpacing="14">
+              <TextBlock x:Name="BatchTitleText" Text="Tłumaczenie" FontSize="12" FontWeight="SemiBold"
+                         Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+              <TextBlock x:Name="BatchCurrentText" Grid.Column="1" FontWeight="SemiBold"
+                         TextWrapping="Wrap" VerticalAlignment="Center" />
+              <TextBlock x:Name="BatchDetailText" Grid.Column="2" FontFamily="Consolas" FontSize="12"
+                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <TextBlock x:Name="StatusText" Text="Wybierz plik lub folder, aby rozpocząć." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
-            <Button x:Name="OpenFolderButton" Grid.Column="1" Content="Pokaż plik" Click="OnOpenFolderClick" IsVisible="False" />
+            <TextBlock x:Name="StatusText" Text="Wybierz plik lub folder, aby rozpocząć."
+                       Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button x:Name="OpenFolderButton" Grid.Column="1" Content="Pokaż plik"
+                    Click="OnOpenFolderClick" IsVisible="False" />
             <Button x:Name="OpenLogButton" Grid.Column="2" Content="Otwórz log" Click="OnOpenLogClick" />
           </Grid>
         </StackPanel>
