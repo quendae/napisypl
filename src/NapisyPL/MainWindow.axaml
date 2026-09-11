@@ -97,14 +97,41 @@
           </Border>
 
           <Border Classes="card">
-            <StackPanel Spacing="7">
+            <StackPanel Spacing="8">
               <CheckBox x:Name="EnhancedCheckBox"
                         Content="Enhanced — analizuj audio i kontekst rozmówców"
                         FontWeight="SemiBold"
                         IsCheckedChanged="OnEnhancedChanged" />
-              <TextBlock Text="Korekta kontekstu: Qwen 1.7B. Qwen sprawdza tylko podejrzane formy rodzaju/liczby po tłumaczeniu bazowym — nie tłumaczy całego tekstu."
+
+              <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <StackPanel Spacing="5">
+                  <TextBlock Text="Model korektora" FontSize="12" FontWeight="SemiBold" />
+                  <ComboBox x:Name="EnhancedModelComboBox"
+                            SelectedIndex="0"
+                            SelectionChanged="OnEnhancedConfigChanged">
+                    <ComboBoxItem Content="Qwen 3.5 9B — jakość" />
+                    <ComboBoxItem Content="GPT-OSS 20B — MoE / benchmark" />
+                    <ComboBoxItem Content="Qwen 3 1.7B — baseline" />
+                  </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="5">
+                  <TextBlock Text="Backend" FontSize="12" FontWeight="SemiBold" />
+                  <ComboBox x:Name="EnhancedBackendComboBox"
+                            SelectedIndex="0"
+                            SelectionChanged="OnEnhancedConfigChanged">
+                    <ComboBoxItem Content="Auto — Vulkan → CPU" />
+                    <ComboBoxItem Content="Vulkan" />
+                    <ComboBoxItem Content="CPU" />
+                  </ComboBox>
+                </StackPanel>
+              </Grid>
+
+              <TextBlock Text="Lokalny model sprawdza tylko podejrzane formy rodzaju/liczby po tłumaczeniu bazowym — nie tłumaczy całego tekstu."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-              <TextBlock Text="Audio jest analizowane lokalnie. Pierwsze użycie korektora pobierze ok. 1,4 GB."
+              <TextBlock x:Name="EnhancedModelHintText"
+                         Text="Korektor: Qwen 3.5 9B Q4_K_M · ~5.6 GB. Backend: Auto (Vulkan → CPU). Model jest pobierany tylko przy pierwszym użyciu."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="Audio i korekta są wykonywane lokalnie. Tryb Auto preferuje Vulkan i w razie braku zgodnego GPU przechodzi na CPU."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
