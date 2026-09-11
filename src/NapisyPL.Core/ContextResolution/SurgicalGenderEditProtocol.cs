@@ -64,6 +64,8 @@ public static partial class SurgicalGenderEditApplier
     private const int MaxWordsPerSide = 3;
     private const int MaxCharsPerSide = 60;
 
+    private static readonly HashSet<(string Left, string Right)> AllowedEndingPairs = BuildAllowedEndingPairs();
+
     public static bool TryApply(SubtitleCue cue, SurgicalGenderEdit edit, out SubtitleCue changed)
     {
         changed = cue;
@@ -118,12 +120,43 @@ public static partial class SurgicalGenderEditApplier
             if (commonPrefix < minimumPrefix)
                 return false;
 
-            // Gender/number inflection normally changes an ending, not most of the lexical stem.
-            if (source.Length - commonPrefix > 5 || replacement.Length - commonPrefix > 5)
+            var sourceEnding = source[commonPrefix..];
+            var replacementEnding = replacement[commonPrefix..];
+            if (!AllowedEndingPairs.Contains((sourceEnding, replacementEnding)))
                 return false;
         }
 
         return changedWordCount is > 0 and <= MaxWordsPerSide;
+    }
+
+    private static HashSet<(string Left, string Right)> BuildAllowedEndingPairs()
+    {
+        (string Left, string Right)[] pairs =
+        [
+            ("", "a"),
+            ("y", "a"),
+            ("y", "e"),
+            ("i", "e"),
+            ("i", "y"),
+            ("em", "am"),
+            ("eś", "aś"),
+            ("by", "aby"),
+            ("li", "ły"),
+            ("liśmy", "łyśmy"),
+            ("liście", "łyście"),
+            ("eni", "one"),
+            ("ien", "na"),
+            ("ienem", "nam"),
+            ("ieneś", "naś")
+        ];
+
+        var result = new HashSet<(string Left, string Right)>();
+        foreach (var pair in pairs)
+        {
+            result.Add(pair);
+            result.Add((pair.Right, pair.Left));
+        }
+        return result;
     }
 
     private static int CommonPrefixLength(string left, string right)
