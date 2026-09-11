@@ -39,8 +39,12 @@ public partial class MainWindow
 
     private void OnArgosProviderSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (string.Equals(ProviderComboBox.SelectedItem as string, ArgosProviderName, StringComparison.Ordinal))
-            ApplyArgosProviderUi();
+        if (!string.Equals(ProviderComboBox.SelectedItem as string, ArgosProviderName, StringComparison.Ordinal))
+            return;
+
+        var runtime = ArgosRuntimeRegistry.GetOrCreate(_httpClient);
+        runtime.StatusProgress = new Progress<string>(message => SetStatus(message, StatusKind.Normal));
+        ApplyArgosProviderUi();
     }
 
     private void ApplyArgosProviderUi()
