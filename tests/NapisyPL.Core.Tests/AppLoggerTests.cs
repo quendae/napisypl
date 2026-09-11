@@ -161,6 +161,19 @@ public sealed class AppLoggerTests
                 ("femaleScoreMaxPermille", 743),
                 ("combinedScoreMeanPermille", 287),
                 ("combinedScoreMaxPermille", 901));
+            logger.Info(
+                "speaker_gender_detail",
+                ("speaker", "SPEAKER_07"),
+                ("sampleCount", 3),
+                ("voiceGender", "unknown"),
+                ("reasonCode", "LowCombinedEvidence"),
+                ("maleMeanPermille", 41),
+                ("femaleMeanPermille", 4),
+                ("combinedMeanPermille", 45),
+                ("normalizedWinnerPermille", 911),
+                ("winnerCount", 0),
+                ("oppositeCount", 0),
+                ("requiredWinnerCount", 2));
 
             var log = File.ReadAllText(logger.LogPath);
 
@@ -176,6 +189,10 @@ public sealed class AppLoggerTests
             Assert.Contains("femaleScoreMaxPermille=743", log);
             Assert.Contains("combinedScoreMeanPermille=287", log);
             Assert.Contains("combinedScoreMaxPermille=901", log);
+            Assert.Contains("speaker=SPEAKER_07", log);
+            Assert.Contains("reasonCode=LowCombinedEvidence", log);
+            Assert.Contains("maleMeanPermille=41", log);
+            Assert.Contains("normalizedWinnerPermille=911", log);
             Assert.DoesNotContain("[REDACTED]", log);
         }
         finally
