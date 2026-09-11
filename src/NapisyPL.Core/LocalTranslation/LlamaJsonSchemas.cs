@@ -64,9 +64,10 @@ public static class LlamaJsonSchemas
                     id = new { type = "integer", minimum = 1 },
                     find = new { type = "string", minLength = 1 },
                     replace = new { type = "string", minLength = 1 },
-                    confidence = new { type = "number", minimum = 0, maximum = 1 }
+                    confidence = new { type = "number", minimum = 0, maximum = 1 },
+                    target = new { type = "string", @enum = new[] { "speaker", "addressee" } }
                 },
-                required = new[] { "id", "find", "replace", "confidence" },
+                required = new[] { "id", "find", "replace", "confidence", "target" },
                 additionalProperties = false
             }
         }
