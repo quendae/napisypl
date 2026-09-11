@@ -18,7 +18,8 @@ public static class TargetedGenderReviewProtocol
         IReadOnlySet<int> candidateIds,
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<string, IReadOnlyList<string>> speakerSamples,
-        IReadOnlyDictionary<int, string?>? probableAddressees = null)
+        IReadOnlyDictionary<int, string?>? probableAddressees = null,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence = null)
     {
         if (sourceWindow.Count != translatedWindow.Count)
             throw new ArgumentException("Source and translated context windows must have equal length.");
@@ -44,6 +45,25 @@ public static class TargetedGenderReviewProtocol
             };
         }).ToArray();
 
+        var relevantSpeakerIds = lines
+            .Where(line => line.candidate)
+            .SelectMany(line => new[] { line.speaker, line.probableAddressee })
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var relevantGenderEvidence = (speakerGenderEvidence ?? new Dictionary<string, SpeakerGenderEvidence>())
+            .Where(pair => relevantSpeakerIds.Contains(pair.Key))
+            .ToDictionary(
+                pair => pair.Key,
+                pair => new
+                {
+                    gender = pair.Value.Gender.ToString().ToLowerInvariant(),
+                    confidence = Math.Round(pair.Value.Confidence, 3),
+                    sampleCount = pair.Value.SampleCount
+                },
+                StringComparer.Ordinal);
+
         return $$"""
         /no_think
         You are a conservative Polish subtitle grammatical-agreement reviewer.
@@ -56,11 +76,18 @@ public static class TargetedGenderReviewProtocol
         - target="speaker": the changed Polish form describes the person SPEAKING the candidate line, e.g. "byłem" -> "byłam" or "zrobiłem" -> "zrobiłam".
         - target="addressee": the changed Polish form directly addresses the LISTENER, e.g. "byłeś" -> "byłaś" or "zrobiłeś" -> "zrobiłaś".
 
+        speakerGenderEvidence is produced by a separate local acoustic classifier over multiple diarized speech fragments.
+        - gender="male" or "female" is usable supporting evidence for that stable speaker ID.
+        - gender="unknown" is no evidence.
+        - confidence describes consistency of the acoustic classification; do not treat it as certainty about identity.
+        - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond this supplied classifier result.
+        - Prefer supplied high-confidence acoustic evidence when it agrees with explicit dialogue evidence; if evidence conflicts or remains uncertain, return no edit.
+
         probableAddressee is computed by the application only when turn-taking strongly looks like B -> A -> B.
         For target="addressee":
         - probableAddressee MUST be non-null.
         - Use ONLY that speaker as the possible addressee; never choose another context speaker.
-        - Require very strong explicit evidence and confidence >= 0.95.
+        - Require very strong evidence and confidence >= 0.95.
         - If probableAddressee is null, NEVER edit an addressee-dependent form.
 
         Output ONLY minimal exact fragment replacements as JSON.
@@ -75,8 +102,8 @@ public static class TargetedGenderReviewProtocol
         - Never copy text from another subtitle line.
         - Change only grammatical gender/number agreement.
         - Use stable speaker IDs only for turn identity; speaker IDs do NOT imply gender.
-        - Never infer gender from voice pitch, speaker number, stereotypes, or a name alone.
-        - Prefer explicit pronouns, gendered titles, relationships, or unambiguous dialogue evidence.
+        - Never infer gender from speaker number, stereotypes, or a name alone.
+        - Prefer explicit pronouns, gendered titles, relationships, supplied speakerGenderEvidence, or unambiguous dialogue evidence.
         - If evidence is uncertain, return no edit for that candidate.
         - Give confidence >= 0.85 only when a speaker-target correction is strongly supported.
         - Give confidence >= 0.95 only when an addressee-target correction is strongly supported.
@@ -88,6 +115,9 @@ public static class TargetedGenderReviewProtocol
 
         relevantSpeakerSamples:
         {{JsonSerializer.Serialize(speakerSamples, JsonOptions)}}
+
+        speakerGenderEvidence:
+        {{JsonSerializer.Serialize(relevantGenderEvidence, JsonOptions)}}
 
         dialogueContext:
         {{JsonSerializer.Serialize(lines, JsonOptions)}}
