@@ -11,7 +11,7 @@ public sealed class AppLogger : IAppLogger
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
-        "responseChars", "speakerCount", "dropped", "finishReason", "proposed",
+        "responseChars", "speakerCount", "dropped", "finishReason", "proposed", "backend", "device",
         "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
         "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous"
