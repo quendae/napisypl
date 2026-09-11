@@ -126,6 +126,7 @@ public sealed class SpeakerVoiceGenderService(
 
             var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
             var allObservations = new List<SpeakerGenderObservation>();
+            var evaluations = new Dictionary<string, SpeakerGenderEvaluation>(StringComparer.Ordinal);
             var result = await Task.Run<IReadOnlyDictionary<string, SpeakerGenderEvidence>>(() =>
             {
                 using var tagger = new AudioTagging(config);
@@ -161,11 +162,32 @@ public sealed class SpeakerVoiceGenderService(
                     }
 
                     allObservations.AddRange(observations);
-                    evidence[$"SPEAKER_{pair.Key:00}"] = SpeakerGenderEvidenceAggregator.Aggregate(observations);
+                    var speaker = $"SPEAKER_{pair.Key:00}";
+                    var evaluation = SpeakerGenderEvidenceAggregator.Evaluate(observations);
+                    evaluations[speaker] = evaluation;
+                    evidence[speaker] = evaluation.Evidence;
                 }
 
                 return evidence;
             }, CancellationToken.None);
+
+            foreach (var pair in evaluations.OrderBy(item => item.Key, StringComparer.Ordinal))
+            {
+                var evaluation = pair.Value;
+                _logger.Info(
+                    "speaker_gender_detail",
+                    ("speaker", pair.Key),
+                    ("sampleCount", evaluation.Evidence.SampleCount),
+                    ("voiceGender", evaluation.Evidence.Gender.ToString().ToLowerInvariant()),
+                    ("reasonCode", evaluation.UnknownReason.ToString()),
+                    ("maleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.MaleEvidence)),
+                    ("femaleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.FemaleEvidence)),
+                    ("combinedMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.CombinedEvidence)),
+                    ("normalizedWinnerPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.NormalizedWinnerConfidence)),
+                    ("winnerCount", evaluation.DirectionalWinnerCount),
+                    ("oppositeCount", evaluation.DirectionalOppositeCount),
+                    ("requiredWinnerCount", evaluation.DirectionalRequiredCount));
+            }
 
             var known = result.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
             var diagnostics = SpeakerGenderObservationDiagnostics.Summarize(allObservations);
