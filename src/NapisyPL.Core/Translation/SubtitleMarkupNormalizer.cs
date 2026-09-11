@@ -51,7 +51,7 @@ public static partial class SubtitleMarkupNormalizer
     [GeneratedRegex(@"<\s*(/?)\s*(i|b|u|s)\s*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SimpleTagRegex();
 
-    [GeneratedRegex(@"</?(i|b|u|s)>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"<(/?)(i|b|u|s)>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NormalizedTagRegex();
 
     [GeneratedRegex(@"<(i|b|u|s)>\s+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
