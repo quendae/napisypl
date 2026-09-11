@@ -11,14 +11,18 @@ public sealed class LocalTargetedGenderReviewService(
     HttpClient httpClient,
     string baseUrl,
     string model,
-    int contextRadius = 3,
+    int contextRadius = 2,
     IAppLogger? logger = null,
-    TimeSpan? requestTimeout = null)
+    TimeSpan? requestTimeout = null,
+    int maxCandidatesPerBatch = 10,
+    int maxContextCuesPerBatch = 50)
 {
     private readonly string _baseUrl = baseUrl.TrimEnd('/');
     private readonly int _contextRadius = contextRadius >= 0 ? contextRadius : throw new ArgumentOutOfRangeException(nameof(contextRadius));
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
     private readonly TimeSpan _requestTimeout = ValidateTimeout(requestTimeout ?? TimeSpan.FromSeconds(90));
+    private readonly int _maxCandidatesPerBatch = maxCandidatesPerBatch > 0 ? maxCandidatesPerBatch : throw new ArgumentOutOfRangeException(nameof(maxCandidatesPerBatch));
+    private readonly int _maxContextCuesPerBatch = maxContextCuesPerBatch > 0 ? maxContextCuesPerBatch : throw new ArgumentOutOfRangeException(nameof(maxContextCuesPerBatch));
 
     public async Task<IReadOnlyList<SubtitleCue>> ReviewAsync(
         IReadOnlyList<SubtitleCue> source,
@@ -42,33 +46,37 @@ public sealed class LocalTargetedGenderReviewService(
 
         var output = translated.ToArray();
         var outputPositionById = output.Select((cue, index) => (cue.Index, index)).ToDictionary(x => x.Index, x => x.index);
-        var windows = GenderReviewCandidateSelector.BuildContextWindows(source, candidateIds, _contextRadius);
+        var batches = GenderReviewCandidateSelector.BuildReviewBatches(
+            source,
+            candidateIds,
+            _contextRadius,
+            _maxCandidatesPerBatch,
+            _maxContextCuesPerBatch);
         var allSpeakerSamples = BuildSpeakerSamples(source, cueSpeakers);
 
         _logger.Info(
             "review_plan",
             ("model", model),
             ("candidateCount", candidateIds.Count),
-            ("windowCount", windows.Count),
+            ("windowCount", batches.Count),
             ("speakerCount", allSpeakerSamples.Count));
-        status?.Report($"Enhanced: {candidateIds.Count} kwestii do sprawdzenia w {windows.Count} krótkich oknach…");
+        status?.Report($"Enhanced: {candidateIds.Count} kwestii do sprawdzenia w {batches.Count} paczkach…");
 
-        for (var windowIndex = 0; windowIndex < windows.Count; windowIndex++)
+        for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var sourceWindow = windows[windowIndex];
+            var batch = batches[batchIndex];
+            var sourceWindow = batch.Cues;
+            var allowedIds = batch.CandidateIds;
             var translatedWindow = sourceWindow.Select(cue => output[outputPositionById[cue.Index]]).ToArray();
-            var allowedIds = sourceWindow.Select(cue => cue.Index).Where(candidateIds.Contains).ToHashSet();
-            if (allowedIds.Count == 0)
-                continue;
 
-            var windowSpeakerIds = sourceWindow
-                .Select(cue => cueSpeakers.TryGetValue(cue.Index, out var speaker) ? speaker : null)
+            var candidateSpeakerIds = allowedIds
+                .Select(id => cueSpeakers.TryGetValue(id, out var speaker) ? speaker : null)
                 .Where(speaker => !string.IsNullOrWhiteSpace(speaker))
                 .Select(speaker => speaker!)
                 .ToHashSet(StringComparer.Ordinal);
             var speakerSamples = allSpeakerSamples
-                .Where(pair => windowSpeakerIds.Contains(pair.Key))
+                .Where(pair => candidateSpeakerIds.Contains(pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             var prompt = TargetedGenderReviewProtocol.BuildPrompt(
                 sourceWindow,
@@ -77,17 +85,17 @@ public sealed class LocalTargetedGenderReviewService(
                 cueSpeakers,
                 speakerSamples);
 
-            var oneBasedWindow = windowIndex + 1;
+            var oneBasedBatch = batchIndex + 1;
             _logger.Info(
                 "review_window_start",
                 ("model", model),
-                ("windowIndex", oneBasedWindow),
-                ("windowCount", windows.Count),
+                ("windowIndex", oneBasedBatch),
+                ("windowCount", batches.Count),
                 ("cueCount", sourceWindow.Count),
                 ("candidateCount", allowedIds.Count),
                 ("speakerCount", speakerSamples.Count),
                 ("promptChars", prompt.Length));
-            status?.Report($"Enhanced: Qwen sprawdza okno {oneBasedWindow} / {windows.Count}…");
+            status?.Report($"Enhanced: model sprawdza paczkę {oneBasedBatch} / {batches.Count}…");
 
             var stopwatch = Stopwatch.StartNew();
             int? httpStatus = null;
@@ -103,7 +111,7 @@ public sealed class LocalTargetedGenderReviewService(
                     {
                         model,
                         temperature = 0.0,
-                        max_tokens = 800,
+                        max_tokens = 400,
                         reasoning_effort = "none",
                         chat_template_kwargs = new { enable_thinking = false },
                         response_format = LlamaJsonSchemas.ReviewResponseFormat,
@@ -112,7 +120,7 @@ public sealed class LocalTargetedGenderReviewService(
                             new
                             {
                                 role = "system",
-                                content = "Review only clearly wrong Polish grammatical gender/number in explicitly allowed subtitle IDs. Return changed lines as JSON only."
+                                content = "Return only tiny exact Polish gender/number fragment replacements for allowed candidate IDs. Never rewrite subtitle lines."
                             },
                             new
                             {
@@ -137,15 +145,15 @@ public sealed class LocalTargetedGenderReviewService(
                 _logger.Error(
                     "review_window_error",
                     ("model", model),
-                    ("windowIndex", oneBasedWindow),
-                    ("windowCount", windows.Count),
+                    ("windowIndex", oneBasedBatch),
+                    ("windowCount", batches.Count),
                     ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
                     ("httpStatus", httpStatus),
                     ("responseChars", body.Length),
                     ("category", nameof(TimeoutException)),
                     ("reasonCode", "review_timeout"),
                     ("result", "fallback"));
-                status?.Report("Enhanced: Qwen przekroczył limit czasu dla okna — zachowuję tłumaczenie bazowe.");
+                status?.Report("Enhanced: model przekroczył limit czasu — zachowuję dotychczasowe tłumaczenie i kończę review.");
                 return output;
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
@@ -154,28 +162,35 @@ public sealed class LocalTargetedGenderReviewService(
                 _logger.Error(
                     "review_window_error",
                     ("model", model),
-                    ("windowIndex", oneBasedWindow),
-                    ("windowCount", windows.Count),
+                    ("windowIndex", oneBasedBatch),
+                    ("windowCount", batches.Count),
                     ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
                     ("httpStatus", httpStatus),
                     ("responseChars", body.Length),
                     ("category", ex.GetType().Name),
                     ("reasonCode", ex is HttpRequestException ? "http_error" : "invalid_response"),
                     ("result", "fallback"));
-                status?.Report("Enhanced: korekta Qwen nie powiodła się — zachowuję tłumaczenie bazowe.");
+                status?.Report("Enhanced: korekta lokalna nie powiodła się — zachowuję dotychczasowe tłumaczenie.");
                 return output;
             }
 
             var applied = 0;
             var dropped = 0;
-            foreach (var (id, text) in parsed.Changes)
+            foreach (var edit in parsed.Edits)
             {
-                if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
+                if (!allowedIds.Contains(edit.Id) || !outputPositionById.TryGetValue(edit.Id, out var position))
                 {
                     dropped++;
                     continue;
                 }
-                output[position] = output[position] with { Text = text };
+
+                if (!SurgicalGenderEditApplier.TryApply(output[position], edit, out var changed))
+                {
+                    dropped++;
+                    continue;
+                }
+
+                output[position] = changed;
                 applied++;
             }
 
@@ -183,8 +198,8 @@ public sealed class LocalTargetedGenderReviewService(
             _logger.Info(
                 "review_window_end",
                 ("model", model),
-                ("windowIndex", oneBasedWindow),
-                ("windowCount", windows.Count),
+                ("windowIndex", oneBasedBatch),
+                ("windowCount", batches.Count),
                 ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
                 ("httpStatus", httpStatus),
                 ("responseChars", body.Length),
@@ -195,8 +210,8 @@ public sealed class LocalTargetedGenderReviewService(
                 ("dropped", dropped),
                 ("result", "success"));
 
-            progress?.Report((double)oneBasedWindow / windows.Count);
-            status?.Report($"Enhanced: korekta kontekstu {oneBasedWindow} / {windows.Count}…");
+            progress?.Report((double)oneBasedBatch / batches.Count);
+            status?.Report($"Enhanced: korekta kontekstu {oneBasedBatch} / {batches.Count}…");
         }
 
         return output;
@@ -223,7 +238,7 @@ public sealed class LocalTargetedGenderReviewService(
                     .OrderByDescending(item => item.Cue.Text.Length)
                     .Select(item => item.Cue.Text)
                     .Distinct(StringComparer.Ordinal)
-                    .Take(5)
+                    .Take(2)
                     .ToArray(),
                 StringComparer.Ordinal);
     }
@@ -256,7 +271,7 @@ public sealed class LocalTargetedGenderReviewService(
             }
 
             return new ParsedReviewResponse(
-                GenderReviewProtocol.ParseResponse(content),
+                SurgicalGenderEditProtocol.ParseResponse(content),
                 finishReason,
                 promptTokens,
                 completionTokens);
@@ -268,7 +283,7 @@ public sealed class LocalTargetedGenderReviewService(
     }
 
     private sealed record ParsedReviewResponse(
-        IReadOnlyDictionary<int, string> Changes,
+        IReadOnlyList<SurgicalGenderEdit> Edits,
         string? FinishReason,
         int? PromptTokens,
         int? CompletionTokens);
