@@ -32,6 +32,26 @@ public sealed class SurgicalGenderEditTests
         Assert.Equal($"{replace} tutaj.", changed.Text);
     }
 
+    [Theory]
+    [InlineData("Byłem", "Byłam", 0.70, SurgicalGenderEditRejectReason.LowConfidence)]
+    [InlineData("Byłeś", "Byłaś", 0.99, SurgicalGenderEditRejectReason.FindMissing)]
+    [InlineData("Byłem", "Zrobiłam", 0.99, SurgicalGenderEditRejectReason.NotInflectionOnly)]
+    public void Apply_ReportsSpecificRejectReason(
+        string find,
+        string replace,
+        double confidence,
+        SurgicalGenderEditRejectReason expectedReason)
+    {
+        var cue = Cue(7, "Byłem gotowy.");
+        var edit = new SurgicalGenderEdit(7, find, replace, confidence);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed, out var reason);
+
+        Assert.False(result);
+        Assert.Equal(cue, changed);
+        Assert.Equal(expectedReason, reason);
+    }
+
     [Fact]
     public void Apply_RejectsWholeSentenceRewrite()
     {
