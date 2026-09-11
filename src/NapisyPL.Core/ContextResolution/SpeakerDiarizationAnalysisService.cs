@@ -11,7 +11,8 @@ public sealed record SpeakerDiarizationAnalysisResult(
 public sealed class SpeakerDiarizationAnalysisService(
     AudioContextExtractionService audioExtraction,
     SpeakerDiarizationService diarization,
-    IAppLogger? logger = null)
+    IAppLogger? logger = null,
+    SpeakerDiarizationCache? cache = null)
 {
     public async Task<SpeakerDiarizationAnalysisResult> AnalyzeAsync(
         string mediaPath,
@@ -27,6 +28,20 @@ public sealed class SpeakerDiarizationAnalysisService(
         string? temporaryWave = null;
         try
         {
+            if (cache is not null)
+            {
+                var cached = await cache.TryLoadAsync(mediaPath, cancellationToken);
+                if (cached is { Count: > 0 })
+                {
+                    logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("segmentCount", cached.Count), ("result", "hit"));
+                    status?.Report($"Enhanced: używam zapisanej analizy rozmówców ({cached.Count} fragmentów)…");
+                    diarizationProgress?.Report(1);
+                    return new SpeakerDiarizationAnalysisResult(SpeakerCueMapper.Map(cues, cached), cached.Count);
+                }
+
+                logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("result", "miss"));
+            }
+
             var timer = Stopwatch.StartNew();
             temporaryWave = await audioExtraction.ExtractTemporaryMono16KhzWaveAsync(mediaPath, status, cancellationToken);
             logger?.Info("enhanced_phase", ("file", file), ("stage", "audio_extract"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
@@ -38,6 +53,12 @@ public sealed class SpeakerDiarizationAnalysisService(
 
             if (segments.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się wykryć żadnego mówcy w ścieżce audio.");
+
+            if (cache is not null)
+            {
+                await cache.SaveAsync(mediaPath, segments, cancellationToken);
+                logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("segmentCount", segments.Count), ("result", "stored"));
+            }
 
             return new SpeakerDiarizationAnalysisResult(SpeakerCueMapper.Map(cues, segments), segments.Count);
         }
