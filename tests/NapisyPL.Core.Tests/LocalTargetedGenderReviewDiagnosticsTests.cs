@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.Models;
@@ -78,16 +79,46 @@ public sealed class LocalTargetedGenderReviewDiagnosticsTests
         Assert.Equal(2, logger.Entries.Count(entry => entry.EventName == "review_window_start"));
     }
 
+    [Fact]
+    public async Task ReviewAsync_GptOssRequestsLowReasoningWithoutQwenThinkingFlag()
+    {
+        var handler = new StubHandler("""
+            {"choices":[{"message":{"content":"[]"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1}}
+            """);
+        using var http = new HttpClient(handler);
+        var service = new LocalTargetedGenderReviewService(
+            http,
+            "http://127.0.0.1:17843/v1",
+            "gpt-oss-20b");
+        var source = new[] { Cue(1, "I was ready.") };
+        var translated = new[] { Cue(1, "Byłem gotowy.") };
+
+        await service.ReviewAsync(source, translated, new Dictionary<int, string?> { [1] = "SPEAKER_00" });
+
+        using var request = JsonDocument.Parse(handler.LastRequestBody!);
+        Assert.Equal("low", request.RootElement.GetProperty("reasoning_effort").GetString());
+        var templateArgs = request.RootElement.GetProperty("chat_template_kwargs");
+        Assert.Equal("low", templateArgs.GetProperty("reasoning_effort").GetString());
+        Assert.False(templateArgs.TryGetProperty("enable_thinking", out _));
+    }
+
     private static SubtitleCue Cue(int id, string text) =>
         new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
 
     private sealed class StubHandler(string response) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        public string? LastRequestBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequestBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(response, Encoding.UTF8, "application/json")
-            });
+            };
+        }
     }
 
     private sealed class RecordingLogger : IAppLogger
