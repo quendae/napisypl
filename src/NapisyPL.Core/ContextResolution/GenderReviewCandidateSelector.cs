@@ -3,6 +3,10 @@ using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
 
+public sealed record GenderReviewBatch(
+    IReadOnlyList<SubtitleCue> Cues,
+    IReadOnlySet<int> CandidateIds);
+
 public static partial class GenderReviewCandidateSelector
 {
     private static readonly string[] CommonGenderedWords =
@@ -28,6 +32,69 @@ public static partial class GenderReviewCandidateSelector
             if (ContainsGenderSensitiveForm(cue.Text))
                 result.Add(cue.Index);
         }
+        return result;
+    }
+
+    public static IReadOnlyList<GenderReviewBatch> BuildReviewBatches(
+        IReadOnlyList<SubtitleCue> cues,
+        IReadOnlySet<int> candidateIds,
+        int radius = 2,
+        int maxCandidatesPerBatch = 10,
+        int maxContextCuesPerBatch = 50)
+    {
+        if (radius < 0)
+            throw new ArgumentOutOfRangeException(nameof(radius));
+        if (maxCandidatesPerBatch <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxCandidatesPerBatch));
+        if (maxContextCuesPerBatch <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxContextCuesPerBatch));
+        if (cues.Count == 0 || candidateIds.Count == 0)
+            return [];
+
+        var positionById = cues
+            .Select((cue, index) => (cue.Index, index))
+            .ToDictionary(pair => pair.Index, pair => pair.index);
+        var orderedCandidates = candidateIds
+            .Where(positionById.ContainsKey)
+            .OrderBy(id => positionById[id])
+            .ToArray();
+
+        var result = new List<GenderReviewBatch>();
+        var batchCandidateIds = new List<int>();
+        var batchPositions = new SortedSet<int>();
+
+        void Flush()
+        {
+            if (batchCandidateIds.Count == 0)
+                return;
+            result.Add(new GenderReviewBatch(
+                batchPositions.Select(position => cues[position]).ToArray(),
+                batchCandidateIds.ToHashSet()));
+            batchCandidateIds.Clear();
+            batchPositions.Clear();
+        }
+
+        foreach (var candidateId in orderedCandidates)
+        {
+            var position = positionById[candidateId];
+            var neighbourhood = Enumerable.Range(
+                    Math.Max(0, position - radius),
+                    Math.Min(cues.Count - 1, position + radius) - Math.Max(0, position - radius) + 1)
+                .ToArray();
+            var combinedContextCount = batchPositions.Union(neighbourhood).Count();
+
+            if (batchCandidateIds.Count >= maxCandidatesPerBatch ||
+                (batchCandidateIds.Count > 0 && combinedContextCount > maxContextCuesPerBatch))
+            {
+                Flush();
+            }
+
+            batchCandidateIds.Add(candidateId);
+            foreach (var contextPosition in neighbourhood)
+                batchPositions.Add(contextPosition);
+        }
+
+        Flush();
         return result;
     }
 
@@ -94,8 +161,6 @@ public static partial class GenderReviewCandidateSelector
             Regex.IsMatch(text, $@"(?<!\p{{L}}){Regex.Escape(word)}(?!\p{{L}})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
     }
 
-    // Polish past/conditional forms carrying grammatical gender, e.g. zrobiłem/zrobiłam,
-    // zrobiłeś/zrobiłaś, zrobił/zrobiła, zrobiłbym/zrobiłabym, zrobili/zrobiły.
     [GeneratedRegex(@"(?<!\p{L})\p{L}*ł(?:em|am|eś|aś|bym|abym|byś|abyś|a|i|y)?(?!\p{L})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PastTenseGenderRegex();
 }
