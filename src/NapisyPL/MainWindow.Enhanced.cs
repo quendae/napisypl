@@ -74,9 +74,7 @@ public partial class MainWindow
             runtimeOptions.BaseUrl,
             "qwen3-1.7b",
             contextRadius: 2,
-            logger: _appLogger,
-            maxCandidatesPerBatch: 10,
-            maxContextCuesPerBatch: 50);
+            logger: _appLogger);
 
         var enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
