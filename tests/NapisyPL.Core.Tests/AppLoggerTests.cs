@@ -79,7 +79,14 @@ public sealed class AppLoggerTests
                 ("dropOutsideBatch", 1),
                 ("dropMissingSpeaker", 2),
                 ("dropContextGuard", 3),
-                ("dropApplyGuard", 4));
+                ("dropApplyGuard", 4),
+                ("dropApplyCueMismatch", 0),
+                ("dropApplyConfidence", 1),
+                ("dropApplyFragment", 0),
+                ("dropApplyUnchanged", 0),
+                ("dropApplyInflection", 2),
+                ("dropApplyFindMissing", 1),
+                ("dropApplyFindAmbiguous", 0));
 
             var log = File.ReadAllText(logger.LogPath);
 
@@ -88,6 +95,13 @@ public sealed class AppLoggerTests
             Assert.Contains("dropMissingSpeaker=2", log);
             Assert.Contains("dropContextGuard=3", log);
             Assert.Contains("dropApplyGuard=4", log);
+            Assert.Contains("dropApplyCueMismatch=0", log);
+            Assert.Contains("dropApplyConfidence=1", log);
+            Assert.Contains("dropApplyFragment=0", log);
+            Assert.Contains("dropApplyUnchanged=0", log);
+            Assert.Contains("dropApplyInflection=2", log);
+            Assert.Contains("dropApplyFindMissing=1", log);
+            Assert.Contains("dropApplyFindAmbiguous=0", log);
         }
         finally
         {
