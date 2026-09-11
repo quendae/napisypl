@@ -124,6 +124,32 @@ public sealed class SpeakerGenderEvidenceTests
         Assert.DoesNotContain("SPEAKER_01\":{\"gender\"", prompt, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BuildPrompt_AllowsKnownAcousticGenderToSupportSpeakerCorrectionWithoutTextConfirmation()
+    {
+        var source = new[] { Cue(1, "I was ready.") };
+        var translated = new[] { Cue(1, "Byłem gotowy.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.94, 3)
+        };
+
+        var prompt = TargetedGenderReviewProtocol.BuildPrompt(
+            source,
+            translated,
+            new HashSet<int> { 1 },
+            speakers,
+            new Dictionary<string, IReadOnlyList<string>> { ["SPEAKER_00"] = ["I was ready."] },
+            new Dictionary<int, string?> { [1] = null },
+            evidence);
+
+        Assert.Contains("speaker-target", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sufficient", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("without explicit dialogue confirmation", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("when it agrees with explicit dialogue evidence", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static SubtitleCue Cue(int id, string text) =>
         new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
 }
