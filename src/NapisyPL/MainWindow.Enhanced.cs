@@ -69,7 +69,8 @@ public partial class MainWindow
             _enhancedHttpClient,
             runtimeOptions.BaseUrl,
             "qwen3-1.7b",
-            contextRadius: 3);
+            contextRadius: 3,
+            logger: _appLogger);
 
         var enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
