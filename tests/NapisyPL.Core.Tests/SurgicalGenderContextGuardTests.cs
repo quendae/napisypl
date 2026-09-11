@@ -43,4 +43,19 @@ public sealed class SurgicalGenderContextGuardTests
 
         Assert.True(SurgicalGenderContextGuard.CanApply(edit, "SPEAKER_A", probableAddressee: null));
     }
+
+    [Theory]
+    [InlineData(GenderAgreementTarget.Speaker)]
+    [InlineData(GenderAgreementTarget.Addressee)]
+    public void CanApply_RejectsBareThirdPersonPastTenseGenderChange(GenderAgreementTarget target)
+    {
+        var edit = new SurgicalGenderEdit(
+            412,
+            "wybuchł",
+            "wybuchła",
+            0.99,
+            target);
+
+        Assert.False(SurgicalGenderContextGuard.CanApply(edit, "SPEAKER_A", "SPEAKER_B"));
+    }
 }
