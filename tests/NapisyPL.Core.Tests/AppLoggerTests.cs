@@ -63,4 +63,35 @@ public sealed class AppLoggerTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Logger_KeepsPrivacySafeReviewCounters()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var logger = new AppLogger(root);
+            logger.Info(
+                "review_window_end",
+                ("proposed", 9),
+                ("dropOutsideBatch", 1),
+                ("dropMissingSpeaker", 2),
+                ("dropContextGuard", 3),
+                ("dropApplyGuard", 4));
+
+            var log = File.ReadAllText(logger.LogPath);
+
+            Assert.Contains("proposed=9", log);
+            Assert.Contains("dropOutsideBatch=1", log);
+            Assert.Contains("dropMissingSpeaker=2", log);
+            Assert.Contains("dropContextGuard=3", log);
+            Assert.Contains("dropApplyGuard=4", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }
