@@ -70,20 +70,26 @@ public sealed class LocalTargetedGenderReviewService(
             var allowedIds = batch.CandidateIds;
             var translatedWindow = sourceWindow.Select(cue => output[outputPositionById[cue.Index]]).ToArray();
 
-            var candidateSpeakerIds = allowedIds
+            var probableAddressees = allowedIds.ToDictionary(
+                id => id,
+                id => DialogueAddresseeResolver.Resolve(source, cueSpeakers, id));
+
+            var relevantSpeakerIds = allowedIds
                 .Select(id => cueSpeakers.TryGetValue(id, out var speaker) ? speaker : null)
+                .Concat(probableAddressees.Values)
                 .Where(speaker => !string.IsNullOrWhiteSpace(speaker))
                 .Select(speaker => speaker!)
                 .ToHashSet(StringComparer.Ordinal);
             var speakerSamples = allSpeakerSamples
-                .Where(pair => candidateSpeakerIds.Contains(pair.Key))
+                .Where(pair => relevantSpeakerIds.Contains(pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             var prompt = TargetedGenderReviewProtocol.BuildPrompt(
                 sourceWindow,
                 translatedWindow,
                 allowedIds,
                 cueSpeakers,
-                speakerSamples);
+                speakerSamples,
+                probableAddressees);
 
             var oneBasedBatch = batchIndex + 1;
             _logger.Info(
@@ -120,7 +126,7 @@ public sealed class LocalTargetedGenderReviewService(
                             new
                             {
                                 role = "system",
-                                content = "Return only tiny exact Polish gender/number fragment replacements for allowed candidate IDs. Never rewrite subtitle lines."
+                                content = "Return only tiny exact Polish gender/number replacements. Label every edit target as speaker or addressee. Never rewrite subtitle lines."
                             },
                             new
                             {
@@ -142,36 +148,32 @@ public sealed class LocalTargetedGenderReviewService(
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 stopwatch.Stop();
-                _logger.Error(
-                    "review_window_error",
-                    ("model", model),
-                    ("windowIndex", oneBasedBatch),
-                    ("windowCount", batches.Count),
-                    ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
-                    ("httpStatus", httpStatus),
-                    ("responseChars", body.Length),
-                    ("category", nameof(TimeoutException)),
-                    ("reasonCode", "review_timeout"),
-                    ("result", "fallback"));
-                status?.Report("Enhanced: model przekroczył limit czasu — zachowuję dotychczasowe tłumaczenie i kończę review.");
-                return output;
+                LogWindowError(
+                    oneBasedBatch,
+                    batches.Count,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    httpStatus,
+                    body.Length,
+                    nameof(TimeoutException),
+                    "review_timeout");
+                progress?.Report((double)oneBasedBatch / batches.Count);
+                status?.Report($"Enhanced: paczka {oneBasedBatch} przekroczyła limit czasu — pomijam ją i kontynuuję.");
+                continue;
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
             {
                 stopwatch.Stop();
-                _logger.Error(
-                    "review_window_error",
-                    ("model", model),
-                    ("windowIndex", oneBasedBatch),
-                    ("windowCount", batches.Count),
-                    ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
-                    ("httpStatus", httpStatus),
-                    ("responseChars", body.Length),
-                    ("category", ex.GetType().Name),
-                    ("reasonCode", ex is HttpRequestException ? "http_error" : "invalid_response"),
-                    ("result", "fallback"));
-                status?.Report("Enhanced: korekta lokalna nie powiodła się — zachowuję dotychczasowe tłumaczenie.");
-                return output;
+                LogWindowError(
+                    oneBasedBatch,
+                    batches.Count,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    httpStatus,
+                    body.Length,
+                    ex.GetType().Name,
+                    ex is HttpRequestException ? "http_error" : "invalid_response");
+                progress?.Report((double)oneBasedBatch / batches.Count);
+                status?.Report($"Enhanced: paczka {oneBasedBatch} zwróciła błąd — zachowuję bazowe tłumaczenie tej paczki i kontynuuję.");
+                continue;
             }
 
             var applied = 0;
@@ -179,6 +181,14 @@ public sealed class LocalTargetedGenderReviewService(
             foreach (var edit in parsed.Edits)
             {
                 if (!allowedIds.Contains(edit.Id) || !outputPositionById.TryGetValue(edit.Id, out var position))
+                {
+                    dropped++;
+                    continue;
+                }
+
+                cueSpeakers.TryGetValue(edit.Id, out var currentSpeaker);
+                probableAddressees.TryGetValue(edit.Id, out var probableAddressee);
+                if (!SurgicalGenderContextGuard.CanApply(edit, currentSpeaker, probableAddressee))
                 {
                     dropped++;
                     continue;
@@ -215,6 +225,28 @@ public sealed class LocalTargetedGenderReviewService(
         }
 
         return output;
+    }
+
+    private void LogWindowError(
+        int windowIndex,
+        int windowCount,
+        double elapsedMs,
+        int? httpStatus,
+        int responseChars,
+        string category,
+        string reasonCode)
+    {
+        _logger.Error(
+            "review_window_error",
+            ("model", model),
+            ("windowIndex", windowIndex),
+            ("windowCount", windowCount),
+            ("elapsedMs", elapsedMs),
+            ("httpStatus", httpStatus),
+            ("responseChars", responseChars),
+            ("category", category),
+            ("reasonCode", reasonCode),
+            ("result", "fallback"));
     }
 
     private static TimeSpan ValidateTimeout(TimeSpan timeout)
