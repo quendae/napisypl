@@ -34,7 +34,6 @@ public sealed class LocalTargetedGenderReviewService(
             return translated;
         }
 
-        var sourceById = source.ToDictionary(cue => cue.Index);
         var output = translated.ToArray();
         var outputPositionById = output.Select((cue, index) => (cue.Index, index)).ToDictionary(x => x.Index, x => x.index);
         var windows = GenderReviewCandidateSelector.BuildContextWindows(source, candidateIds, _contextRadius);
@@ -51,48 +50,56 @@ public sealed class LocalTargetedGenderReviewService(
             if (allowedIds.Count == 0)
                 continue;
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
+            try
             {
-                Content = JsonContent.Create(new
+                using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
                 {
-                    model,
-                    temperature = 0.0,
-                    max_tokens = 800,
-                    reasoning_effort = "none",
-                    chat_template_kwargs = new { enable_thinking = false },
-                    response_format = LlamaJsonSchemas.ReviewResponseFormat,
-                    messages = new object[]
+                    Content = JsonContent.Create(new
                     {
-                        new
+                        model,
+                        temperature = 0.0,
+                        max_tokens = 800,
+                        reasoning_effort = "none",
+                        chat_template_kwargs = new { enable_thinking = false },
+                        response_format = LlamaJsonSchemas.ReviewResponseFormat,
+                        messages = new object[]
                         {
-                            role = "system",
-                            content = "Review only clearly wrong Polish grammatical gender/number in explicitly allowed subtitle IDs. Return changed lines as JSON only."
-                        },
-                        new
-                        {
-                            role = "user",
-                            content = TargetedGenderReviewProtocol.BuildPrompt(
-                                sourceWindow,
-                                translatedWindow,
-                                allowedIds,
-                                cueSpeakers,
-                                speakerSamples)
+                            new
+                            {
+                                role = "system",
+                                content = "Review only clearly wrong Polish grammatical gender/number in explicitly allowed subtitle IDs. Return changed lines as JSON only."
+                            },
+                            new
+                            {
+                                role = "user",
+                                content = TargetedGenderReviewProtocol.BuildPrompt(
+                                    sourceWindow,
+                                    translatedWindow,
+                                    allowedIds,
+                                    cueSpeakers,
+                                    speakerSamples)
+                            }
                         }
-                    }
-                })
-            };
+                    })
+                };
 
-            using var response = await httpClient.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException($"Local targeted review: {(int)response.StatusCode} {body}");
+                using var response = await httpClient.SendAsync(request, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"Local targeted review: {(int)response.StatusCode} {body}");
 
-            var changed = ParseApiResponse(body);
-            foreach (var (id, text) in changed)
+                var changed = ParseApiResponse(body);
+                foreach (var (id, text) in changed)
+                {
+                    if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
+                        throw new InvalidDataException($"Targeted reviewer attempted to change non-candidate cue {id}.");
+                    output[position] = output[position] with { Text = text };
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
             {
-                if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
-                    throw new InvalidDataException($"Targeted reviewer attempted to change non-candidate cue {id}.");
-                output[position] = output[position] with { Text = text };
+                status?.Report("Enhanced: korekta Qwen nie powiodła się — zachowuję tłumaczenie bazowe.");
+                return output;
             }
 
             progress?.Report((double)(windowIndex + 1) / windows.Count);
