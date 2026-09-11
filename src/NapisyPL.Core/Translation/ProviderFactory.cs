@@ -19,6 +19,7 @@ public static class ProviderFactory
             "Gemini" => new GeminiProvider(httpClient, RequireKey(provider, apiKey), RequireModel(provider, model), baseUrl),
             "Claude" => new AnthropicProvider(httpClient, RequireKey(provider, apiKey), RequireModel(provider, model), baseUrl),
             "OpenAI / Ollama" => new OpenAiCompatibleProvider(httpClient, apiKey, RequireModel(provider, model), RequireBaseUrl(provider, baseUrl)),
+            "Local Qwen (offline)" => new LocalQwenProvider(httpClient, RequireBaseUrl(provider, baseUrl), RequireModel(provider, model)),
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Nieznany provider tłumaczenia.")
         };
 
