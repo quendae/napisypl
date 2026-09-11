@@ -14,8 +14,8 @@ public sealed class LocalTargetedGenderReviewService(
     int contextRadius = 2,
     IAppLogger? logger = null,
     TimeSpan? requestTimeout = null,
-    int maxCandidatesPerBatch = 10,
-    int maxContextCuesPerBatch = 50)
+    int maxCandidatesPerBatch = 5,
+    int maxContextCuesPerBatch = 25)
 {
     private readonly string _baseUrl = baseUrl.TrimEnd('/');
     private readonly int _contextRadius = contextRadius >= 0 ? contextRadius : throw new ArgumentOutOfRangeException(nameof(contextRadius));
@@ -184,6 +184,14 @@ public sealed class LocalTargetedGenderReviewService(
             var droppedMissingSpeaker = 0;
             var droppedContextGuard = 0;
             var droppedApplyGuard = 0;
+            var droppedApplyCueMismatch = 0;
+            var droppedApplyConfidence = 0;
+            var droppedApplyFragment = 0;
+            var droppedApplyUnchanged = 0;
+            var droppedApplyInflection = 0;
+            var droppedApplyFindMissing = 0;
+            var droppedApplyFindAmbiguous = 0;
+
             foreach (var edit in parsed.Edits)
             {
                 if (!allowedIds.Contains(edit.Id) || !outputPositionById.TryGetValue(edit.Id, out var position))
@@ -209,10 +217,34 @@ public sealed class LocalTargetedGenderReviewService(
                     continue;
                 }
 
-                if (!SurgicalGenderEditApplier.TryApply(output[position], edit, out var changed))
+                if (!SurgicalGenderEditApplier.TryApply(output[position], edit, out var changed, out var rejectReason))
                 {
                     dropped++;
                     droppedApplyGuard++;
+                    switch (rejectReason)
+                    {
+                        case SurgicalGenderEditRejectReason.CueMismatch:
+                            droppedApplyCueMismatch++;
+                            break;
+                        case SurgicalGenderEditRejectReason.LowConfidence:
+                            droppedApplyConfidence++;
+                            break;
+                        case SurgicalGenderEditRejectReason.InvalidFragment:
+                            droppedApplyFragment++;
+                            break;
+                        case SurgicalGenderEditRejectReason.Unchanged:
+                            droppedApplyUnchanged++;
+                            break;
+                        case SurgicalGenderEditRejectReason.NotInflectionOnly:
+                            droppedApplyInflection++;
+                            break;
+                        case SurgicalGenderEditRejectReason.FindMissing:
+                            droppedApplyFindMissing++;
+                            break;
+                        case SurgicalGenderEditRejectReason.FindAmbiguous:
+                            droppedApplyFindAmbiguous++;
+                            break;
+                    }
                     continue;
                 }
 
@@ -239,6 +271,13 @@ public sealed class LocalTargetedGenderReviewService(
                 ("dropMissingSpeaker", droppedMissingSpeaker),
                 ("dropContextGuard", droppedContextGuard),
                 ("dropApplyGuard", droppedApplyGuard),
+                ("dropApplyCueMismatch", droppedApplyCueMismatch),
+                ("dropApplyConfidence", droppedApplyConfidence),
+                ("dropApplyFragment", droppedApplyFragment),
+                ("dropApplyUnchanged", droppedApplyUnchanged),
+                ("dropApplyInflection", droppedApplyInflection),
+                ("dropApplyFindMissing", droppedApplyFindMissing),
+                ("dropApplyFindAmbiguous", droppedApplyFindAmbiguous),
                 ("result", "success"));
 
             progress?.Report((double)oneBasedBatch / batches.Count);
