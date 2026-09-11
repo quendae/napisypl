@@ -103,11 +103,17 @@ public partial class MainWindow
         var diarizationAssets = new SpeakerDiarizationAssetManager(_enhancedHttpClient, diarizationOptions);
         var diarization = new SpeakerDiarizationService(diarizationAssets, diarizationOptions);
         var diarizationCache = SpeakerDiarizationCache.CreateDefault();
+
+        var genderOptions = SpeakerVoiceGenderOptions.CreateDefault();
+        var genderAssets = new SpeakerVoiceGenderAssetManager(_enhancedHttpClient, genderOptions);
+        var voiceGender = new SpeakerVoiceGenderService(genderAssets, genderOptions, _appLogger);
+
         var speakerAnalysis = new SpeakerDiarizationAnalysisService(
             audioExtraction,
             diarization,
             _appLogger,
-            diarizationCache);
+            diarizationCache,
+            voiceGender);
 
         var runtimeOptions = GetSelectedEnhancedOptions();
         var runtimeAssets = new LocalContextAssetManager(_enhancedHttpClient, runtimeOptions);
@@ -205,6 +211,7 @@ public partial class MainWindow
         var options = GetSelectedEnhancedOptions();
         EnhancedModelHintText.Text =
             $"Korektor: {options.ModelDisplayName} · {options.ModelApproxSize}. " +
-            $"Backend: {GetSelectedBackendLabel()}. Model jest pobierany tylko przy pierwszym użyciu.";
+            $"Backend: {GetSelectedBackendLabel()}. Model jest pobierany tylko przy pierwszym użyciu. " +
+            "Enhanced używa też lokalnego modelu audio ~27 MB do ostrożnej klasyfikacji głosu rozmówców.";
     }
 }
