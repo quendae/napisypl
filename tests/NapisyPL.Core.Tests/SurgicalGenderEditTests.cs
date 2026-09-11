@@ -72,10 +72,10 @@ public sealed class SurgicalGenderEditTests
     }
 
     [Fact]
-    public void ParseResponse_ReadsFindReplaceAndConfidence()
+    public void ParseResponse_ReadsFindReplaceConfidenceAndTarget()
     {
         var edits = SurgicalGenderEditProtocol.ParseResponse("""
-            [{"id":7,"find":"Byłem","replace":"Byłam","confidence":0.94}]
+            [{"id":7,"find":"Byłem","replace":"Byłam","confidence":0.94,"target":"speaker"}]
             """);
 
         var edit = Assert.Single(edits);
@@ -83,6 +83,7 @@ public sealed class SurgicalGenderEditTests
         Assert.Equal("Byłem", edit.Find);
         Assert.Equal("Byłam", edit.Replace);
         Assert.Equal(0.94, edit.Confidence, 3);
+        Assert.Equal(GenderAgreementTarget.Speaker, edit.Target);
     }
 
     private static SubtitleCue Cue(int id, string text) =>
