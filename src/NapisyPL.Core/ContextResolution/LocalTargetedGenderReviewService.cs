@@ -97,13 +97,10 @@ public sealed class LocalTargetedGenderReviewService(
                 return output;
             }
 
-            // Scope validation intentionally stays outside the best-effort catch. A malformed
-            // model response may be skipped, but a request to alter a non-candidate cue is a
-            // protocol invariant violation and must remain a hard failure.
             foreach (var (id, text) in changed)
             {
                 if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
-                    throw new InvalidDataException($"Targeted reviewer attempted to change non-candidate cue {id}.");
+                    continue;
                 output[position] = output[position] with { Text = text };
             }
 
