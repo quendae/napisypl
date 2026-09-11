@@ -17,6 +17,21 @@ public sealed class SurgicalGenderEditTests
         Assert.Equal("Nazwałaś ją \"biznatch\"?", changed.Text);
     }
 
+    [Theory]
+    [InlineData("Byłem", "Byłam")]
+    [InlineData("gotowy", "gotowa")]
+    [InlineData("zrobiłeś", "zrobiłaś")]
+    [InlineData("powinieneś", "powinnaś")]
+    [InlineData("sam", "sama")]
+    public void Apply_AcceptsCommonGenderInflections(string find, string replace)
+    {
+        var cue = Cue(7, $"{find} tutaj.");
+        var edit = new SurgicalGenderEdit(7, find, replace, 0.97);
+
+        Assert.True(SurgicalGenderEditApplier.TryApply(cue, edit, out var changed));
+        Assert.Equal($"{replace} tutaj.", changed.Text);
+    }
+
     [Fact]
     public void Apply_RejectsWholeSentenceRewrite()
     {
@@ -34,6 +49,15 @@ public sealed class SurgicalGenderEditTests
     {
         var cue = Cue(45, "Nazwałeś ją \"biznatch\"?");
         var edit = new SurgicalGenderEdit(45, "Nazwałeś", "Zrobiłeś", 0.99);
+
+        Assert.False(SurgicalGenderEditApplier.TryApply(cue, edit, out _));
+    }
+
+    [Fact]
+    public void Apply_RejectsSameStemPersonChange()
+    {
+        var cue = Cue(45, "Nazwałeś ją \"biznatch\"?");
+        var edit = new SurgicalGenderEdit(45, "Nazwałeś", "Nazwałem", 0.99);
 
         Assert.False(SurgicalGenderEditApplier.TryApply(cue, edit, out _));
     }
