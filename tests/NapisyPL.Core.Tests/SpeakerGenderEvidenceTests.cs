@@ -34,6 +34,36 @@ public sealed class SpeakerGenderEvidenceTests
     }
 
     [Fact]
+    public void Evaluate_LowAbsoluteButDirectionalEvidence_ReportsLowCombinedReason()
+    {
+        var result = SpeakerGenderEvidenceAggregator.Evaluate(
+        [
+            new SpeakerGenderObservation(0.040, 0.004, 3.0),
+            new SpeakerGenderObservation(0.031, 0.003, 2.0),
+            new SpeakerGenderObservation(0.025, 0.004, 1.5)
+        ]);
+
+        Assert.Equal(SpeakerVoiceGender.Unknown, result.Evidence.Gender);
+        Assert.Equal(SpeakerGenderUnknownReason.LowCombinedEvidence, result.UnknownReason);
+        Assert.InRange(result.CombinedEvidence, 0.03, 0.05);
+        Assert.True(result.NormalizedWinnerConfidence > 0.85);
+    }
+
+    [Fact]
+    public void Evaluate_StrongConsistentFemaleEvidence_ReportsKnownWithoutUnknownReason()
+    {
+        var result = SpeakerGenderEvidenceAggregator.Evaluate(
+        [
+            new SpeakerGenderObservation(0.05, 0.55, 2.0),
+            new SpeakerGenderObservation(0.06, 0.61, 2.5)
+        ]);
+
+        Assert.Equal(SpeakerVoiceGender.Female, result.Evidence.Gender);
+        Assert.Equal(SpeakerGenderUnknownReason.None, result.UnknownReason);
+        Assert.True(result.NormalizedWinnerConfidence > 0.85);
+    }
+
+    [Fact]
     public void Diagnostics_SummarizeTagPresenceAndScoresWithoutAudioContent()
     {
         var result = SpeakerGenderObservationDiagnostics.Summarize(
