@@ -34,6 +34,26 @@ public sealed class SpeakerGenderEvidenceTests
     }
 
     [Fact]
+    public void Diagnostics_SummarizeTagPresenceAndScoresWithoutAudioContent()
+    {
+        var result = SpeakerGenderObservationDiagnostics.Summarize(
+        [
+            new SpeakerGenderObservation(0.42, 0.03, 2.0),
+            new SpeakerGenderObservation(0.00, 0.31, 3.0),
+            new SpeakerGenderObservation(0.00, 0.00, 1.0)
+        ]);
+
+        Assert.Equal(3, result.SampleCount);
+        Assert.Equal(1, result.MaleTagSampleCount);
+        Assert.Equal(2, result.FemaleTagSampleCount);
+        Assert.Equal(2, result.AnyGenderTagSampleCount);
+        Assert.Equal(420, result.MaleScoreMaxPermille);
+        Assert.Equal(310, result.FemaleScoreMaxPermille);
+        Assert.Equal(225, result.CombinedScoreMeanPermille);
+        Assert.Equal(450, result.CombinedScoreMaxPermille);
+    }
+
+    [Fact]
     public void BuildPrompt_IncludesRelevantSpeakerVoiceGenderEvidence()
     {
         var source = new[] { Cue(1, "I was ready."), Cue(2, "Okay.") };
