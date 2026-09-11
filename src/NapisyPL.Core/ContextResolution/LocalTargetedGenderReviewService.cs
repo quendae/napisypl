@@ -37,7 +37,7 @@ public sealed class LocalTargetedGenderReviewService(
         var output = translated.ToArray();
         var outputPositionById = output.Select((cue, index) => (cue.Index, index)).ToDictionary(x => x.Index, x => x.index);
         var windows = GenderReviewCandidateSelector.BuildContextWindows(source, candidateIds, _contextRadius);
-        var speakerSamples = BuildSpeakerSamples(source, cueSpeakers);
+        var allSpeakerSamples = BuildSpeakerSamples(source, cueSpeakers);
 
         status?.Report($"Enhanced: {candidateIds.Count} kwestii do sprawdzenia w {windows.Count} krótkich oknach…");
 
@@ -49,6 +49,15 @@ public sealed class LocalTargetedGenderReviewService(
             var allowedIds = sourceWindow.Select(cue => cue.Index).Where(candidateIds.Contains).ToHashSet();
             if (allowedIds.Count == 0)
                 continue;
+
+            var windowSpeakerIds = sourceWindow
+                .Select(cue => cueSpeakers.TryGetValue(cue.Index, out var speaker) ? speaker : null)
+                .Where(speaker => !string.IsNullOrWhiteSpace(speaker))
+                .Select(speaker => speaker!)
+                .ToHashSet(StringComparer.Ordinal);
+            var speakerSamples = allSpeakerSamples
+                .Where(pair => windowSpeakerIds.Contains(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
             IReadOnlyDictionary<int, string> changed;
             try
