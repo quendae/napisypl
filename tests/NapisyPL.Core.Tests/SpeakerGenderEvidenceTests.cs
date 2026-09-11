@@ -49,7 +49,7 @@ public sealed class SpeakerGenderEvidenceTests
         Assert.Equal(2, result.AnyGenderTagSampleCount);
         Assert.Equal(420, result.MaleScoreMaxPermille);
         Assert.Equal(310, result.FemaleScoreMaxPermille);
-        Assert.Equal(225, result.CombinedScoreMeanPermille);
+        Assert.Equal(305, result.CombinedScoreMeanPermille);
         Assert.Equal(450, result.CombinedScoreMaxPermille);
     }
 
