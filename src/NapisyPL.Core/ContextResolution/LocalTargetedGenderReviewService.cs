@@ -12,11 +12,13 @@ public sealed class LocalTargetedGenderReviewService(
     string baseUrl,
     string model,
     int contextRadius = 3,
-    IAppLogger? logger = null)
+    IAppLogger? logger = null,
+    TimeSpan? requestTimeout = null)
 {
     private readonly string _baseUrl = baseUrl.TrimEnd('/');
     private readonly int _contextRadius = contextRadius >= 0 ? contextRadius : throw new ArgumentOutOfRangeException(nameof(contextRadius));
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
+    private readonly TimeSpan _requestTimeout = ValidateTimeout(requestTimeout ?? TimeSpan.FromSeconds(90));
 
     public async Task<IReadOnlyList<SubtitleCue>> ReviewAsync(
         IReadOnlyList<SubtitleCue> source,
@@ -91,6 +93,8 @@ public sealed class LocalTargetedGenderReviewService(
             int? httpStatus = null;
             string body = string.Empty;
             ParsedReviewResponse parsed;
+            using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            requestCancellation.CancelAfter(_requestTimeout);
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
@@ -119,13 +123,30 @@ public sealed class LocalTargetedGenderReviewService(
                     })
                 };
 
-                using var response = await httpClient.SendAsync(request, cancellationToken);
+                using var response = await httpClient.SendAsync(request, requestCancellation.Token);
                 httpStatus = (int)response.StatusCode;
-                body = await response.Content.ReadAsStringAsync(cancellationToken);
+                body = await response.Content.ReadAsStringAsync(requestCancellation.Token);
                 if (!response.IsSuccessStatusCode)
                     throw new HttpRequestException($"Local targeted review returned HTTP {(int)response.StatusCode}.");
 
                 parsed = ParseApiResponse(body);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                stopwatch.Stop();
+                _logger.Error(
+                    "review_window_error",
+                    ("model", model),
+                    ("windowIndex", oneBasedWindow),
+                    ("windowCount", windows.Count),
+                    ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
+                    ("httpStatus", httpStatus),
+                    ("responseChars", body.Length),
+                    ("category", nameof(TimeoutException)),
+                    ("reasonCode", "review_timeout"),
+                    ("result", "fallback"));
+                status?.Report("Enhanced: Qwen przekroczył limit czasu dla okna — zachowuję tłumaczenie bazowe.");
+                return output;
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
             {
@@ -179,6 +200,13 @@ public sealed class LocalTargetedGenderReviewService(
         }
 
         return output;
+    }
+
+    private static TimeSpan ValidateTimeout(TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        return timeout;
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildSpeakerSamples(
