@@ -111,6 +111,11 @@ public sealed class LocalTargetedGenderReviewService(
             requestCancellation.CancelAfter(_requestTimeout);
             try
             {
+                var isGptOss = string.Equals(model, "gpt-oss-20b", StringComparison.OrdinalIgnoreCase);
+                object chatTemplateKwargs = isGptOss
+                    ? new { reasoning_effort = "low" }
+                    : new { enable_thinking = false };
+
                 using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
                 {
                     Content = JsonContent.Create(new
@@ -118,8 +123,8 @@ public sealed class LocalTargetedGenderReviewService(
                         model,
                         temperature = 0.0,
                         max_tokens = 400,
-                        reasoning_effort = "none",
-                        chat_template_kwargs = new { enable_thinking = false },
+                        reasoning_effort = isGptOss ? "low" : "none",
+                        chat_template_kwargs = chatTemplateKwargs,
                         response_format = LlamaJsonSchemas.SurgicalReviewResponseFormat,
                         messages = new object[]
                         {
