@@ -9,7 +9,7 @@ public sealed class AppLogger : IAppLogger
     {
         "provider", "model", "file", "segmentCount", "characterCount", "batch", "batchCount",
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "stage",
-        "fileIndex", "fileCount", "completed", "skipped", "failed"
+        "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount"
     };
 
     private readonly object _writeGate = new();
