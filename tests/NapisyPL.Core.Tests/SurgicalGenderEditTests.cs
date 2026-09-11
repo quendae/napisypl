@@ -30,6 +30,15 @@ public sealed class SurgicalGenderEditTests
     }
 
     [Fact]
+    public void Apply_RejectsUnrelatedShortReplacement()
+    {
+        var cue = Cue(45, "Nazwałeś ją \"biznatch\"?");
+        var edit = new SurgicalGenderEdit(45, "Nazwałeś", "Zrobiłeś", 0.99);
+
+        Assert.False(SurgicalGenderEditApplier.TryApply(cue, edit, out _));
+    }
+
+    [Fact]
     public void Apply_RejectsLowConfidenceOrMissingFragment()
     {
         var cue = Cue(7, "Byłem gotowy.");
