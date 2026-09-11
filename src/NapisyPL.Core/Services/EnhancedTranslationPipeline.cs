@@ -13,9 +13,9 @@ public sealed class EnhancedTranslationPipeline(
     SrtParser srtParser,
     SubtitleWriter writer,
     TranslationCoordinator translationCoordinator,
-    EnhancedContextAnalysisService contextAnalysis,
+    SpeakerDiarizationAnalysisService speakerAnalysis,
     LocalContextRuntimeManager runtimeManager,
-    LocalGenderReviewService genderReview,
+    LocalTargetedGenderReviewService targetedReview,
     IAppLogger? logger = null) : ITranslationPipeline
 {
     public async Task<TranslationResult> TranslateAsync(
@@ -51,15 +51,15 @@ public sealed class EnhancedTranslationPipeline(
             if (sourceCues.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się odczytać żadnych kwestii z napisów.");
 
-            var analysis = await contextAnalysis.AnalyzeAsync(
+            // Audio is used only to keep stable speaker identities. No LLM work happens before translation.
+            var speakers = await speakerAnalysis.AnalyzeAsync(
                 inputPath,
                 sourceCues,
                 diarizationProgress: null,
-                resolverProgress: null,
                 status,
                 cancellationToken);
 
-            status?.Report($"Enhanced: kontekst gotowy — {analysis.Context.Speakers.Count} profili mówców. Tłumaczę napisy…");
+            status?.Report($"Enhanced: wykryto {speakers.SpeakerSegmentCount} fragmentów mowy. Tłumaczę przez {provider.DisplayName}…");
             var timer = Stopwatch.StartNew();
             var translated = translationProgress is null
                 ? await translationCoordinator.TranslateCuesAsync(sourceCues, provider, progress: (IProgress<double>?)null, cancellationToken)
@@ -67,23 +67,45 @@ public sealed class EnhancedTranslationPipeline(
             logger?.Info("enhanced_phase", ("file", file), ("stage", "translation"), ("provider", provider.DisplayName), ("elapsedMs", timer.ElapsedMilliseconds), ("segmentCount", translated.Count), ("result", "success"));
 
             cancellationToken.ThrowIfCancellationRequested();
-            status?.Report("Enhanced: sprawdzam rodzaj gramatyczny i adresatów…");
-            await runtimeManager.EnsureRunningAsync(status, cancellationToken);
-            timer.Restart();
-            var reviewed = await genderReview.ReviewAsync(
-                sourceCues,
-                translated,
-                analysis.Context,
-                analysis.CueSpeakers,
-                progress: null,
-                cancellationToken);
-            var changedCount = reviewed.Zip(translated).Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
-            logger?.Info("enhanced_phase", ("file", file), ("stage", "gender_review"), ("elapsedMs", timer.ElapsedMilliseconds), ("segmentCount", reviewed.Count), ("completed", changedCount), ("result", "success"));
+            var candidateIds = GenderReviewCandidateSelector.SelectCandidateIds(translated);
+            IReadOnlyList<SubtitleCue> reviewed = translated;
+            var changedCount = 0;
+
+            if (candidateIds.Count > 0)
+            {
+                status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — uruchamiam mały Qwen…");
+                timer.Restart();
+                await runtimeManager.EnsureRunningAsync(status, cancellationToken);
+                logger?.Info("enhanced_phase", ("file", file), ("stage", "reviewer_startup"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
+
+                timer.Restart();
+                reviewed = await targetedReview.ReviewAsync(
+                    sourceCues,
+                    translated,
+                    speakers.CueSpeakers,
+                    progress: null,
+                    status,
+                    cancellationToken);
+                changedCount = reviewed.Zip(translated).Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
+                logger?.Info(
+                    "enhanced_phase",
+                    ("file", file),
+                    ("stage", "gender_review"),
+                    ("elapsedMs", timer.ElapsedMilliseconds),
+                    ("segmentCount", translated.Count),
+                    ("candidateCount", candidateIds.Count),
+                    ("completed", changedCount),
+                    ("result", "success"));
+            }
+            else
+            {
+                logger?.Info("enhanced_phase", ("file", file), ("stage", "gender_review"), ("candidateCount", 0), ("completed", 0), ("result", "skipped"));
+            }
 
             var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
-            status?.Report($"Enhanced: zapisuję wynik — poprawiono kontekstowo {changedCount} kwestii…");
+            status?.Report($"Enhanced: zapisuję wynik — Qwen poprawił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
             string? txtOutput = null;
