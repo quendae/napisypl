@@ -7,7 +7,8 @@ namespace NapisyPL.Core.ContextResolution;
 public sealed record SpeakerVoiceGenderOptions(
     string BaseDirectory,
     string ModelUrl,
-    string LabelsUrl)
+    string LabelsUrl,
+    int TopK)
 {
     public string ModelPath => Path.Combine(BaseDirectory, "audio-tagging-gender.int8.onnx");
     public string LabelsPath => Path.Combine(BaseDirectory, "audio-tagging-labels.csv");
@@ -20,7 +21,8 @@ public sealed record SpeakerVoiceGenderOptions(
         return new SpeakerVoiceGenderOptions(
             Path.Combine(localAppData, "SubFlow", "speaker-gender"),
             root + "model.int8.onnx?download=true",
-            root + "class_labels_indices.csv?download=true");
+            root + "class_labels_indices.csv?download=true",
+            TopK: 50);
     }
 }
 
@@ -120,7 +122,7 @@ public sealed class SpeakerVoiceGenderService(
             config.Model.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
             config.Model.Provider = "cpu";
             config.Labels = options.LabelsPath;
-            config.TopK = 10;
+            config.TopK = options.TopK;
 
             var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
             var result = await Task.Run<IReadOnlyDictionary<string, SpeakerGenderEvidence>>(() =>
