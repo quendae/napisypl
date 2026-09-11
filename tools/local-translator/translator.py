@@ -54,14 +54,14 @@ class TranslatorRuntime:
             _emit_error(emit, None, "invalid_request", "jobId is required.")
             return True
 
-        if self._translation is None:
-            _emit_error(emit, job_id, "model_not_loaded", "Load a translation model first.")
-            return True
-
         segments = command.get("segments")
         validated = _validate_segments(segments)
         if validated is None:
             _emit_error(emit, job_id, "invalid_request", "segments must contain unique positive ids and text strings.")
+            return True
+
+        if self._translation is None:
+            _emit_error(emit, job_id, "model_not_loaded", "Load a translation model first.")
             return True
 
         total = len(validated)
