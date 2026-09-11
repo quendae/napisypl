@@ -11,7 +11,10 @@ public sealed class AppLogger : IAppLogger
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
-        "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "dropped", "finishReason", "proposed", "backend", "device",
+        "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "topK",
+        "genderSampleCount", "maleTagSampleCount", "femaleTagSampleCount", "anyGenderTagSampleCount",
+        "maleScoreMaxPermille", "femaleScoreMaxPermille", "combinedScoreMeanPermille", "combinedScoreMaxPermille",
+        "dropped", "finishReason", "proposed", "backend", "device",
         "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
         "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous"
