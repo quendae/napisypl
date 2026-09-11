@@ -151,13 +151,31 @@ public sealed class AppLoggerTests
                 "speaker_gender",
                 ("speakerCount", 12),
                 ("knownGenderCount", 8),
-                ("genderEvidenceCount", 3));
+                ("genderEvidenceCount", 3),
+                ("topK", 50),
+                ("genderSampleCount", 31),
+                ("maleTagSampleCount", 18),
+                ("femaleTagSampleCount", 11),
+                ("anyGenderTagSampleCount", 25),
+                ("maleScoreMaxPermille", 812),
+                ("femaleScoreMaxPermille", 743),
+                ("combinedScoreMeanPermille", 287),
+                ("combinedScoreMaxPermille", 901));
 
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("speakerCount=12", log);
             Assert.Contains("knownGenderCount=8", log);
             Assert.Contains("genderEvidenceCount=3", log);
+            Assert.Contains("topK=50", log);
+            Assert.Contains("genderSampleCount=31", log);
+            Assert.Contains("maleTagSampleCount=18", log);
+            Assert.Contains("femaleTagSampleCount=11", log);
+            Assert.Contains("anyGenderTagSampleCount=25", log);
+            Assert.Contains("maleScoreMaxPermille=812", log);
+            Assert.Contains("femaleScoreMaxPermille=743", log);
+            Assert.Contains("combinedScoreMeanPermille=287", log);
+            Assert.Contains("combinedScoreMaxPermille=901", log);
             Assert.DoesNotContain("[REDACTED]", log);
         }
         finally
