@@ -24,4 +24,12 @@ public sealed class SpeakerGenderSamplePlannerTests
         Assert.Equal(1, selected[1].Count);
         Assert.Equal(4.0, selected[1][0].EndSeconds - selected[1][0].StartSeconds, 3);
     }
+
+    [Fact]
+    public void CreateDefault_RequestsEnoughAudioTagsForGenderEvidence()
+    {
+        var options = SpeakerVoiceGenderOptions.CreateDefault();
+
+        Assert.True(options.TopK >= 50);
+    }
 }
