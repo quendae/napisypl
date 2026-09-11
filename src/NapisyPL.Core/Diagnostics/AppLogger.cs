@@ -12,7 +12,9 @@ public sealed class AppLogger : IAppLogger
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
         "responseChars", "speakerCount", "dropped", "finishReason", "proposed",
-        "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard"
+        "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
+        "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
+        "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous"
     };
 
     private readonly object _writeGate = new();
