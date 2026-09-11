@@ -46,6 +46,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        CompleteEnhancedControlInitialization();
 
         var processRunner = new ProcessRunner();
         var ffmpegManager = new FfmpegManager(_httpClient);
