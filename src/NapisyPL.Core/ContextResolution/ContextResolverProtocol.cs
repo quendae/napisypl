@@ -81,7 +81,7 @@ public static class ContextResolverProtocol
         if (string.IsNullOrWhiteSpace(response))
             throw new InvalidDataException("Context resolver returned an empty response.");
 
-        var json = StripFence(response.Trim());
+        var json = ExtractJsonObject(StripFence(response.Trim()));
         try
         {
             using var document = JsonDocument.Parse(json);
@@ -168,6 +168,15 @@ public static class ContextResolverProtocol
         }
 
         return confidence;
+    }
+
+    private static string ExtractJsonObject(string text)
+    {
+        var firstBrace = text.IndexOf('{');
+        var lastBrace = text.LastIndexOf('}');
+        return firstBrace >= 0 && lastBrace >= firstBrace
+            ? text[firstBrace..(lastBrace + 1)]
+            : text;
     }
 
     private static string StripFence(string text)
