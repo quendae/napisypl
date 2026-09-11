@@ -56,7 +56,7 @@ public sealed class TranslationCoordinator
             {
                 if (!result.TryGetValue(cue.Index, out var text))
                     throw new InvalidDataException($"Tłumacz nie zwrócił segmentu {cue.Index}.");
-                translated.Add(cue with { Text = text });
+                translated.Add(cue with { Text = SubtitleMarkupNormalizer.Normalize(text) });
                 completed++;
             }
 
@@ -118,7 +118,7 @@ public sealed class TranslationCoordinator
             {
                 if (!result.TryGetValue(segment.Id, out var text))
                     throw new InvalidDataException($"Tłumacz nie zwrócił segmentu {segment.Id}.");
-                output[segment.Id - 1] = text;
+                output[segment.Id - 1] = SubtitleMarkupNormalizer.Normalize(text);
                 completed++;
             }
 
