@@ -8,8 +8,10 @@ public sealed class AppLogger : IAppLogger
     private static readonly HashSet<string> AllowedFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "provider", "model", "file", "segmentCount", "characterCount", "batch", "batchCount",
-        "elapsedMs", "httpStatus", "category", "version", "result", "reason", "stage",
-        "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount"
+        "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
+        "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
+        "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
+        "responseChars", "speakerCount", "dropped", "finishReason"
     };
 
     private readonly object _writeGate = new();
