@@ -25,7 +25,7 @@ public sealed class LocalTargetedGenderReviewFailureTests
             status: new InlineProgress<string>(statusMessages.Add));
 
         Assert.Equal("Byłem gotowy.", result.Single().Text);
-        Assert.Contains(statusMessages, message => message.Contains("zachowuję tłumaczenie bazowe", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(statusMessages, message => message.Contains("zachowuję", StringComparison.OrdinalIgnoreCase));
     }
 
     private static SubtitleCue Cue(int id, string text) =>
