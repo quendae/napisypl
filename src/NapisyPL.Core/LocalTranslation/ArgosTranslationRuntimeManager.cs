@@ -110,9 +110,9 @@ public sealed class ArgosTranslationRuntimeManager(
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            StandardInputEncoding = System.Text.Encoding.UTF8,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8
+            StandardInputEncoding = LocalTranslatorEncoding.Utf8NoBom,
+            StandardOutputEncoding = LocalTranslatorEncoding.Utf8NoBom,
+            StandardErrorEncoding = LocalTranslatorEncoding.Utf8NoBom
         };
         startInfo.Environment["ARGOS_PACKAGES_DIR"] = options.PackagesDirectory;
         startInfo.Environment["PYTHONUTF8"] = "1";
