@@ -17,6 +17,54 @@ public sealed record SpeakerGenderEvidence(
     double Confidence,
     int SampleCount);
 
+public sealed record SpeakerGenderObservationDiagnosticSummary(
+    int SampleCount,
+    int MaleTagSampleCount,
+    int FemaleTagSampleCount,
+    int AnyGenderTagSampleCount,
+    int MaleScoreMaxPermille,
+    int FemaleScoreMaxPermille,
+    int CombinedScoreMeanPermille,
+    int CombinedScoreMaxPermille);
+
+public static class SpeakerGenderObservationDiagnostics
+{
+    public static SpeakerGenderObservationDiagnosticSummary Summarize(
+        IReadOnlyList<SpeakerGenderObservation> observations)
+    {
+        var valid = observations
+            .Where(item =>
+                item.DurationSeconds > 0 &&
+                double.IsFinite(item.DurationSeconds) &&
+                double.IsFinite(item.MaleProbability) &&
+                double.IsFinite(item.FemaleProbability) &&
+                item.MaleProbability is >= 0 and <= 1 &&
+                item.FemaleProbability is >= 0 and <= 1)
+            .ToArray();
+
+        if (valid.Length == 0)
+            return new SpeakerGenderObservationDiagnosticSummary(0, 0, 0, 0, 0, 0, 0, 0);
+
+        var totalDuration = valid.Sum(item => item.DurationSeconds);
+        var combinedMean = totalDuration > 0
+            ? valid.Sum(item => (item.MaleProbability + item.FemaleProbability) * item.DurationSeconds) / totalDuration
+            : 0;
+
+        return new SpeakerGenderObservationDiagnosticSummary(
+            valid.Length,
+            valid.Count(item => item.MaleProbability > 0),
+            valid.Count(item => item.FemaleProbability > 0),
+            valid.Count(item => item.MaleProbability > 0 || item.FemaleProbability > 0),
+            ToPermille(valid.Max(item => item.MaleProbability)),
+            ToPermille(valid.Max(item => item.FemaleProbability)),
+            ToPermille(combinedMean),
+            ToPermille(valid.Max(item => item.MaleProbability + item.FemaleProbability)));
+    }
+
+    private static int ToPermille(double value) =>
+        (int)Math.Round(value * 1000, MidpointRounding.AwayFromZero);
+}
+
 public static class SpeakerGenderEvidenceAggregator
 {
     private const double MinimumTotalDurationSeconds = 1.5;
