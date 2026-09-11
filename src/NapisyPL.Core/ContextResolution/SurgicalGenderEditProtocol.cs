@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
@@ -57,7 +58,7 @@ public static class SurgicalGenderEditProtocol
     }
 }
 
-public static class SurgicalGenderEditApplier
+public static partial class SurgicalGenderEditApplier
 {
     public const double MinimumConfidence = 0.85;
     private const int MaxWordsPerSide = 3;
@@ -68,7 +69,9 @@ public static class SurgicalGenderEditApplier
         changed = cue;
         if (edit.Id != cue.Index || edit.Confidence < MinimumConfidence)
             return false;
-        if (!IsSmallFragment(edit.Find) || !IsSmallFragment(edit.Replace) || string.Equals(edit.Find, edit.Replace, StringComparison.Ordinal))
+        if (!IsSmallFragment(edit.Find) || !IsSmallFragment(edit.Replace) ||
+            string.Equals(edit.Find, edit.Replace, StringComparison.Ordinal) ||
+            !LooksLikeInflectionOnly(edit.Find, edit.Replace))
             return false;
 
         var first = cue.Text.IndexOf(edit.Find, StringComparison.Ordinal);
@@ -87,6 +90,51 @@ public static class SurgicalGenderEditApplier
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > MaxCharsPerSide || value.Contains('\n') || value.Contains('\r'))
             return false;
-        return value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length <= MaxWordsPerSide;
+        return WordRegex().Matches(value).Count is > 0 and <= MaxWordsPerSide;
     }
+
+    private static bool LooksLikeInflectionOnly(string find, string replace)
+    {
+        var sourceWords = WordRegex().Matches(find).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        var replacementWords = WordRegex().Matches(replace).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        if (sourceWords.Length == 0 || sourceWords.Length != replacementWords.Length)
+            return false;
+
+        var changedWordCount = 0;
+        for (var i = 0; i < sourceWords.Length; i++)
+        {
+            var source = sourceWords[i];
+            var replacement = replacementWords[i];
+            if (string.Equals(source, replacement, StringComparison.Ordinal))
+                continue;
+
+            changedWordCount++;
+            var shorterLength = Math.Min(source.Length, replacement.Length);
+            if (shorterLength < 2)
+                return false;
+
+            var commonPrefix = CommonPrefixLength(source, replacement);
+            var minimumPrefix = Math.Max(2, shorterLength / 2);
+            if (commonPrefix < minimumPrefix)
+                return false;
+
+            // Gender/number inflection normally changes an ending, not most of the lexical stem.
+            if (source.Length - commonPrefix > 5 || replacement.Length - commonPrefix > 5)
+                return false;
+        }
+
+        return changedWordCount is > 0 and <= MaxWordsPerSide;
+    }
+
+    private static int CommonPrefixLength(string left, string right)
+    {
+        var length = Math.Min(left.Length, right.Length);
+        var index = 0;
+        while (index < length && left[index] == right[index])
+            index++;
+        return index;
+    }
+
+    [GeneratedRegex(@"\p{L}+")]
+    private static partial Regex WordRegex();
 }
