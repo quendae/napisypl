@@ -8,7 +8,8 @@ public enum GenderAgreementTarget
 {
     Unknown,
     Speaker,
-    Addressee
+    Addressee,
+    ThirdPerson
 }
 
 public enum SurgicalGenderEditRejectReason
@@ -150,6 +151,9 @@ public static partial class GenderAgreementTargetClassifier
             if (string.Equals(sourceWords[i], replacementWords[i], StringComparison.Ordinal))
                 continue;
 
+            if (IsBareThirdPersonPastTensePair(sourceWords[i], replacementWords[i]))
+                return GenderAgreementTarget.ThirdPerson;
+
             var prefix = CommonPrefixLength(sourceWords[i], replacementWords[i]);
             var pair = (sourceWords[i][prefix..], replacementWords[i][prefix..]);
             var wordTarget = SpeakerEndingPairs.Contains(pair)
@@ -166,6 +170,25 @@ public static partial class GenderAgreementTargetClassifier
         }
 
         return inferred;
+    }
+
+    private static bool IsBareThirdPersonPastTensePair(string left, string right)
+    {
+        if (left.EndsWith('ł') && right.EndsWith("ła", StringComparison.Ordinal) &&
+            string.Equals(left[..^1], right[..^2], StringComparison.Ordinal))
+            return true;
+        if (right.EndsWith('ł') && left.EndsWith("ła", StringComparison.Ordinal) &&
+            string.Equals(right[..^1], left[..^2], StringComparison.Ordinal))
+            return true;
+
+        if (left.EndsWith("li", StringComparison.Ordinal) && right.EndsWith("ły", StringComparison.Ordinal) &&
+            string.Equals(left[..^2], right[..^2], StringComparison.Ordinal))
+            return true;
+        if (right.EndsWith("li", StringComparison.Ordinal) && left.EndsWith("ły", StringComparison.Ordinal) &&
+            string.Equals(right[..^2], left[..^2], StringComparison.Ordinal))
+            return true;
+
+        return false;
     }
 
     private static HashSet<(string Left, string Right)> BuildPairs(params (string Left, string Right)[] pairs)
