@@ -1,12 +1,15 @@
 using System.Diagnostics;
+using NapisyPL.Core.Diagnostics;
 
 namespace NapisyPL.Core.ContextResolution;
 
 public sealed class LocalContextRuntimeManager(
     HttpClient httpClient,
     LocalContextAssetManager assetManager,
-    LocalContextRuntimeOptions options) : IAsyncDisposable
+    LocalContextRuntimeOptions options,
+    IAppLogger? logger = null) : IAsyncDisposable
 {
+    private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
     private Process? _process;
     private CancellationTokenSource? _lifetimeCancellation;
     private Task? _stdoutDrain;
@@ -18,7 +21,7 @@ public sealed class LocalContextRuntimeManager(
         IProgress<string>? status = null,
         CancellationToken cancellationToken = default)
     {
-        if (await IsHealthyAsync(cancellationToken))
+        if (IsRunning && await IsHealthyAsync(cancellationToken))
             return;
 
         await assetManager.EnsureAvailableAsync(status, cancellationToken);
@@ -26,18 +29,24 @@ public sealed class LocalContextRuntimeManager(
         if (_process is { HasExited: false })
             await StopProcessAsync();
 
-        status?.Report("Enhanced: uruchamiam lokalny resolver kontekstu…");
+        var stopwatch = Stopwatch.StartNew();
+        var (effectiveOptions, resolvedDevice) = await ResolveBackendAsync(status, cancellationToken);
+        var effectiveBackend = effectiveOptions.Backend == LocalContextBackend.Cpu ? "cpu" : "vulkan";
+
+        status?.Report(
+            $"Enhanced: uruchamiam {effectiveOptions.ModelDisplayName} · {effectiveBackend}" +
+            (resolvedDevice is null ? string.Empty : $" · {resolvedDevice}") + "…");
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = options.ServerExecutablePath,
-            WorkingDirectory = options.RuntimeDirectory,
+            FileName = effectiveOptions.ServerExecutablePath,
+            WorkingDirectory = effectiveOptions.RuntimeDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        foreach (var argument in options.BuildServerArguments(options.ModelPath))
+        foreach (var argument in effectiveOptions.BuildServerArguments(effectiveOptions.ModelPath, resolvedDevice))
             startInfo.ArgumentList.Add(argument);
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
@@ -52,13 +61,91 @@ public sealed class LocalContextRuntimeManager(
         try
         {
             await WaitForHealthyAsync(process, status, cancellationToken);
-            status?.Report("Enhanced: lokalny resolver kontekstu jest gotowy.");
+            stopwatch.Stop();
+            _logger.Info(
+                "local_context_runtime",
+                ("backend", effectiveBackend),
+                ("device", resolvedDevice ?? "none"),
+                ("model", options.ModelAlias),
+                ("version", options.RuntimeVersion),
+                ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
+                ("result", "success"));
+            status?.Report(
+                $"Enhanced: {effectiveOptions.ModelDisplayName} gotowy · {effectiveBackend}" +
+                (resolvedDevice is null ? string.Empty : $" · {resolvedDevice}") + ".");
         }
-        catch
+        catch (Exception ex)
         {
+            stopwatch.Stop();
+            _logger.Error(
+                "local_context_runtime",
+                ("backend", effectiveBackend),
+                ("device", resolvedDevice ?? "none"),
+                ("model", options.ModelAlias),
+                ("version", options.RuntimeVersion),
+                ("elapsedMs", stopwatch.Elapsed.TotalMilliseconds),
+                ("category", ex.GetType().Name),
+                ("result", "failed"));
             await StopProcessAsync();
             throw;
         }
+    }
+
+    private async Task<(LocalContextRuntimeOptions Options, string? Device)> ResolveBackendAsync(
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
+        if (options.Backend == LocalContextBackend.Cpu)
+            return (options, null);
+
+        string? device = null;
+        try
+        {
+            device = await DetectPreferredVulkanDeviceAsync(options, cancellationToken);
+        }
+        catch when (options.Backend == LocalContextBackend.Auto)
+        {
+            device = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(device))
+            return (options, device);
+
+        if (options.Backend == LocalContextBackend.Vulkan)
+            throw new InvalidOperationException(
+                "Nie znaleziono urządzenia Vulkan dla llama.cpp. Wybierz backend CPU albo zaktualizuj sterownik Vulkan GPU.");
+
+        status?.Report("Enhanced: Vulkan niedostępny — przechodzę na CPU…");
+        var cpuOptions = options.WithBackend(LocalContextBackend.Cpu);
+        var cpuAssets = new LocalContextAssetManager(httpClient, cpuOptions);
+        await cpuAssets.EnsureAvailableAsync(status, cancellationToken);
+        return (cpuOptions, null);
+    }
+
+    private static async Task<string?> DetectPreferredVulkanDeviceAsync(
+        LocalContextRuntimeOptions runtimeOptions,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = runtimeOptions.ServerExecutablePath,
+            WorkingDirectory = runtimeOptions.RuntimeDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        startInfo.ArgumentList.Add("--list-devices");
+
+        using var process = new Process { StartInfo = startInfo };
+        if (!process.Start())
+            return null;
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync(cancellationToken);
+        var output = (await stdoutTask) + Environment.NewLine + (await stderrTask);
+        return LocalContextDeviceSelector.SelectPreferredVulkanDevice(output);
     }
 
     private async Task WaitForHealthyAsync(
@@ -67,7 +154,7 @@ public sealed class LocalContextRuntimeManager(
         CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(90));
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
 
         var attempt = 0;
         while (true)
@@ -81,7 +168,7 @@ public sealed class LocalContextRuntimeManager(
 
             attempt++;
             if (attempt % 10 == 0)
-                status?.Report("Enhanced: ładuję model kontekstu…");
+                status?.Report($"Enhanced: ładuję {options.ModelDisplayName}…");
 
             await Task.Delay(500, timeout.Token);
         }
