@@ -11,7 +11,8 @@ public sealed class AppLogger : IAppLogger
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
-        "responseChars", "speakerCount", "dropped", "finishReason"
+        "responseChars", "speakerCount", "dropped", "finishReason", "proposed",
+        "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard"
     };
 
     private readonly object _writeGate = new();
