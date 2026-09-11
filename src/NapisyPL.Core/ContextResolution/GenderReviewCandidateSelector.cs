@@ -34,10 +34,15 @@ public static partial class GenderReviewCandidateSelector
     public static IReadOnlyList<IReadOnlyList<SubtitleCue>> BuildContextWindows(
         IReadOnlyList<SubtitleCue> cues,
         IReadOnlySet<int> candidateIds,
-        int radius = 3)
+        int radius = 3,
+        int maxWindowCues = 14)
     {
         if (radius < 0)
             throw new ArgumentOutOfRangeException(nameof(radius));
+        if (maxWindowCues <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxWindowCues));
+        if (maxWindowCues < radius * 2 + 1)
+            throw new ArgumentOutOfRangeException(nameof(maxWindowCues), "Maximum window size must fit the requested context radius.");
         if (cues.Count == 0 || candidateIds.Count == 0)
             return [];
 
@@ -56,10 +61,20 @@ public static partial class GenderReviewCandidateSelector
         {
             var start = Math.Max(0, position - radius);
             var end = Math.Min(cues.Count - 1, position + radius);
-            if (ranges.Count == 0 || start > ranges[^1].End + 1)
+
+            if (ranges.Count == 0)
+            {
                 ranges.Add((start, end));
+                continue;
+            }
+
+            var current = ranges[^1];
+            var combinedEnd = Math.Max(current.End, end);
+            var canMerge = start <= current.End + 1 && combinedEnd - current.Start + 1 <= maxWindowCues;
+            if (canMerge)
+                ranges[^1] = (current.Start, combinedEnd);
             else
-                ranges[^1] = (ranges[^1].Start, Math.Max(ranges[^1].End, end));
+                ranges.Add((start, end));
         }
 
         return ranges
