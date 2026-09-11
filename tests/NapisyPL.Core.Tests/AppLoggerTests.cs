@@ -108,4 +108,33 @@ public sealed class AppLoggerTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Logger_KeepsPrivacySafeLocalRuntimeMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var logger = new AppLogger(root);
+            logger.Info(
+                "local_context_runtime",
+                ("backend", "vulkan"),
+                ("device", "Vulkan1"),
+                ("model", "qwen3.5-9b"),
+                ("version", "b10809"));
+
+            var log = File.ReadAllText(logger.LogPath);
+
+            Assert.Contains("backend=vulkan", log);
+            Assert.Contains("device=Vulkan1", log);
+            Assert.Contains("model=qwen3.5-9b", log);
+            Assert.DoesNotContain("[REDACTED]", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }
