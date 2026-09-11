@@ -73,7 +73,7 @@ public sealed class EnhancedTranslationPipeline(
 
             if (candidateIds.Count > 0)
             {
-                status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — uruchamiam mały Qwen…");
+                status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — uruchamiam lokalny korektor…");
                 timer.Restart();
                 await runtimeManager.EnsureRunningAsync(status, cancellationToken);
                 logger?.Info("enhanced_phase", ("file", file), ("stage", "reviewer_startup"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
@@ -105,7 +105,7 @@ public sealed class EnhancedTranslationPipeline(
             var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
-            status?.Report($"Enhanced: zapisuję wynik — Qwen poprawił {changedCount} kwestii…");
+            status?.Report($"Enhanced: zapisuję wynik — lokalny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
             string? txtOutput = null;
