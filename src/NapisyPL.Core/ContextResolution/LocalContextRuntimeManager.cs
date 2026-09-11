@@ -10,6 +10,8 @@ public sealed class LocalContextRuntimeManager(
     IAppLogger? logger = null) : IAsyncDisposable
 {
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
+    private readonly AsyncSingleFlightGate _startupGate = new();
+    private readonly CancellationTokenSource _disposeCancellation = new();
     private Process? _process;
     private CancellationTokenSource? _lifetimeCancellation;
     private Task? _stdoutDrain;
@@ -24,6 +26,19 @@ public sealed class LocalContextRuntimeManager(
         if (IsRunning && await IsHealthyAsync(cancellationToken))
             return;
 
+        await _startupGate.RunAsync(
+            token => EnsureRunningCoreAsync(status, token),
+            _disposeCancellation.Token,
+            cancellationToken);
+    }
+
+    private async Task EnsureRunningCoreAsync(
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
+        if (IsRunning && await IsHealthyAsync(cancellationToken))
+            return;
+
         await assetManager.EnsureAvailableAsync(status, cancellationToken);
 
         if (_process is { HasExited: false })
@@ -31,6 +46,7 @@ public sealed class LocalContextRuntimeManager(
 
         var stopwatch = Stopwatch.StartNew();
         var (effectiveOptions, resolvedDevice) = await ResolveBackendAsync(status, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var effectiveBackend = effectiveOptions.Backend == LocalContextBackend.Cpu ? "cpu" : "vulkan";
 
         status?.Report(
@@ -248,5 +264,10 @@ public sealed class LocalContextRuntimeManager(
         _lifetimeCancellation = null;
     }
 
-    public async ValueTask DisposeAsync() => await StopProcessAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _disposeCancellation.Cancel();
+        await StopProcessAsync();
+        _disposeCancellation.Dispose();
+    }
 }
