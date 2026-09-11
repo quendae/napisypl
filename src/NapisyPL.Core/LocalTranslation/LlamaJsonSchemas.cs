@@ -48,7 +48,27 @@ public static class LlamaJsonSchemas
 
     public static object TranslationResponseFormat => BuildChangedLineArrayFormat();
 
-    public static object ReviewResponseFormat => BuildChangedLineArrayFormat();
+    public static object ReviewResponseFormat => new
+    {
+        type = "json_schema",
+        schema = new
+        {
+            type = "array",
+            items = new
+            {
+                type = "object",
+                properties = new
+                {
+                    id = new { type = "integer", minimum = 1 },
+                    find = new { type = "string", minLength = 1 },
+                    replace = new { type = "string", minLength = 1 },
+                    confidence = new { type = "number", minimum = 0, maximum = 1 }
+                },
+                required = new[] { "id", "find", "replace", "confidence" },
+                additionalProperties = false
+            }
+        }
+    };
 
     private static object BuildChangedLineArrayFormat() => new
     {
