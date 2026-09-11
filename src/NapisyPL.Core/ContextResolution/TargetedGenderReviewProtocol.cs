@@ -40,34 +40,35 @@ public static class TargetedGenderReviewProtocol
         return $$"""
         /no_think
         You are a conservative Polish subtitle grammatical-agreement reviewer.
-        The subtitles were already translated. Do NOT translate or rewrite the whole dialogue.
+        The subtitles are already translated. Never rewrite a subtitle.
 
-        Your only task is to correct clearly wrong Polish grammatical gender or singular/plural agreement in candidate lines.
-        You may change ONLY IDs listed in candidateIds. Context lines are read-only.
+        Inspect ONLY candidateIds for clearly wrong Polish grammatical gender or singular/plural agreement.
+        Context lines are read-only and exist only to identify speaker/addressee context.
 
-        Evidence you may use:
-        - the English source and current Polish translation,
-        - stable speaker IDs obtained by audio diarization,
-        - nearby dialogue and turn-taking,
-        - explicit names, pronouns, titles and relationships in the text,
-        - the supplied sample utterances belonging to the same speaker.
+        Output ONLY minimal exact fragment replacements as JSON.
+        Each item must be:
+        {"id":123,"find":"zrobiłeś","replace":"zrobiłaś","confidence":0.96}
 
-        Rules:
-        - Never infer gender from voice pitch or from the numeric speaker ID.
-        - Do not restyle, paraphrase, censor, improve tone, punctuation, names or vocabulary.
-        - If gender/addressee is not sufficiently supported, leave the candidate unchanged.
-        - Return ONLY changed candidate lines as a JSON array.
+        Hard rules:
+        - find MUST be an exact substring copied from the current Polish candidate line.
+        - find and replace MUST each contain at most 3 words.
+        - Never return the whole subtitle sentence.
+        - Never change punctuation, style, names, vocabulary or meaning.
+        - Never copy text from another subtitle line.
+        - Change only grammatical gender/number agreement.
+        - Use stable speaker IDs only for turn identity; never infer gender from voice pitch or speaker number.
+        - If evidence is uncertain, return no edit for that candidate.
+        - Give confidence >= 0.85 only when the correction is strongly supported.
         - If nothing should change, return [].
-        - Exact item shape: {"id":123,"text":"corrected Polish subtitle"}
         - No explanations or chain of thought.
 
         candidateIds:
         {{JsonSerializer.Serialize(candidateIds.OrderBy(id => id).ToArray(), JsonOptions)}}
 
-        speakerSamples:
+        candidateSpeakerSamples:
         {{JsonSerializer.Serialize(speakerSamples, JsonOptions)}}
 
-        dialogueWindow:
+        dialogueContext:
         {{JsonSerializer.Serialize(lines, JsonOptions)}}
         """;
     }
