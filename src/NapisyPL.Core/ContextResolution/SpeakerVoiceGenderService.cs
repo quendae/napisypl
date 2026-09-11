@@ -125,6 +125,7 @@ public sealed class SpeakerVoiceGenderService(
             config.TopK = options.TopK;
 
             var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
+            var allObservations = new List<SpeakerGenderObservation>();
             var result = await Task.Run<IReadOnlyDictionary<string, SpeakerGenderEvidence>>(() =>
             {
                 using var tagger = new AudioTagging(config);
@@ -159,6 +160,7 @@ public sealed class SpeakerVoiceGenderService(
                             (double)samples.Length / wave.SampleRate));
                     }
 
+                    allObservations.AddRange(observations);
                     evidence[$"SPEAKER_{pair.Key:00}"] = SpeakerGenderEvidenceAggregator.Aggregate(observations);
                 }
 
@@ -166,12 +168,22 @@ public sealed class SpeakerVoiceGenderService(
             }, CancellationToken.None);
 
             var known = result.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
+            var diagnostics = SpeakerGenderObservationDiagnostics.Summarize(allObservations);
             _logger.Info(
                 "enhanced_phase",
                 ("stage", "speaker_gender"),
                 ("elapsedMs", timer.ElapsedMilliseconds),
                 ("speakerCount", result.Count),
                 ("knownGenderCount", known),
+                ("topK", options.TopK),
+                ("genderSampleCount", diagnostics.SampleCount),
+                ("maleTagSampleCount", diagnostics.MaleTagSampleCount),
+                ("femaleTagSampleCount", diagnostics.FemaleTagSampleCount),
+                ("anyGenderTagSampleCount", diagnostics.AnyGenderTagSampleCount),
+                ("maleScoreMaxPermille", diagnostics.MaleScoreMaxPermille),
+                ("femaleScoreMaxPermille", diagnostics.FemaleScoreMaxPermille),
+                ("combinedScoreMeanPermille", diagnostics.CombinedScoreMeanPermille),
+                ("combinedScoreMaxPermille", diagnostics.CombinedScoreMaxPermille),
                 ("result", "success"));
             return result;
         }
