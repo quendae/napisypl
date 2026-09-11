@@ -36,6 +36,14 @@ public partial class MainWindow
         RefreshReadyState();
     }
 
+    private async Task EnsureLocalQwenRunningAsync(CancellationToken cancellationToken)
+    {
+        EnsureEnhancedConfigured();
+        await _enhancedRuntimeManager!.EnsureRunningAsync(
+            new Progress<string>(message => SetStatus(message, StatusKind.Normal)),
+            cancellationToken);
+    }
+
     private void EnsureEnhancedConfigured()
     {
         if (_enhancedConfigured)
