@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using NapisyPL.Core.LocalTranslation;
 
 namespace NapisyPL.Core.ContextResolution;
 
@@ -24,8 +25,11 @@ public sealed class OpenAiContextResolver(
             Content = JsonContent.Create(new
             {
                 model,
-                temperature = 0.1,
+                temperature = 0.0,
                 max_tokens = 1200,
+                reasoning_effort = "none",
+                chat_template_kwargs = new { enable_thinking = false },
+                response_format = LlamaJsonSchemas.ContextResponseFormat,
                 messages = new object[]
                 {
                     new
