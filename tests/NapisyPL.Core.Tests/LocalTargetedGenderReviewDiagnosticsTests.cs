@@ -53,6 +53,31 @@ public sealed class LocalTargetedGenderReviewDiagnosticsTests
         Assert.DoesNotContain(translatedText, allLoggedValues, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ReviewAsync_DefaultsToAtMostFiveCandidatesPerWindowForLocalSmallModel()
+    {
+        var handler = new StubHandler("""
+            {"choices":[{"message":{"content":"[]"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1}}
+            """);
+        using var http = new HttpClient(handler);
+        var logger = new RecordingLogger();
+        var service = new LocalTargetedGenderReviewService(
+            http,
+            "http://127.0.0.1:17843/v1",
+            "qwen3-1.7b",
+            logger: logger);
+        var source = Enumerable.Range(1, 6).Select(id => Cue(id, $"Source {id}")).ToArray();
+        var translated = Enumerable.Range(1, 6).Select(id => Cue(id, "Byłem gotowy.")).ToArray();
+        var speakers = Enumerable.Range(1, 6).ToDictionary(id => id, id => (string?)$"SPEAKER_{id % 2:00}");
+
+        await service.ReviewAsync(source, translated, speakers);
+
+        var plan = Assert.Single(logger.Entries.Where(entry => entry.EventName == "review_plan"));
+        Assert.Equal(6, plan.Int("candidateCount"));
+        Assert.Equal(2, plan.Int("windowCount"));
+        Assert.Equal(2, logger.Entries.Count(entry => entry.EventName == "review_window_start"));
+    }
+
     private static SubtitleCue Cue(int id, string text) =>
         new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
 
