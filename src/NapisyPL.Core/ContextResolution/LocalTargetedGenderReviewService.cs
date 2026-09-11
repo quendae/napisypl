@@ -359,7 +359,7 @@ public sealed class LocalTargetedGenderReviewService(
         }
         catch (InvalidDataException)
         {
-            var firstArray = content.IndexOf('[', StringComparison.Ordinal);
+            var firstArray = content.IndexOf('[');
             var lastArray = content.LastIndexOf(']');
             if (firstArray < 0 || lastArray <= firstArray)
                 throw;
