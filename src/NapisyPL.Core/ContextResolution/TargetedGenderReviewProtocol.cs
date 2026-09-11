@@ -77,11 +77,12 @@ public static class TargetedGenderReviewProtocol
         - target="addressee": the changed Polish form directly addresses the LISTENER, e.g. "byłeś" -> "byłaś" or "zrobiłeś" -> "zrobiłaś".
 
         speakerGenderEvidence is produced by a separate local acoustic classifier over multiple diarized speech fragments.
-        - gender="male" or "female" is usable supporting evidence for that stable speaker ID.
+        - gender="male" or "female" is usable evidence for that stable speaker ID.
         - gender="unknown" is no evidence.
         - confidence describes consistency of the acoustic classification; do not treat it as certainty about identity.
         - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond this supplied classifier result.
-        - Prefer supplied high-confidence acoustic evidence when it agrees with explicit dialogue evidence; if evidence conflicts or remains uncertain, return no edit.
+        - For a speaker-target correction, known male/female speakerGenderEvidence with confidence >= 0.85 is sufficient on its own without explicit dialogue confirmation when the current Polish form clearly uses the opposite grammatical gender and there is no conflicting context evidence.
+        - If supplied acoustic evidence conflicts with explicit dialogue evidence or remains uncertain, return no edit.
 
         probableAddressee is computed by the application only when turn-taking strongly looks like B -> A -> B.
         For target="addressee":
