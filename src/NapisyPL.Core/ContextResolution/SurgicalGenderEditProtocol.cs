@@ -11,6 +11,18 @@ public enum GenderAgreementTarget
     Addressee
 }
 
+public enum SurgicalGenderEditRejectReason
+{
+    None,
+    CueMismatch,
+    LowConfidence,
+    InvalidFragment,
+    Unchanged,
+    NotInflectionOnly,
+    FindMissing,
+    FindAmbiguous
+}
+
 public sealed record SurgicalGenderEdit(
     int Id,
     string Find,
@@ -188,22 +200,61 @@ public static partial class SurgicalGenderEditApplier
 
     private static readonly HashSet<(string Left, string Right)> AllowedEndingPairs = BuildAllowedEndingPairs();
 
-    public static bool TryApply(SubtitleCue cue, SurgicalGenderEdit edit, out SubtitleCue changed)
+    public static bool TryApply(SubtitleCue cue, SurgicalGenderEdit edit, out SubtitleCue changed) =>
+        TryApply(cue, edit, out changed, out _);
+
+    public static bool TryApply(
+        SubtitleCue cue,
+        SurgicalGenderEdit edit,
+        out SubtitleCue changed,
+        out SurgicalGenderEditRejectReason rejectReason)
     {
         changed = cue;
-        if (edit.Id != cue.Index || edit.Confidence < MinimumConfidence)
+        rejectReason = SurgicalGenderEditRejectReason.None;
+
+        if (edit.Id != cue.Index)
+        {
+            rejectReason = SurgicalGenderEditRejectReason.CueMismatch;
             return false;
-        if (!IsSmallFragment(edit.Find) || !IsSmallFragment(edit.Replace) ||
-            string.Equals(edit.Find, edit.Replace, StringComparison.Ordinal) ||
-            !LooksLikeInflectionOnly(edit.Find, edit.Replace))
+        }
+
+        if (edit.Confidence < MinimumConfidence)
+        {
+            rejectReason = SurgicalGenderEditRejectReason.LowConfidence;
             return false;
+        }
+
+        if (!IsSmallFragment(edit.Find) || !IsSmallFragment(edit.Replace))
+        {
+            rejectReason = SurgicalGenderEditRejectReason.InvalidFragment;
+            return false;
+        }
+
+        if (string.Equals(edit.Find, edit.Replace, StringComparison.Ordinal))
+        {
+            rejectReason = SurgicalGenderEditRejectReason.Unchanged;
+            return false;
+        }
+
+        if (!LooksLikeInflectionOnly(edit.Find, edit.Replace))
+        {
+            rejectReason = SurgicalGenderEditRejectReason.NotInflectionOnly;
+            return false;
+        }
 
         var first = cue.Text.IndexOf(edit.Find, StringComparison.Ordinal);
         if (first < 0)
+        {
+            rejectReason = SurgicalGenderEditRejectReason.FindMissing;
             return false;
+        }
+
         var second = cue.Text.IndexOf(edit.Find, first + edit.Find.Length, StringComparison.Ordinal);
         if (second >= 0)
+        {
+            rejectReason = SurgicalGenderEditRejectReason.FindAmbiguous;
             return false;
+        }
 
         var updated = cue.Text[..first] + edit.Replace + cue.Text[(first + edit.Find.Length)..];
         changed = cue with { Text = updated };
