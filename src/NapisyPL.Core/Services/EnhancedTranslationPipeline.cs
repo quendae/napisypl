@@ -39,6 +39,8 @@ public sealed class EnhancedTranslationPipeline(
             throw new InvalidOperationException("Enhanced wymaga tekstowej ścieżki napisów.");
 
         var file = Path.GetFileName(inputPath);
+        BeginRuntimeWarmup(runtimeManager, logger, file);
+
         string? temporarySrt = null;
         try
         {
@@ -74,7 +76,7 @@ public sealed class EnhancedTranslationPipeline(
 
             if (candidateIds.Count > 0)
             {
-                status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — uruchamiam lokalny korektor…");
+                status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — przygotowuję lokalny korektor…");
                 timer.Restart();
                 await runtimeManager.EnsureRunningAsync(status, cancellationToken);
                 logger?.Info("enhanced_phase", ("file", file), ("stage", "reviewer_startup"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
@@ -130,6 +132,45 @@ public sealed class EnhancedTranslationPipeline(
             {
                 try { File.Delete(temporarySrt); } catch { }
             }
+        }
+    }
+
+    private static void BeginRuntimeWarmup(
+        LocalContextRuntimeManager runtimeManager,
+        IAppLogger? logger,
+        string file)
+    {
+        _ = WarmRuntimeAsync(runtimeManager, logger, file);
+    }
+
+    private static async Task WarmRuntimeAsync(
+        LocalContextRuntimeManager runtimeManager,
+        IAppLogger? logger,
+        string file)
+    {
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            await runtimeManager.EnsureRunningAsync(status: null, CancellationToken.None);
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "reviewer_preload"),
+                ("elapsedMs", timer.ElapsedMilliseconds),
+                ("result", "success"));
+        }
+        catch (OperationCanceledException)
+        {
+            // Configuration reset or application shutdown cancels the shared startup.
+        }
+        catch (Exception ex)
+        {
+            logger?.Error(
+                "enhanced_failed",
+                ("file", file),
+                ("stage", "reviewer_preload"),
+                ("category", ex.GetType().Name),
+                ("result", "fallback"));
         }
     }
 }
