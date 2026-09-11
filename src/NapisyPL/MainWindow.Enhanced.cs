@@ -12,6 +12,7 @@ public partial class MainWindow
     private LocalContextRuntimeManager? _enhancedRuntimeManager;
     private bool _enhancedConfigured;
     private bool _enhancedCloseHooked;
+    private bool _enhancedControlsReady;
 
     private async void OnEnhancedChanged(object? sender, RoutedEventArgs e)
     {
@@ -41,6 +42,9 @@ public partial class MainWindow
 
     private async void OnEnhancedConfigChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (!_enhancedControlsReady)
+            return;
+
         UpdateEnhancedHint();
         SyncLocalProviderModelWithEnhanced();
         if (_pipeline is null || _busy || !_enhancedConfigured)
@@ -56,6 +60,12 @@ public partial class MainWindow
                 $"Enhanced: wybrano {GetSelectedEnhancedOptions().ModelDisplayName} · {GetSelectedBackendLabel()}.",
                 StatusKind.Normal);
         }
+    }
+
+    private void CompleteEnhancedControlInitialization()
+    {
+        _enhancedControlsReady = true;
+        UpdateEnhancedHint();
     }
 
     private async Task EnsureLocalQwenRunningAsync(CancellationToken cancellationToken)
@@ -186,8 +196,12 @@ public partial class MainWindow
 
     private void UpdateEnhancedHint()
     {
-        if (EnhancedModelHintText is null)
+        if (!_enhancedControlsReady ||
+            EnhancedModelComboBox is null ||
+            EnhancedBackendComboBox is null ||
+            EnhancedModelHintText is null)
             return;
+
         var options = GetSelectedEnhancedOptions();
         EnhancedModelHintText.Text =
             $"Korektor: {options.ModelDisplayName} · {options.ModelApproxSize}. " +
