@@ -22,7 +22,7 @@ public partial class MainWindow
             EnsureEnhancedConfigured();
             _pipeline.UseEnhanced = true;
             SetStatus(
-                "Enhanced włączony — dla filmów SubFlow przeanalizuje audio lokalnie przed tłumaczeniem.",
+                "Enhanced włączony — audio rozpozna rozmówców, a mały Qwen sprawdzi tylko podejrzane formy po tłumaczeniu.",
                 StatusKind.Normal);
         }
         else
@@ -59,28 +59,17 @@ public partial class MainWindow
         var diarizationOptions = SpeakerDiarizationOptions.CreateDefault();
         var diarizationAssets = new SpeakerDiarizationAssetManager(_enhancedHttpClient, diarizationOptions);
         var diarization = new SpeakerDiarizationService(diarizationAssets, diarizationOptions);
+        var speakerAnalysis = new SpeakerDiarizationAnalysisService(audioExtraction, diarization, _appLogger);
 
         var runtimeOptions = LocalContextRuntimeOptions.CreateDefault();
         var runtimeAssets = new LocalContextAssetManager(_enhancedHttpClient, runtimeOptions);
         _enhancedRuntimeManager = new LocalContextRuntimeManager(_enhancedHttpClient, runtimeAssets, runtimeOptions);
 
-        var contextResolver = new OpenAiContextResolver(
-            _enhancedHttpClient,
-            runtimeOptions.BaseUrl,
-            "qwen3-1.7b");
-        var contextCoordinator = new ContextResolutionCoordinator(windowSize: 40, overlap: 10);
-        var contextAnalysis = new EnhancedContextAnalysisService(
-            audioExtraction,
-            diarization,
-            _enhancedRuntimeManager,
-            contextResolver,
-            contextCoordinator,
-            _appLogger);
-        var genderReview = new LocalGenderReviewService(
+        var targetedReview = new LocalTargetedGenderReviewService(
             _enhancedHttpClient,
             runtimeOptions.BaseUrl,
             "qwen3-1.7b",
-            windowSize: 40);
+            contextRadius: 3);
 
         var enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
@@ -88,9 +77,9 @@ public partial class MainWindow
             new SrtParser(),
             new SubtitleWriter(),
             new TranslationCoordinator(),
-            contextAnalysis,
+            speakerAnalysis,
             _enhancedRuntimeManager,
-            genderReview,
+            targetedReview,
             _appLogger);
 
         _pipeline.EnhancedPipeline = enhancedPipeline;
