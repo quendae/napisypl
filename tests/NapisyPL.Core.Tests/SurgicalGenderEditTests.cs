@@ -32,6 +32,24 @@ public sealed class SurgicalGenderEditTests
         Assert.Equal($"{replace} tutaj.", changed.Text);
     }
 
+    [Fact]
+    public void Apply_AcceptsLongerExactAnchorWhenOnlyFewWordsChangeInflection()
+    {
+        var cue = Cue(7, "Wtedy naprawdę byłem bardzo zmęczony po pracy.");
+        var edit = new SurgicalGenderEdit(
+            7,
+            "naprawdę byłem bardzo zmęczony",
+            "naprawdę byłam bardzo zmęczona",
+            0.98,
+            GenderAgreementTarget.Speaker);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed, out var reason);
+
+        Assert.True(result);
+        Assert.Equal(SurgicalGenderEditRejectReason.None, reason);
+        Assert.Equal("Wtedy naprawdę byłam bardzo zmęczona po pracy.", changed.Text);
+    }
+
     [Theory]
     [InlineData("Byłem", "Byłam", 0.70, SurgicalGenderEditRejectReason.LowConfidence)]
     [InlineData("Byłeś", "Byłaś", 0.99, SurgicalGenderEditRejectReason.FindMissing)]
