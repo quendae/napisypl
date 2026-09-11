@@ -12,11 +12,43 @@ from pathlib import Path
 
 import ctranslate2
 import sentencepiece as spm
+from sacremoses.normalize import MosesPunctNormalizer
+from sacremoses.tokenize import MosesDetokenizer, MosesTokenizer
+from subword_nmt.apply_bpe import BPE
 
 _translator = None
 _tokenizer = None
 _target_prefix = ""
 _model_name = "unknown"
+
+
+class SentencePieceAdapter:
+    def __init__(self, model_path: Path):
+        self.processor = spm.SentencePieceProcessor(model_file=str(model_path))
+
+    def encode(self, text: str):
+        return self.processor.encode(text, out_type=str)
+
+    def decode(self, pieces):
+        return self.processor.decode_pieces(pieces).replace("▁", " ").replace("_", " ")
+
+
+class BpeAdapter:
+    def __init__(self, model_path: Path, from_code: str, to_code: str):
+        self.normalizer = MosesPunctNormalizer(from_code)
+        self.tokenizer = MosesTokenizer(from_code)
+        self.detokenizer = MosesDetokenizer(to_code)
+        with model_path.open("r", encoding="utf-8") as source:
+            self.bpe = BPE(source)
+
+    def encode(self, text: str):
+        normalized = self.normalizer.normalize(text)
+        tokenized = " ".join(self.tokenizer.tokenize(normalized))
+        return self.bpe.segment_tokens(tokenized.strip("\r\n ").split(" "))
+
+    def decode(self, pieces):
+        merged = " ".join(pieces).replace("@@ ", "")
+        return self.detokenizer.detokenize(merged.split(" "))
 
 
 def emit(payload):
@@ -50,13 +82,12 @@ def find_package_root(extracted: Path) -> Path:
     if not candidates:
         raise RuntimeError("Argos package does not contain an English to Polish translation model")
 
-    package_root, metadata = candidates[0]
+    package_root, _ = candidates[0]
     model_dir = package_root / "model"
-    tokenizer_path = package_root / "sentencepiece.model"
     if not model_dir.is_dir():
         raise FileNotFoundError("Argos package does not contain the CTranslate2 model directory")
-    if not tokenizer_path.is_file():
-        raise FileNotFoundError("Argos package does not contain sentencepiece.model")
+    if not (package_root / "sentencepiece.model").is_file() and not (package_root / "bpe.model").is_file():
+        raise FileNotFoundError("Argos package does not contain sentencepiece.model or bpe.model")
     return package_root
 
 
@@ -93,6 +124,22 @@ def ensure_extracted(model_path: Path) -> tuple[Path, dict]:
     return package_root, metadata
 
 
+def create_tokenizer(package_root: Path, metadata: dict):
+    sentencepiece_path = package_root / "sentencepiece.model"
+    if sentencepiece_path.is_file():
+        return SentencePieceAdapter(sentencepiece_path)
+
+    bpe_path = package_root / "bpe.model"
+    if bpe_path.is_file():
+        return BpeAdapter(
+            bpe_path,
+            metadata.get("from_code") or "en",
+            metadata.get("to_code") or "pl",
+        )
+
+    raise FileNotFoundError("Argos package does not contain a supported tokenizer")
+
+
 def load_model(model_path):
     global _translator, _tokenizer, _target_prefix, _model_name
 
@@ -108,7 +155,7 @@ def load_model(model_path):
         intra_threads=0,
         compute_type="auto",
     )
-    _tokenizer = spm.SentencePieceProcessor(model_file=str(package_root / "sentencepiece.model"))
+    _tokenizer = create_tokenizer(package_root, metadata)
     _target_prefix = metadata.get("target_prefix", "") or ""
     _model_name = model_file.name
 
@@ -121,7 +168,7 @@ def load_model(model_path):
 
 def decode_result(result) -> str:
     pieces = result.hypotheses[0]
-    value = _tokenizer.decode_pieces(pieces).replace("▁", " ").replace("_", " ")
+    value = _tokenizer.decode(pieces)
     if _target_prefix and value.startswith(_target_prefix):
         value = value[len(_target_prefix):]
     if value.startswith(" "):
@@ -151,7 +198,7 @@ def translate_segments(segments):
 
     translated_lines = []
     if flat_texts:
-        tokenized = [_tokenizer.encode(text, out_type=str) for text in flat_texts]
+        tokenized = [_tokenizer.encode(text) for text in flat_texts]
         target_prefix = [[_target_prefix]] * len(tokenized) if _target_prefix else None
         results = _translator.translate_batch(
             tokenized,
