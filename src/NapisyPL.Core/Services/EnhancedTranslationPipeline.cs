@@ -51,7 +51,7 @@ public sealed class EnhancedTranslationPipeline(
             if (sourceCues.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się odczytać żadnych kwestii z napisów.");
 
-            // Audio is used only to keep stable speaker identities. No LLM work happens before translation.
+            // Audio keeps stable speaker identities and supplies conservative acoustic gender evidence.
             var speakers = await speakerAnalysis.AnalyzeAsync(
                 inputPath,
                 sourceCues,
@@ -59,7 +59,8 @@ public sealed class EnhancedTranslationPipeline(
                 status,
                 cancellationToken);
 
-            status?.Report($"Enhanced: wykryto {speakers.SpeakerSegmentCount} fragmentów mowy. Tłumaczę przez {provider.DisplayName}…");
+            var knownGenderCount = speakers.SpeakerGenderEvidence.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
+            status?.Report($"Enhanced: wykryto {speakers.SpeakerSegmentCount} fragmentów mowy, pewna klasyfikacja głosu dla {knownGenderCount} rozmówców. Tłumaczę przez {provider.DisplayName}…");
             var timer = Stopwatch.StartNew();
             var translated = translationProgress is null
                 ? await translationCoordinator.TranslateCuesAsync(sourceCues, provider, progress: (IProgress<double>?)null, cancellationToken)
@@ -84,8 +85,9 @@ public sealed class EnhancedTranslationPipeline(
                     translated,
                     speakers.CueSpeakers,
                     progress: null,
-                    status,
-                    cancellationToken);
+                    status: status,
+                    cancellationToken: cancellationToken,
+                    speakerGenderEvidence: speakers.SpeakerGenderEvidence);
                 changedCount = reviewed.Zip(translated).Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
                 logger?.Info(
                     "enhanced_phase",
