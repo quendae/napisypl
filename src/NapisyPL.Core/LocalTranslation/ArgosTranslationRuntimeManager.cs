@@ -14,6 +14,7 @@ public sealed class ArgosTranslationRuntimeManager(
     private bool _loaded;
 
     public bool IsRunning => _process is { HasExited: false };
+    public IProgress<string>? StatusProgress { get; set; }
 
     public async Task EnsureReadyAsync(
         IProgress<string>? status = null,
@@ -22,7 +23,7 @@ public sealed class ArgosTranslationRuntimeManager(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureReadyCoreAsync(status, cancellationToken);
+            await EnsureReadyCoreAsync(status ?? StatusProgress, cancellationToken);
         }
         finally
         {
@@ -40,7 +41,7 @@ public sealed class ArgosTranslationRuntimeManager(
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await EnsureReadyCoreAsync(status: null, cancellationToken);
+            await EnsureReadyCoreAsync(StatusProgress, cancellationToken);
             var process = _process ?? throw new InvalidOperationException("Argos helper is not running.");
             var jobId = Guid.NewGuid().ToString("N");
             var segments = texts.Select((text, index) => new TranslationSegment(index + 1, text)).ToArray();
@@ -58,6 +59,7 @@ public sealed class ArgosTranslationRuntimeManager(
                         result[segment.Id - 1] = segment.Text;
                         break;
                     case LocalProgressEvent progress when progress.JobId == jobId:
+                        StatusProgress?.Report($"Argos: tłumaczenie lokalne {progress.Completed} / {progress.Total}…");
                         break;
                     case CompleteEvent complete when complete.JobId == jobId:
                         if (result.Any(text => text is null))
