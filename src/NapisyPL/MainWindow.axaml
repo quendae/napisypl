@@ -4,7 +4,9 @@
         Title="SubFlow"
         Width="820" Height="840"
         MinWidth="680" MinHeight="640"
-        Background="{DynamicResource CanvasBrush}">
+        Background="{DynamicResource CanvasBrush}"
+        Opened="OnArgosWindowOpened"
+        Closed="OnArgosWindowClosed">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="34,28,34,34" Spacing="18">
       <Border Background="#161A22" CornerRadius="7" Padding="12,8">
@@ -82,7 +84,7 @@
                     Content="Enhanced — analizuj audio i kontekst rozmówców"
                     FontWeight="SemiBold"
                     IsCheckedChanged="OnEnhancedChanged" />
-          <TextBlock Text="Opcjonalnie: lokalnie wykrywa mówców i używa małego modelu do poprawy rodzaju gramatycznego/adresata. Pierwsze uruchomienie pobierze ok. 1,4 GB. Działa dla filmów; bez wysyłania audio do chmury."
+          <TextBlock Text="Opcjonalnie: lokalnie wykrywa mówców, a mały Qwen sprawdza tylko podejrzane formy rodzaju/liczby po właściwym tłumaczeniu. Pierwsze użycie Qwena pobierze ok. 1,4 GB. Audio nie jest wysyłane do chmury."
                      Foreground="{DynamicResource MutedBrush}"
                      FontSize="12"
                      TextWrapping="Wrap" />
