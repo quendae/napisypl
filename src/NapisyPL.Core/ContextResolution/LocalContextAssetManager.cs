@@ -26,7 +26,7 @@ public sealed class LocalContextAssetManager(
 
     private async Task DownloadRuntimeAsync(IProgress<string>? status, CancellationToken cancellationToken)
     {
-        status?.Report("Enhanced: pobieram lokalny silnik kontekstu (~20 MB)…");
+        status?.Report($"Enhanced: pobieram llama.cpp {options.RuntimeFlavor}…");
         var tempRoot = Path.Combine(Path.GetTempPath(), "SubFlow-llama-" + Guid.NewGuid().ToString("N"));
         var zipPath = Path.Combine(tempRoot, "runtime.zip");
         var extractPath = Path.Combine(tempRoot, "extract");
@@ -35,7 +35,12 @@ public sealed class LocalContextAssetManager(
 
         try
         {
-            await DownloadToFileAsync(options.RuntimeZipUrl, zipPath, "silnik llama.cpp", status, cancellationToken);
+            await DownloadToFileAsync(
+                options.RuntimeZipUrl,
+                zipPath,
+                $"llama.cpp {options.RuntimeFlavor}",
+                status,
+                cancellationToken);
             status?.Report("Enhanced: rozpakowuję lokalny silnik kontekstu…");
             ZipFile.ExtractToDirectory(zipPath, extractPath, overwriteFiles: true);
 
@@ -57,11 +62,16 @@ public sealed class LocalContextAssetManager(
 
     private async Task DownloadModelAsync(IProgress<string>? status, CancellationToken cancellationToken)
     {
-        status?.Report("Enhanced: pobieram model kontekstu Qwen3-1.7B (~1.3 GB)…");
+        status?.Report($"Enhanced: pobieram {options.ModelDisplayName} ({options.ModelApproxSize})…");
         var partialPath = options.ModelPath + ".partial";
         try
         {
-            await DownloadToFileAsync(options.ModelUrl, partialPath, "Qwen3-1.7B", status, cancellationToken);
+            await DownloadToFileAsync(
+                options.ModelUrl,
+                partialPath,
+                options.ModelDisplayName,
+                status,
+                cancellationToken);
             File.Move(partialPath, options.ModelPath, overwrite: true);
         }
         finally
