@@ -137,4 +137,32 @@ public sealed class AppLoggerTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Logger_KeepsPrivacySafeSpeakerGenderCounters()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var logger = new AppLogger(root);
+            logger.Info(
+                "speaker_gender",
+                ("speakerCount", 12),
+                ("knownGenderCount", 8),
+                ("genderEvidenceCount", 3));
+
+            var log = File.ReadAllText(logger.LogPath);
+
+            Assert.Contains("speakerCount=12", log);
+            Assert.Contains("knownGenderCount=8", log);
+            Assert.Contains("genderEvidenceCount=3", log);
+            Assert.DoesNotContain("[REDACTED]", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }
