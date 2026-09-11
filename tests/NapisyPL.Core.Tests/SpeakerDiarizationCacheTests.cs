@@ -14,8 +14,8 @@ public sealed class SpeakerDiarizationCacheTests
         var cache = new SpeakerDiarizationCache(Path.Combine(root, "cache"), "sherpa-pyannote3-campplus-v1");
         var segments = new[]
         {
-            new SpeakerSegment(0.5, 1.5, "SPEAKER_00"),
-            new SpeakerSegment(2.0, 3.0, "SPEAKER_01")
+            new SpeakerSegment(0.5, 1.5, 0),
+            new SpeakerSegment(2.0, 3.0, 1)
         };
 
         await cache.SaveAsync(media, segments);
@@ -23,7 +23,7 @@ public sealed class SpeakerDiarizationCacheTests
 
         Assert.NotNull(loaded);
         Assert.Equal(2, loaded!.Count);
-        Assert.Equal("SPEAKER_01", loaded[1].Speaker);
+        Assert.Equal(1, loaded[1].Speaker);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class SpeakerDiarizationCacheTests
         var media = Path.Combine(root, "episode.mkv");
         await File.WriteAllTextAsync(media, "media-v1");
         var cache = new SpeakerDiarizationCache(Path.Combine(root, "cache"), "sherpa-pyannote3-campplus-v1");
-        await cache.SaveAsync(media, new[] { new SpeakerSegment(0.5, 1.5, "SPEAKER_00") });
+        await cache.SaveAsync(media, new[] { new SpeakerSegment(0.5, 1.5, 0) });
 
         await File.AppendAllTextAsync(media, "-changed");
         var loaded = await cache.TryLoadAsync(media);
