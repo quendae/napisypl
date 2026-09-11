@@ -90,7 +90,7 @@ public static class SpeakerGenderObservationDiagnostics
 public static class SpeakerGenderEvidenceAggregator
 {
     private const double MinimumTotalDurationSeconds = 1.5;
-    private const double MinimumCombinedSpeechEvidence = 0.15;
+    private const double MinimumCombinedSpeechEvidence = 0.03;
     private const double MinimumNormalizedConfidence = 0.75;
     private const double MinimumPerSampleDirectionConfidence = 0.65;
 
