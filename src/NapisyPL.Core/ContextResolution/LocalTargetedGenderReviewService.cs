@@ -50,6 +50,7 @@ public sealed class LocalTargetedGenderReviewService(
             if (allowedIds.Count == 0)
                 continue;
 
+            IReadOnlyDictionary<int, string> changed;
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
@@ -88,18 +89,22 @@ public sealed class LocalTargetedGenderReviewService(
                 if (!response.IsSuccessStatusCode)
                     throw new HttpRequestException($"Local targeted review: {(int)response.StatusCode} {body}");
 
-                var changed = ParseApiResponse(body);
-                foreach (var (id, text) in changed)
-                {
-                    if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
-                        throw new InvalidDataException($"Targeted reviewer attempted to change non-candidate cue {id}.");
-                    output[position] = output[position] with { Text = text };
-                }
+                changed = ParseApiResponse(body);
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
             {
                 status?.Report("Enhanced: korekta Qwen nie powiodła się — zachowuję tłumaczenie bazowe.");
                 return output;
+            }
+
+            // Scope validation intentionally stays outside the best-effort catch. A malformed
+            // model response may be skipped, but a request to alter a non-candidate cue is a
+            // protocol invariant violation and must remain a hard failure.
+            foreach (var (id, text) in changed)
+            {
+                if (!allowedIds.Contains(id) || !outputPositionById.TryGetValue(id, out var position))
+                    throw new InvalidDataException($"Targeted reviewer attempted to change non-candidate cue {id}.");
+                output[position] = output[position] with { Text = text };
             }
 
             progress?.Report((double)(windowIndex + 1) / windows.Count);
