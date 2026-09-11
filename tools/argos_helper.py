@@ -51,6 +51,15 @@ class BpeAdapter:
         return self.detokenizer.detokenize(merged.split(" "))
 
 
+def configure_stdio():
+    # PyInstaller console streams on Windows can inherit a legacy code page such as cp1252.
+    # The parent .NET process explicitly speaks UTF-8, so make the helper protocol deterministic too.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="strict")
+
+
 def emit(payload):
     sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
     sys.stdout.flush()
@@ -241,6 +250,7 @@ def translate_job(command):
 
 
 def main():
+    configure_stdio()
     # stdout is reserved for the newline-delimited JSON protocol.
     for raw_line in sys.stdin:
         raw_line = raw_line.strip()
