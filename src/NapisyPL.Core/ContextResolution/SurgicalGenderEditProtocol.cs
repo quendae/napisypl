@@ -4,7 +4,19 @@ using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
 
-public sealed record SurgicalGenderEdit(int Id, string Find, string Replace, double Confidence);
+public enum GenderAgreementTarget
+{
+    Unknown,
+    Speaker,
+    Addressee
+}
+
+public sealed record SurgicalGenderEdit(
+    int Id,
+    string Find,
+    string Replace,
+    double Confidence,
+    GenderAgreementTarget Target = GenderAgreementTarget.Unknown);
 
 public static class SurgicalGenderEditProtocol
 {
@@ -35,7 +47,20 @@ public static class SurgicalGenderEditProtocol
                 if (string.IsNullOrWhiteSpace(find) || string.IsNullOrWhiteSpace(replace) || confidence is < 0 or > 1)
                     throw new InvalidDataException("Gender reviewer returned an invalid surgical-edit value.");
 
-                result.Add(new SurgicalGenderEdit(id, find, replace, confidence));
+                var target = GenderAgreementTarget.Unknown;
+                if (item.TryGetProperty("target", out var targetElement))
+                {
+                    if (targetElement.ValueKind != JsonValueKind.String)
+                        throw new InvalidDataException("Gender reviewer returned an invalid agreement target.");
+                    target = targetElement.GetString()?.ToLowerInvariant() switch
+                    {
+                        "speaker" => GenderAgreementTarget.Speaker,
+                        "addressee" => GenderAgreementTarget.Addressee,
+                        _ => throw new InvalidDataException("Gender reviewer returned an unknown agreement target.")
+                    };
+                }
+
+                result.Add(new SurgicalGenderEdit(id, find, replace, confidence, target));
             }
 
             return result;
@@ -56,6 +81,103 @@ public static class SurgicalGenderEditProtocol
             ? text[(firstNewLine + 1)..lastFence].Trim()
             : text;
     }
+}
+
+public static class SurgicalGenderContextGuard
+{
+    private const double MinimumAddresseeConfidence = 0.95;
+
+    public static bool CanApply(
+        SurgicalGenderEdit edit,
+        string? currentSpeaker,
+        string? probableAddressee)
+    {
+        if (string.IsNullOrWhiteSpace(currentSpeaker) || edit.Target == GenderAgreementTarget.Unknown)
+            return false;
+
+        var inferredTarget = GenderAgreementTargetClassifier.Infer(edit.Find, edit.Replace);
+        if (inferredTarget != GenderAgreementTarget.Unknown && inferredTarget != edit.Target)
+            return false;
+
+        return edit.Target switch
+        {
+            GenderAgreementTarget.Speaker => true,
+            GenderAgreementTarget.Addressee =>
+                edit.Confidence >= MinimumAddresseeConfidence &&
+                !string.IsNullOrWhiteSpace(probableAddressee) &&
+                !string.Equals(currentSpeaker, probableAddressee, StringComparison.Ordinal),
+            _ => false
+        };
+    }
+}
+
+public static partial class GenderAgreementTargetClassifier
+{
+    private static readonly HashSet<(string Left, string Right)> SpeakerEndingPairs = BuildPairs(
+        ("em", "am"),
+        ("bym", "abym"),
+        ("liśmy", "łyśmy"),
+        ("ienem", "nam"));
+
+    private static readonly HashSet<(string Left, string Right)> AddresseeEndingPairs = BuildPairs(
+        ("eś", "aś"),
+        ("byś", "abyś"),
+        ("liście", "łyście"),
+        ("ieneś", "naś"));
+
+    public static GenderAgreementTarget Infer(string find, string replace)
+    {
+        var sourceWords = WordRegex().Matches(find).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        var replacementWords = WordRegex().Matches(replace).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        if (sourceWords.Length == 0 || sourceWords.Length != replacementWords.Length)
+            return GenderAgreementTarget.Unknown;
+
+        var inferred = GenderAgreementTarget.Unknown;
+        for (var i = 0; i < sourceWords.Length; i++)
+        {
+            if (string.Equals(sourceWords[i], replacementWords[i], StringComparison.Ordinal))
+                continue;
+
+            var prefix = CommonPrefixLength(sourceWords[i], replacementWords[i]);
+            var pair = (sourceWords[i][prefix..], replacementWords[i][prefix..]);
+            var wordTarget = SpeakerEndingPairs.Contains(pair)
+                ? GenderAgreementTarget.Speaker
+                : AddresseeEndingPairs.Contains(pair)
+                    ? GenderAgreementTarget.Addressee
+                    : GenderAgreementTarget.Unknown;
+
+            if (wordTarget == GenderAgreementTarget.Unknown)
+                continue;
+            if (inferred != GenderAgreementTarget.Unknown && inferred != wordTarget)
+                return GenderAgreementTarget.Unknown;
+            inferred = wordTarget;
+        }
+
+        return inferred;
+    }
+
+    private static HashSet<(string Left, string Right)> BuildPairs(params (string Left, string Right)[] pairs)
+    {
+        var result = new HashSet<(string Left, string Right)>();
+        foreach (var pair in pairs)
+        {
+            result.Add(pair);
+            result.Add((pair.Right, pair.Left));
+        }
+        return result;
+    }
+
+    private static int CommonPrefixLength(string left, string right)
+    {
+        var length = Math.Min(left.Length, right.Length);
+        var index = 0;
+        while (index < length && left[index] == right[index])
+            index++;
+        return index;
+    }
+
+    [GeneratedRegex(@"\p{L}+")]
+    private static partial Regex WordRegex();
 }
 
 public static partial class SurgicalGenderEditApplier
@@ -141,6 +263,8 @@ public static partial class SurgicalGenderEditApplier
             ("em", "am"),
             ("eś", "aś"),
             ("by", "aby"),
+            ("bym", "abym"),
+            ("byś", "abyś"),
             ("li", "ły"),
             ("liśmy", "łyśmy"),
             ("liście", "łyście"),
