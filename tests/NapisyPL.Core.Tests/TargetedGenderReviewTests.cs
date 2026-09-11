@@ -23,9 +23,9 @@ public sealed class TargetedGenderReviewTests
     }
 
     [Fact]
-    public async Task ReviewAsync_IgnoresChangesOutsideCandidateIds()
+    public async Task ReviewAsync_AppliesOnlySurgicalEditsInsideCandidateIds()
     {
-        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"text\":\"Byłam gotowa.\"},{\"id\":2,\"text\":\"Nie powinno się zmienić\"}]"},"finish_reason":"stop"}]}""");
+        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłem gotowy\",\"replace\":\"Byłam gotowa\",\"confidence\":0.97},{\"id\":2,\"find\":\"Dobrze\",\"replace\":\"Źle\",\"confidence\":0.99}]"},"finish_reason":"stop"}]}""");
         using var http = new HttpClient(handler);
         var service = new LocalTargetedGenderReviewService(http, "http://127.0.0.1:17843/v1", "qwen3-1.7b");
         var source = new[] { Cue(1, "I was ready."), Cue(2, "Okay.") };
@@ -41,7 +41,7 @@ public sealed class TargetedGenderReviewTests
     }
 
     [Fact]
-    public async Task ReviewAsync_IncludesOnlySpeakerSamplesUsedByCurrentWindow()
+    public async Task ReviewAsync_IncludesOnlyCandidateSpeakerSamplesUsedByCurrentBatch()
     {
         var handler = new CountingHandler("""{"choices":[{"message":{"content":"[]"},"finish_reason":"stop"}]}""");
         using var http = new HttpClient(handler);
@@ -52,14 +52,14 @@ public sealed class TargetedGenderReviewTests
             .ToArray();
         var speakers = new Dictionary<int, string?>
         {
-            [4] = "SPEAKER_WINDOW",
-            [5] = "SPEAKER_WINDOW",
+            [4] = "SPEAKER_CONTEXT",
+            [5] = "SPEAKER_CANDIDATE",
             [10] = "SPEAKER_OUTSIDE"
         };
 
         await service.ReviewAsync(source, translated, speakers);
 
-        Assert.Contains("SPEAKER_WINDOW", handler.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains("SPEAKER_CANDIDATE", handler.LastRequestBody, StringComparison.Ordinal);
         Assert.DoesNotContain("SPEAKER_OUTSIDE", handler.LastRequestBody, StringComparison.Ordinal);
     }
 
