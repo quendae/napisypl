@@ -200,4 +200,39 @@ public sealed class AppLoggerTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Logger_KeepsPrivacySafeReviewCoverageMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var logger = new AppLogger(root);
+            logger.Info(
+                "review_coverage",
+                ("candidateCount", 100),
+                ("knownGenderEvidenceCount", 5),
+                ("knownSpeakerCandidateCount", 7),
+                ("knownAddresseeCandidateCount", 3),
+                ("knownSpeakerCandidateIds", "12,45,88"),
+                ("knownAddresseeCandidateIds", "45,91"),
+                ("subtitleText", "must remain private"));
+
+            var log = File.ReadAllText(logger.LogPath);
+
+            Assert.Contains("knownGenderEvidenceCount=5", log);
+            Assert.Contains("knownSpeakerCandidateCount=7", log);
+            Assert.Contains("knownAddresseeCandidateCount=3", log);
+            Assert.Contains("knownSpeakerCandidateIds=12,45,88", log);
+            Assert.Contains("knownAddresseeCandidateIds=45,91", log);
+            Assert.DoesNotContain("must remain private", log);
+            Assert.DoesNotContain("knownGenderEvidenceCount=[REDACTED]", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }
