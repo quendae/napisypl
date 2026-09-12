@@ -26,6 +26,12 @@ jobs:
         run: |
           $source = Join-Path $env:RUNNER_TEMP "bergamot-translator"
           git clone --branch v0.4.5 --depth 1 --recurse-submodules --shallow-submodules https://github.com/browsermt/bergamot-translator.git $source
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $msvcPatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/sentencepiece-modern-msvc.patch").Path
+          git -C $source apply $msvcPatch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           Copy-Item "tools/offline-mt/bergamot-helper" (Join-Path $source "subflow-helper") -Recurse
           Add-Content (Join-Path $source "CMakeLists.txt") "`nadd_subdirectory(subflow-helper)"
           "BERGAMOT_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -53,6 +59,7 @@ jobs:
         shell: pwsh
         run: |
           cmake --build $env:BERGAMOT_BUILD --config Release --target SubFlow.BergamotHelper --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $helper = Get-ChildItem $env:BERGAMOT_BUILD -Filter "SubFlow.BergamotHelper.exe" -Recurse | Select-Object -First 1
           if (-not $helper) { throw "SubFlow.BergamotHelper.exe was not produced" }
           "SUBFLOW_BERGAMOT_HELPER=$($helper.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
