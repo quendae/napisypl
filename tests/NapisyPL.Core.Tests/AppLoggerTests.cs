@@ -218,6 +218,9 @@ public sealed class AppLoggerTests
                 ("knownAddresseeCandidateCount", 3),
                 ("knownSpeakerCandidateIds", "12,45,88"),
                 ("knownAddresseeCandidateIds", "45,91"),
+                ("eligibleSpeakerCandidateCount", 2),
+                ("eligibleSpeakerCandidateIds", "45,88"),
+                ("speakerCandidateEvidence", "12:SPEAKER_13:female:940:1:false;45:SPEAKER_28:male:988:3:true"),
                 ("subtitleText", "must remain private"));
 
             var log = File.ReadAllText(logger.LogPath);
@@ -227,8 +230,13 @@ public sealed class AppLoggerTests
             Assert.Contains("knownAddresseeCandidateCount=3", log);
             Assert.Contains("knownSpeakerCandidateIds=12,45,88", log);
             Assert.Contains("knownAddresseeCandidateIds=45,91", log);
+            Assert.Contains("eligibleSpeakerCandidateCount=2", log);
+            Assert.Contains("eligibleSpeakerCandidateIds=45,88", log);
+            Assert.Contains("speakerCandidateEvidence=12:SPEAKER_13:female:940:1:false;45:SPEAKER_28:male:988:3:true", log);
             Assert.DoesNotContain("must remain private", log);
             Assert.DoesNotContain("knownGenderEvidenceCount=[REDACTED]", log);
+            Assert.DoesNotContain("eligibleSpeakerCandidateIds=[REDACTED]", log);
+            Assert.DoesNotContain("speakerCandidateEvidence=[REDACTED]", log);
         }
         finally
         {
