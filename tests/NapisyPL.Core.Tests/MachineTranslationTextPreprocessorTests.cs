@@ -75,7 +75,8 @@ public sealed class MachineTranslationTextPreprocessorTests
             new TranslationSegment(1, "One."),
             new TranslationSegment(2, "Two.")
         ]);
+        Action act = () => _ = sut.Reassemble(batch, new[] { "Jeden." });
 
-        Assert.Throws<InvalidDataException>(() => sut.Reassemble(batch, ["Jeden."]));
+        Assert.Throws<InvalidDataException>(act);
     }
 }
