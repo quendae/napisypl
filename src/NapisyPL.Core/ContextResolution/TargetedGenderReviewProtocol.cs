@@ -98,6 +98,7 @@ public static class TargetedGenderReviewProtocol
         - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond the supplied classifier result.
         - For speaker-target edits, use ONLY candidateSpeakerGender on that candidate as the actionable acoustic signal.
         - candidateSpeakerGender is present only when the classifier has male/female evidence with confidence >= 0.85 from at least 2 samples.
+        - An eligible candidateSpeakerGender is sufficient on its own without explicit dialogue confirmation when the current Polish form clearly uses the opposite grammatical gender and there is no conflicting context evidence.
         - If supplied acoustic evidence conflicts with explicit dialogue evidence or remains uncertain, return no edit.
 
         IMPORTANT KNOWN-SPEAKER CHECK:
