@@ -13,7 +13,7 @@ public sealed class GenderReviewCoverageDiagnosticsTests
             Cue(1, 0, 1, "B before"),
             Cue(2, 1.2, 2.2, "candidate A"),
             Cue(3, 2.4, 3.4, "B after"),
-            Cue(4, 4.0, 5.0, "candidate unknown")
+            Cue(4, 20.0, 21.0, "candidate unknown")
         };
         var candidateIds = new HashSet<int> { 2, 4 };
         var speakers = new Dictionary<int, string?>
