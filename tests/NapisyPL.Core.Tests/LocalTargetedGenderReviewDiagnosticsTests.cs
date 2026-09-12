@@ -55,6 +55,53 @@ public sealed class LocalTargetedGenderReviewDiagnosticsTests
     }
 
     [Fact]
+    public async Task ReviewAsync_LogsThirdPersonSubjectConflictSeparately()
+    {
+        var handler = new StubHandler("""
+            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zapomniałaś\",\"replace\":\"Zapomniałeś\",\"confidence\":0.99,\"target\":\"addressee\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}
+            """);
+        using var http = new HttpClient(handler);
+        var logger = new RecordingLogger();
+        var service = new LocalTargetedGenderReviewService(
+            http,
+            "http://127.0.0.1:17843/v1",
+            "qwen3.5-9b",
+            logger: logger);
+        var source = new[]
+        {
+            Cue(1, "Do you think they're ever gonna forget today?"),
+            Cue(2, "Never.")
+        };
+        var translated = new[]
+        {
+            Cue(1, "Myślisz, że oni Zapomniałaś o dzisiejszym dniu?"),
+            Cue(2, "Nigdy.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_A",
+            [2] = "SPEAKER_B"
+        };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_B"] = new(SpeakerVoiceGender.Male, 0.977, 3)
+        };
+
+        var result = await service.ReviewAsync(
+            source,
+            translated,
+            speakers,
+            speakerGenderEvidence: evidence);
+
+        Assert.Equal(translated[0].Text, result[0].Text);
+        var ended = Assert.Single(logger.Entries.Where(entry => entry.EventName == "review_window_end"));
+        Assert.Equal(1, ended.Int("proposed"));
+        Assert.Equal(0, ended.Int("completed"));
+        Assert.Equal(1, ended.Int("dropApplyGuard"));
+        Assert.Equal(1, ended.Int("dropApplyThirdPersonSubjectConflict"));
+    }
+
+    [Fact]
     public async Task ReviewAsync_DefaultsToAtMostFiveCandidatesPerWindowForLocalSmallModel()
     {
         var handler = new StubHandler("""
