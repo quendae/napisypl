@@ -116,7 +116,8 @@ public static class SurgicalGenderContextGuard
         return edit.Target switch
         {
             GenderAgreementTarget.Speaker =>
-                SpeakerGenderReviewEligibility.IsEligible(currentSpeakerGenderEvidence),
+                SpeakerGenderReviewEligibility.IsEligible(currentSpeakerGenderEvidence) &&
+                SpeakerGenderEditDirectionGuard.IsCompatible(edit, currentSpeakerGenderEvidence),
             GenderAgreementTarget.Addressee =>
                 edit.Confidence >= MinimumAddresseeConfidence &&
                 !string.IsNullOrWhiteSpace(probableAddressee) &&
@@ -124,6 +125,97 @@ public static class SurgicalGenderContextGuard
             _ => false
         };
     }
+}
+
+public static partial class SpeakerGenderEditDirectionGuard
+{
+    private enum EditDirection
+    {
+        Unknown,
+        MasculineToFeminine,
+        FeminineToMasculine,
+        Conflicting
+    }
+
+    private static readonly HashSet<(string Masculine, string Feminine)> GenderEndingPairs =
+    [
+        ("", "a"),
+        ("y", "a"),
+        ("em", "am"),
+        ("eś", "aś"),
+        ("by", "aby"),
+        ("bym", "abym"),
+        ("byś", "abyś"),
+        ("li", "ły"),
+        ("liśmy", "łyśmy"),
+        ("liście", "łyście"),
+        ("eni", "one"),
+        ("ien", "na"),
+        ("ienem", "nam"),
+        ("ieneś", "naś")
+    ];
+
+    public static bool IsCompatible(
+        SurgicalGenderEdit edit,
+        SpeakerGenderEvidence? evidence)
+    {
+        if (!SpeakerGenderReviewEligibility.IsEligible(evidence))
+            return false;
+
+        var direction = Infer(edit.Find, edit.Replace);
+        return direction switch
+        {
+            EditDirection.Unknown => true,
+            EditDirection.MasculineToFeminine => evidence!.Gender == SpeakerVoiceGender.Female,
+            EditDirection.FeminineToMasculine => evidence!.Gender == SpeakerVoiceGender.Male,
+            _ => false
+        };
+    }
+
+    private static EditDirection Infer(string find, string replace)
+    {
+        var sourceWords = DirectionWordRegex().Matches(find).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        var replacementWords = DirectionWordRegex().Matches(replace).Select(match => match.Value.ToLowerInvariant()).ToArray();
+        if (sourceWords.Length == 0 || sourceWords.Length != replacementWords.Length)
+            return EditDirection.Unknown;
+
+        var inferred = EditDirection.Unknown;
+        for (var i = 0; i < sourceWords.Length; i++)
+        {
+            if (string.Equals(sourceWords[i], replacementWords[i], StringComparison.Ordinal))
+                continue;
+
+            var prefix = CommonPrefixLength(sourceWords[i], replacementWords[i]);
+            var sourceEnding = sourceWords[i][prefix..];
+            var replacementEnding = replacementWords[i][prefix..];
+
+            EditDirection wordDirection;
+            if (GenderEndingPairs.Contains((sourceEnding, replacementEnding)))
+                wordDirection = EditDirection.MasculineToFeminine;
+            else if (GenderEndingPairs.Contains((replacementEnding, sourceEnding)))
+                wordDirection = EditDirection.FeminineToMasculine;
+            else
+                continue;
+
+            if (inferred != EditDirection.Unknown && inferred != wordDirection)
+                return EditDirection.Conflicting;
+            inferred = wordDirection;
+        }
+
+        return inferred;
+    }
+
+    private static int CommonPrefixLength(string left, string right)
+    {
+        var length = Math.Min(left.Length, right.Length);
+        var index = 0;
+        while (index < length && left[index] == right[index])
+            index++;
+        return index;
+    }
+
+    [GeneratedRegex(@"\p{L}+")]
+    private static partial Regex DirectionWordRegex();
 }
 
 public static partial class GenderAgreementTargetClassifier
