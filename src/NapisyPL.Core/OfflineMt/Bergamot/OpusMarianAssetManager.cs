@@ -69,7 +69,7 @@ public sealed class OpusMarianAssetManager(
             ModelId: descriptor.BackendId,
             ModelVersion: descriptor.Release,
             ModelSource: descriptor.ArchiveUrl,
-            LicenseId: "NOASSERTION",
+            LicenseId: "Apache-2.0",
             BenchmarkOnly: true,
             InstalledSizeBytes: manifestFiles.Sum(file => file.SizeBytes),
             InstalledAtUtc: DateTimeOffset.UtcNow,
