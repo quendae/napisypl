@@ -23,3 +23,15 @@ diff --git a/cmake/FindPCRE2.cmake b/cmake/FindPCRE2.cmake
    set(PCRE2_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/include")
    set(PCRE2_FOUND TRUE CACHE BOOL "Found PCRE2 libraries" FORCE)
    
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,5 +1,8 @@
+ include_directories(ssplit)
+ add_library(ssplit STATIC ssplit/ssplit.cpp ssplit/regex.cpp)
++if(WIN32 AND SSPLIT_USE_INTERNAL_PCRE2)
++  target_compile_definitions(ssplit PRIVATE PCRE2_STATIC)
++endif()
+ target_link_libraries(ssplit ${EXT_LIBS})
+ 
+ set_target_properties(ssplit PROPERTIES
