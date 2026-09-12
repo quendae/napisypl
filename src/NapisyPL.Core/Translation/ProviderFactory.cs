@@ -1,5 +1,6 @@
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.LocalTranslation;
+using NapisyPL.Core.OfflineMt.Bergamot;
 using NapisyPL.Core.Translation.Providers;
 
 namespace NapisyPL.Core.Translation;
@@ -22,6 +23,8 @@ public static class ProviderFactory
             "OpenAI / Ollama" => new OpenAiCompatibleProvider(httpClient, apiKey, RequireModel(provider, model), RequireBaseUrl(provider, baseUrl)),
             "Local Qwen (offline)" => new LocalQwenProvider(httpClient, RequireBaseUrl(provider, baseUrl), RequireModel(provider, model)),
             "Local Argos (offline)" => new ArgosOfflineProvider(ArgosRuntimeRegistry.GetOrCreate(httpClient)),
+            "Firefox/Bergamot (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetFirefox(httpClient)),
+            "OPUS-MT / Marian (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetOpusMarian(httpClient)),
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Nieznany provider tłumaczenia.")
         };
 
