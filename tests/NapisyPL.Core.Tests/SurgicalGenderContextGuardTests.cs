@@ -116,4 +116,40 @@ public sealed class SurgicalGenderContextGuardTests
             new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.99, 2),
             new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.99, 2)));
     }
+
+    [Fact]
+    public void CanApply_RejectsAddresseeEditWhenSameClauseHasExplicitThirdPersonSubject()
+    {
+        var edit = new SurgicalGenderEdit(
+            253,
+            "Zapomniałaś",
+            "Zapomniałeś",
+            0.99,
+            GenderAgreementTarget.Addressee);
+
+        Assert.False(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_A",
+            "SPEAKER_B",
+            probableAddresseeGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Male, 0.977, 3),
+            currentPolishText: "Myślisz, że oni Zapomniałaś o dzisiejszym dniu? Nigdy."));
+    }
+
+    [Fact]
+    public void CanApply_DoesNotLetEarlierThirdPersonSubjectBlockLaterAddresseeClause()
+    {
+        var edit = new SurgicalGenderEdit(
+            254,
+            "zapomniałaś",
+            "zapomniałeś",
+            0.99,
+            GenderAgreementTarget.Addressee);
+
+        Assert.True(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_A",
+            "SPEAKER_B",
+            probableAddresseeGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Male, 0.977, 3),
+            currentPolishText: "Oni powiedzieli, że zapomniałaś o spotkaniu."));
+    }
 }
