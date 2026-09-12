@@ -104,7 +104,8 @@ public static class SurgicalGenderContextGuard
         SurgicalGenderEdit edit,
         string? currentSpeaker,
         string? probableAddressee,
-        SpeakerGenderEvidence? currentSpeakerGenderEvidence = null)
+        SpeakerGenderEvidence? currentSpeakerGenderEvidence = null,
+        SpeakerGenderEvidence? probableAddresseeGenderEvidence = null)
     {
         if (string.IsNullOrWhiteSpace(currentSpeaker) || edit.Target == GenderAgreementTarget.Unknown)
             return false;
@@ -121,7 +122,9 @@ public static class SurgicalGenderContextGuard
             GenderAgreementTarget.Addressee =>
                 edit.Confidence >= MinimumAddresseeConfidence &&
                 !string.IsNullOrWhiteSpace(probableAddressee) &&
-                !string.Equals(currentSpeaker, probableAddressee, StringComparison.Ordinal),
+                !string.Equals(currentSpeaker, probableAddressee, StringComparison.Ordinal) &&
+                SpeakerGenderReviewEligibility.IsEligible(probableAddresseeGenderEvidence) &&
+                SpeakerGenderEditDirectionGuard.IsCompatible(edit, probableAddresseeGenderEvidence),
             _ => false
         };
     }
