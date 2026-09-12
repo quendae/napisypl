@@ -101,7 +101,7 @@ public sealed class AddresseeGenderReviewSafetyTests
             evidence);
 
         Assert.Contains("\"candidateAddresseeGender\":null", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("mandatoryAddresseeChecks:\n[]", prompt, StringComparison.Ordinal);
+        Assert.Contains("mandatoryAddresseeChecks:\n[]", prompt.ReplaceLineEndings("\n"), StringComparison.Ordinal);
     }
 
     private static SubtitleCue Cue(int id, string text) =>
