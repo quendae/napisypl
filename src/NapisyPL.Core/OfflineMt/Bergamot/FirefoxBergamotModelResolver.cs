@@ -13,9 +13,18 @@ public static class FirefoxBergamotModelResolver
         ArgumentException.ThrowIfNullOrWhiteSpace(targetLanguage);
 
         using var document = JsonDocument.Parse(registryJson);
-        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+        JsonElement data;
+        if (document.RootElement.TryGetProperty("data", out var legacyData) && legacyData.ValueKind == JsonValueKind.Array)
         {
-            throw new InvalidDataException("Firefox translations registry does not contain a data array.");
+            data = legacyData;
+        }
+        else if (document.RootElement.TryGetProperty("changes", out var changes) && changes.ValueKind == JsonValueKind.Array)
+        {
+            data = changes;
+        }
+        else
+        {
+            throw new InvalidDataException("Firefox translations registry does not contain a data or changes array.");
         }
 
         var records = data.EnumerateArray()
