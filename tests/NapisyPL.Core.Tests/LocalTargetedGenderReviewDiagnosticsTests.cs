@@ -58,7 +58,7 @@ public sealed class LocalTargetedGenderReviewDiagnosticsTests
     public async Task ReviewAsync_LogsThirdPersonSubjectConflictSeparately()
     {
         var handler = new StubHandler("""
-            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zapomniałaś\",\"replace\":\"Zapomniałeś\",\"confidence\":0.99,\"target\":\"addressee\"}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}
+            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zapomniałaś\",\"replace\":\"Zapomniałeś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}
             """);
         using var http = new HttpClient(handler);
         var logger = new RecordingLogger();
