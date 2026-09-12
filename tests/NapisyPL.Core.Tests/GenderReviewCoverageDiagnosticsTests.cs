@@ -38,6 +38,33 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(1, result.KnownAddresseeCandidateCount);
         Assert.Equal(new[] { 2 }, result.KnownAddresseeCandidateIds);
         Assert.Equal(2, result.KnownRelevantGenderEvidenceCount);
+        Assert.Equal(1, result.EligibleSpeakerCandidateCount);
+        Assert.Equal(new[] { 2 }, result.EligibleSpeakerCandidateIds);
+        Assert.Equal(
+            "2:SPEAKER_A:female:940:3:true;4:SPEAKER_C:unknown:910:2:false",
+            result.SpeakerCandidateEvidence);
+    }
+
+    [Fact]
+    public void Summarize_KnownSingleSampleSpeakerIsReportedButNotEligible()
+    {
+        var cues = new[] { Cue(141, 10, 11, "candidate") };
+        var speakers = new Dictionary<int, string?> { [141] = "SPEAKER_13" };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_13"] = new(SpeakerVoiceGender.Female, 0.94, 1)
+        };
+
+        var result = GenderReviewCoverageDiagnostics.Summarize(
+            cues,
+            new HashSet<int> { 141 },
+            speakers,
+            evidence);
+
+        Assert.Equal(1, result.KnownSpeakerCandidateCount);
+        Assert.Equal(0, result.EligibleSpeakerCandidateCount);
+        Assert.Empty(result.EligibleSpeakerCandidateIds);
+        Assert.Equal("141:SPEAKER_13:female:940:1:false", result.SpeakerCandidateEvidence);
     }
 
     [Fact]
@@ -61,6 +88,9 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(0, result.KnownAddresseeCandidateCount);
         Assert.Empty(result.KnownAddresseeCandidateIds);
         Assert.Equal(0, result.KnownRelevantGenderEvidenceCount);
+        Assert.Equal(0, result.EligibleSpeakerCandidateCount);
+        Assert.Empty(result.EligibleSpeakerCandidateIds);
+        Assert.Equal("1:SPEAKER_X:unknown:990:3:false", result.SpeakerCandidateEvidence);
     }
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
