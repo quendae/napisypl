@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $build = Join-Path $env:RUNNER_TEMP "bergamot-build"
-          cmake -S $env:BERGAMOT_SOURCE -B $build -A x64 -DBUILD_ARCH=x86-64-v2 -DCOMPILE_TESTS=OFF -DCOMPILE_UNIT_TESTS=OFF -DCOMPILE_PYTHON=OFF
+          cmake -S $env:BERGAMOT_SOURCE -B $build -A x64 -DBUILD_ARCH=x86-64-v2 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCOMPILE_TESTS=OFF -DCOMPILE_UNIT_TESTS=OFF -DCOMPILE_PYTHON=OFF
           "BERGAMOT_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build SubFlow Bergamot helper
