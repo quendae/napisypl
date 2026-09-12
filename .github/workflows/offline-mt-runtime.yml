@@ -29,9 +29,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $msvcPatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/sentencepiece-modern-msvc.patch").Path
-          git -C $source apply --check $msvcPatch
+          $sentencepiece = Join-Path $source "3rd_party/marian-dev/src/3rd_party/sentencepiece"
+          git -C $sentencepiece apply --check $msvcPatch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git -C $source apply $msvcPatch
+          git -C $sentencepiece apply $msvcPatch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           Copy-Item "tools/offline-mt/bergamot-helper" (Join-Path $source "subflow-helper") -Recurse
