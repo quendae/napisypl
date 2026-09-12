@@ -14,10 +14,15 @@ public sealed class FirefoxBergamotInstallerTests
         var backendDirectory = Path.Combine(root, "bergamot-firefox");
         var assetManager = new OfflineMtAssetManager(backendDirectory);
         var fixture = CreateFixture();
+        var decompressionLimits = new List<long>();
         var installer = new FirefoxBergamotAssetManager(
             assetManager,
             (url, _) => Task.FromResult(fixture.Downloads[url]),
-            compressed => fixture.Decompressed[Convert.ToBase64String(compressed)]);
+            (compressed, expectedSize) =>
+            {
+                decompressionLimits.Add(expectedSize);
+                return fixture.Decompressed[Convert.ToBase64String(compressed)];
+            });
 
         try
         {
@@ -27,6 +32,14 @@ public sealed class FirefoxBergamotInstallerTests
             Assert.Equal(fixture.ModelRaw, await File.ReadAllBytesAsync(Path.Combine(backendDirectory, "model.enpl.bin")));
             Assert.Equal(fixture.VocabRaw, await File.ReadAllBytesAsync(Path.Combine(backendDirectory, "vocab.enpl.spm")));
             Assert.Equal(fixture.LexRaw, await File.ReadAllBytesAsync(Path.Combine(backendDirectory, "lex.enpl.bin")));
+            Assert.Equal(
+                new[]
+                {
+                    fixture.Descriptor.Model.SizeBytes,
+                    fixture.Descriptor.SourceVocab.SizeBytes,
+                    fixture.Descriptor.Shortlist.SizeBytes,
+                },
+                decompressionLimits);
 
             var config = await File.ReadAllTextAsync(Path.Combine(backendDirectory, "config.yml"));
             Assert.Contains("model.enpl.bin", config, StringComparison.Ordinal);
@@ -51,7 +64,7 @@ public sealed class FirefoxBergamotInstallerTests
         var installer = new FirefoxBergamotAssetManager(
             assetManager,
             (url, _) => Task.FromResult(fixture.Downloads[url]),
-            compressed => fixture.Decompressed[Convert.ToBase64String(compressed)]);
+            (compressed, _) => fixture.Decompressed[Convert.ToBase64String(compressed)]);
 
         try
         {
