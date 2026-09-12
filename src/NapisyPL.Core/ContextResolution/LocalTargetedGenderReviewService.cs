@@ -191,6 +191,7 @@ public sealed class LocalTargetedGenderReviewService(
             var droppedApplyInflection = 0;
             var droppedApplyFindMissing = 0;
             var droppedApplyFindAmbiguous = 0;
+            var droppedApplyThirdPersonSubjectConflict = 0;
 
             foreach (var edit in parsed.Edits)
             {
@@ -242,6 +243,7 @@ public sealed class LocalTargetedGenderReviewService(
                         case SurgicalGenderEditRejectReason.NotInflectionOnly: droppedApplyInflection++; break;
                         case SurgicalGenderEditRejectReason.FindMissing: droppedApplyFindMissing++; break;
                         case SurgicalGenderEditRejectReason.FindAmbiguous: droppedApplyFindAmbiguous++; break;
+                        case SurgicalGenderEditRejectReason.ThirdPersonSubjectConflict: droppedApplyThirdPersonSubjectConflict++; break;
                     }
                     continue;
                 }
@@ -276,6 +278,7 @@ public sealed class LocalTargetedGenderReviewService(
                 ("dropApplyInflection", droppedApplyInflection),
                 ("dropApplyFindMissing", droppedApplyFindMissing),
                 ("dropApplyFindAmbiguous", droppedApplyFindAmbiguous),
+                ("dropApplyThirdPersonSubjectConflict", droppedApplyThirdPersonSubjectConflict),
                 ("result", "success"));
 
             progress?.Report((double)oneBasedBatch / batches.Count);
