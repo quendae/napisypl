@@ -233,7 +233,7 @@ public sealed class EnhancedTranslationPipeline(
     private static string BuildArgosCacheIdentity(ITranslationProvider provider)
     {
         var options = ArgosRuntimeOptions.CreateDefault();
-        return $"{provider.DisplayName}|{options.ModelFileName}|enhanced-cache-v1";
+        return $"{provider.DisplayName}|{options.ModelFileName}|enhanced-cache-v2";
     }
 
     private static void LogReviewCoverage(
