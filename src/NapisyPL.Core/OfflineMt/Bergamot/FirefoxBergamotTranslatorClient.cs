@@ -4,8 +4,8 @@ namespace NapisyPL.Core.OfflineMt.Bergamot;
 
 public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorClient, IAsyncDisposable
 {
-    public const string BackendId = "bergamot-firefox-en-pl";
-    private const string DisplayName = "Firefox/Bergamot EN→PL";
+    public const string BackendIdValue = "bergamot-firefox-en-pl";
+    private const string DisplayNameValue = "Firefox/Bergamot EN→PL";
     private const string RuntimeName = "bergamot-translator";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -30,7 +30,12 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
         _installModelAsync = installModelAsync ?? throw new ArgumentNullException(nameof(installModelAsync));
     }
 
-    public async Task EnsureReadyAsync(CancellationToken cancellationToken = default)
+    public string BackendId => BackendIdValue;
+    public string DisplayName => DisplayNameValue;
+
+    public async Task EnsureReadyAsync(
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         await _gate.WaitAsync(cancellationToken);
@@ -42,14 +47,16 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
             _manifest ??= await TryLoadInstalledManifestAsync(cancellationToken);
             if (_manifest is null)
             {
+                status?.Report("Firefox/Bergamot: resolving EN→PL model…");
                 var descriptor = await _resolveModelAsync("en", "pl", cancellationToken);
+                status?.Report("Firefox/Bergamot: installing local EN→PL model…");
                 await _installModelAsync(descriptor, cancellationToken);
                 _manifest = await TryLoadInstalledManifestAsync(cancellationToken)
                     ?? throw new InvalidDataException(
                         "Firefox/Bergamot model installation completed without a valid local manifest.");
             }
 
-            await _runtime.EnsureReadyAsync(cancellationToken: cancellationToken);
+            await _runtime.EnsureReadyAsync(status, cancellationToken);
         }
         finally
         {
@@ -66,7 +73,7 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
         if (texts.Count == 0)
             return [];
 
-        await EnsureReadyAsync(cancellationToken);
+        await EnsureReadyAsync(cancellationToken: cancellationToken);
         return await _runtime.TranslateAsync(texts, cancellationToken);
     }
 
@@ -84,7 +91,7 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
 
         return new OfflineMachineTranslatorInfo(
             BackendId: manifest.BackendId,
-            DisplayName: DisplayName,
+            DisplayName: DisplayNameValue,
             ModelId: manifest.ModelId,
             ModelVersion: manifest.ModelVersion,
             ModelSource: manifest.ModelSource,
@@ -108,7 +115,7 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
             var json = await File.ReadAllTextAsync(_assets.ManifestPath, cancellationToken);
             var manifest = JsonSerializer.Deserialize<OfflineMtManifest>(json, JsonOptions);
             return manifest is not null &&
-                   string.Equals(manifest.BackendId, BackendId, StringComparison.Ordinal)
+                   string.Equals(manifest.BackendId, BackendIdValue, StringComparison.Ordinal)
                 ? manifest
                 : null;
         }
