@@ -119,21 +119,21 @@ public sealed class FirefoxBergamotTranslatorClientTests
             InstalledAtUtc: DateTimeOffset.UtcNow,
             Files:
             [
-                File("config.yml", configBytes),
-                File("model.bin", modelBytes)
+                ManifestFile("config.yml", configBytes),
+                ManifestFile("model.bin", modelBytes)
             ]);
 
         await assets.InstallAsync(
             async (stagingDirectory, ct) =>
             {
-                await File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "config.yml"), configBytes, ct);
-                await File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "model.bin"), modelBytes, ct);
+                await System.IO.File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "config.yml"), configBytes, ct);
+                await System.IO.File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "model.bin"), modelBytes, ct);
                 return manifest;
             },
             cancellationToken);
     }
 
-    private static OfflineMtManifestFile File(string path, byte[] bytes) =>
+    private static OfflineMtManifestFile ManifestFile(string path, byte[] bytes) =>
         new(path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.LongLength);
 
     private static BergamotModelDescriptor Descriptor(string version)
