@@ -96,10 +96,36 @@ public sealed class ArgosOfflineProvider(IArgosTranslatorClient client) : ITrans
         return logicalLines;
     }
 
-    private static bool StartsDialogueTurn(string line) =>
-        line.StartsWith("- ", StringComparison.Ordinal) ||
-        line.StartsWith("– ", StringComparison.Ordinal) ||
-        line.StartsWith("— ", StringComparison.Ordinal);
+    private static bool StartsDialogueTurn(string line)
+    {
+        var visible = line.TrimStart();
+        while (visible.Length > 0)
+        {
+            if (visible[0] == '<')
+            {
+                var end = visible.IndexOf('>');
+                if (end < 0)
+                    break;
+                visible = visible[(end + 1)..].TrimStart();
+                continue;
+            }
+
+            if (visible[0] == '{')
+            {
+                var end = visible.IndexOf('}');
+                if (end < 0)
+                    break;
+                visible = visible[(end + 1)..].TrimStart();
+                continue;
+            }
+
+            break;
+        }
+
+        return visible.StartsWith("- ", StringComparison.Ordinal) ||
+               visible.StartsWith("– ", StringComparison.Ordinal) ||
+               visible.StartsWith("— ", StringComparison.Ordinal);
+    }
 
     private static void SplitSentences(string line, List<string> result)
     {
