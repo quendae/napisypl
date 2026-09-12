@@ -110,6 +110,42 @@ public sealed class SurgicalGenderEditTests
     }
 
     [Fact]
+    public void Apply_RejectsAddresseeEditWhenSameClauseHasExplicitThirdPersonSubject()
+    {
+        var cue = Cue(253, "Myślisz, że oni Zapomniałaś o dzisiejszym dniu? Nigdy.");
+        var edit = new SurgicalGenderEdit(
+            253,
+            "Zapomniałaś",
+            "Zapomniałeś",
+            0.99,
+            GenderAgreementTarget.Addressee);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed, out var reason);
+
+        Assert.False(result);
+        Assert.Equal(cue, changed);
+        Assert.Equal(SurgicalGenderEditRejectReason.ThirdPersonSubjectConflict, reason);
+    }
+
+    [Fact]
+    public void Apply_AllowsAddresseeEditWhenThirdPersonSubjectBelongsToEarlierClause()
+    {
+        var cue = Cue(254, "Oni powiedzieli, że zapomniałaś o spotkaniu.");
+        var edit = new SurgicalGenderEdit(
+            254,
+            "zapomniałaś",
+            "zapomniałeś",
+            0.99,
+            GenderAgreementTarget.Addressee);
+
+        var result = SurgicalGenderEditApplier.TryApply(cue, edit, out var changed, out var reason);
+
+        Assert.True(result);
+        Assert.Equal(SurgicalGenderEditRejectReason.None, reason);
+        Assert.Equal("Oni powiedzieli, że zapomniałeś o spotkaniu.", changed.Text);
+    }
+
+    [Fact]
     public void ParseResponse_ReadsFindReplaceConfidenceAndTarget()
     {
         var edits = SurgicalGenderEditProtocol.ParseResponse("""
