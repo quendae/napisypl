@@ -11,7 +11,7 @@ public sealed class TurnTakingGenderUserScenarioTests
     public async Task MaleSpeaker_WhenNextResponderIsEligibleFemale_UsesFemaleSecondPersonForm()
     {
         using var http = new HttpClient(new StubHandler("""
-            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłeś\",\"replace\":\"Byłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
+            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zrobiłeś\",\"replace\":\"Zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
             """));
         var service = new LocalTargetedGenderReviewService(
             http,
@@ -20,13 +20,13 @@ public sealed class TurnTakingGenderUserScenarioTests
 
         var source = new[]
         {
-            Cue(1, 0.0, 1.0, "Were you ready?"),
-            Cue(2, 1.2, 2.0, "Yes, I was.")
+            Cue(1, 0.0, 1.0, "Did you do it?"),
+            Cue(2, 1.2, 2.0, "Yes, I did.")
         };
         var translated = new[]
         {
-            Cue(1, 0.0, 1.0, "Byłeś gotowy?"),
-            Cue(2, 1.2, 2.0, "Tak, byłam.")
+            Cue(1, 0.0, 1.0, "Zrobiłeś to?"),
+            Cue(2, 1.2, 2.0, "Tak, zrobiłam.")
         };
         var speakers = new Dictionary<int, string?>
         {
@@ -49,14 +49,14 @@ public sealed class TurnTakingGenderUserScenarioTests
         Assert.True(resolution.IsResolved);
         Assert.Equal("SPEAKER_FEMALE", resolution.SpeakerId);
         Assert.Equal("next_turn_two_speaker", resolution.ReasonCode);
-        Assert.Equal("Byłaś gotowy?", result[0].Text);
+        Assert.Equal("Zrobiłaś to?", result[0].Text);
     }
 
     [Fact]
     public async Task MaleSpeaker_MonologueWithoutOtherResponder_DoesNotGuessFemaleAddressee()
     {
         using var http = new HttpClient(new StubHandler("""
-            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłeś\",\"replace\":\"Byłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
+            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zrobiłeś\",\"replace\":\"Zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
             """));
         var service = new LocalTargetedGenderReviewService(
             http,
@@ -65,12 +65,12 @@ public sealed class TurnTakingGenderUserScenarioTests
 
         var source = new[]
         {
-            Cue(1, 0.0, 1.0, "Were you ready?"),
+            Cue(1, 0.0, 1.0, "Did you do it?"),
             Cue(2, 1.2, 2.0, "Come on, we have to go.")
         };
         var translated = new[]
         {
-            Cue(1, 0.0, 1.0, "Byłeś gotowy?"),
+            Cue(1, 0.0, 1.0, "Zrobiłeś to?"),
             Cue(2, 1.2, 2.0, "Chodź, musimy iść.")
         };
         var speakers = new Dictionary<int, string?>
@@ -91,7 +91,7 @@ public sealed class TurnTakingGenderUserScenarioTests
             speakerGenderEvidence: evidence);
 
         Assert.False(resolution.IsResolved);
-        Assert.Equal("Byłeś gotowy?", result[0].Text);
+        Assert.Equal("Zrobiłeś to?", result[0].Text);
     }
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
