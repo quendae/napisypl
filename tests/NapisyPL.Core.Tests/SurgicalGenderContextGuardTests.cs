@@ -28,11 +28,15 @@ public sealed class SurgicalGenderContextGuardTests
             0.99,
             GenderAgreementTarget.Speaker);
 
-        Assert.False(SurgicalGenderContextGuard.CanApply(edit, "SPEAKER_A", "SPEAKER_B"));
+        Assert.False(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_A",
+            "SPEAKER_B",
+            new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.95, 2)));
     }
 
     [Fact]
-    public void CanApply_FirstPersonEditTargetsSpeaker()
+    public void CanApply_FirstPersonEditTargetsSpeakerWhenEvidenceIsEligible()
     {
         var edit = new SurgicalGenderEdit(
             7,
@@ -41,7 +45,11 @@ public sealed class SurgicalGenderContextGuardTests
             0.95,
             GenderAgreementTarget.Speaker);
 
-        Assert.True(SurgicalGenderContextGuard.CanApply(edit, "SPEAKER_A", probableAddressee: null));
+        Assert.True(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_A",
+            probableAddressee: null,
+            currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.95, 2)));
     }
 
     [Theory]
@@ -56,6 +64,10 @@ public sealed class SurgicalGenderContextGuardTests
             0.99,
             target);
 
-        Assert.False(SurgicalGenderContextGuard.CanApply(edit, "SPEAKER_A", "SPEAKER_B"));
+        Assert.False(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_A",
+            "SPEAKER_B",
+            new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.99, 2)));
     }
 }
