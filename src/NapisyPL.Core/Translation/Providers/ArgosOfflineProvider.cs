@@ -58,40 +58,77 @@ public sealed class ArgosOfflineProvider(IArgosTranslatorClient client) : ITrans
             return [];
 
         var result = new List<string>();
-        foreach (var rawLine in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        foreach (var logicalLine in BuildLogicalLines(text))
+            SplitSentences(logicalLine, result);
+        return result;
+    }
+
+    private static IReadOnlyList<string> BuildLogicalLines(string text)
+    {
+        var physicalLines = text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0)
+            .ToArray();
+
+        if (physicalLines.Length == 0)
+            return [];
+
+        var logicalLines = new List<string>();
+        var current = new List<string>();
+
+        foreach (var line in physicalLines)
         {
-            var line = rawLine.Trim();
-            if (line.Length == 0)
-                continue;
-
-            var start = 0;
-            for (var i = 0; i < line.Length; i++)
+            if (StartsDialogueTurn(line) && current.Count > 0)
             {
-                var punctuation = line[i];
-                if (punctuation is not ('.' or '!' or '?' or '…'))
-                    continue;
-
-                if (punctuation == '.' && IsDotAbbreviation(line, start, i))
-                    continue;
-
-                var next = i + 1;
-                while (next < line.Length && char.IsWhiteSpace(line[next]))
-                    next++;
-                if (next >= line.Length || next == i + 1)
-                    continue;
-
-                var part = line[start..(i + 1)].Trim();
-                if (part.Length > 0)
-                    result.Add(part);
-                start = next;
-                i = next - 1;
+                logicalLines.Add(string.Join(" ", current));
+                current.Clear();
             }
 
-            var tail = line[start..].Trim();
-            if (tail.Length > 0)
-                result.Add(tail);
+            current.Add(line);
         }
-        return result;
+
+        if (current.Count > 0)
+            logicalLines.Add(string.Join(" ", current));
+
+        return logicalLines;
+    }
+
+    private static bool StartsDialogueTurn(string line) =>
+        line.StartsWith("- ", StringComparison.Ordinal) ||
+        line.StartsWith("– ", StringComparison.Ordinal) ||
+        line.StartsWith("— ", StringComparison.Ordinal);
+
+    private static void SplitSentences(string line, List<string> result)
+    {
+        var start = 0;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var punctuation = line[i];
+            if (punctuation is not ('.' or '!' or '?' or '…'))
+                continue;
+
+            if (punctuation == '.' && IsDotAbbreviation(line, start, i))
+                continue;
+
+            var next = i + 1;
+            while (next < line.Length && char.IsWhiteSpace(line[next]))
+                next++;
+            if (next >= line.Length || next == i + 1)
+                continue;
+
+            var part = line[start..(i + 1)].Trim();
+            if (part.Length > 0)
+                result.Add(part);
+            start = next;
+            i = next - 1;
+        }
+
+        var tail = line[start..].Trim();
+        if (tail.Length > 0)
+            result.Add(tail);
     }
 
     private static bool IsDotAbbreviation(string line, int sentenceStart, int dotIndex)
