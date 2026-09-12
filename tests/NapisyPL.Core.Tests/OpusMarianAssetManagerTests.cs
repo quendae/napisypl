@@ -17,7 +17,7 @@ public sealed class OpusMarianAssetManagerTests
         Assert.Equal("pol", descriptor.TargetLanguage);
         Assert.Equal("2021-02-19", descriptor.Release);
         Assert.Equal(
-            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip",
+            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip/eng-pol/opus-2021-02-19.zip",
             descriptor.ArchiveUrl);
         Assert.Equal("normalization + SentencePiece spm32k/spm32k", descriptor.Preprocessing);
     }
@@ -74,6 +74,8 @@ public sealed class OpusMarianAssetManagerTests
             Assert.Contains("source.spm", config, StringComparison.Ordinal);
             Assert.Contains("target.spm", config, StringComparison.Ordinal);
             Assert.DoesNotContain("gemm-precision: int8", config, StringComparison.OrdinalIgnoreCase);
+            var manifest = await File.ReadAllTextAsync(Path.Combine(root, "manifest.json"));
+            Assert.Contains("\"licenseId\": \"Apache-2.0\"", manifest, StringComparison.Ordinal);
         }
         finally
         {
