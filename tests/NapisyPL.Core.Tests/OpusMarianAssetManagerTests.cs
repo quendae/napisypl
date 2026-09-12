@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Text;
+using NapisyPL.Core.OfflineMt;
 using NapisyPL.Core.OfflineMt.Bergamot;
 
 namespace NapisyPL.Core.Tests;
@@ -41,5 +44,89 @@ public sealed class OpusMarianAssetManagerTests
 
         Assert.StartsWith(Path.GetFullPath(root), resolved, StringComparison.OrdinalIgnoreCase);
         Assert.EndsWith(Path.Combine("model", "model.npz"), resolved, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InstallPinnedModelAsync_ExtractsCanonicalModelFilesAndWritesBergamotConfig()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var archive = Zip(
+                ("eng-pol/model.npz", "MODEL"),
+                ("eng-pol/source.spm", "SOURCE"),
+                ("eng-pol/target.spm", "TARGET"),
+                ("eng-pol/README.md", "ignore me"));
+            var assets = new OfflineMtAssetManager(root);
+            var manager = new OpusMarianAssetManager(
+                assets,
+                (url, cancellationToken) => Task.FromResult(archive));
+
+            await manager.InstallPinnedModelAsync();
+
+            Assert.True(await assets.IsInstalledAsync());
+            Assert.Equal("MODEL", await File.ReadAllTextAsync(Path.Combine(root, "model.npz")));
+            Assert.Equal("SOURCE", await File.ReadAllTextAsync(Path.Combine(root, "source.spm")));
+            Assert.Equal("TARGET", await File.ReadAllTextAsync(Path.Combine(root, "target.spm")));
+            Assert.False(File.Exists(Path.Combine(root, "README.md")));
+            var config = await File.ReadAllTextAsync(Path.Combine(root, "config.yml"));
+            Assert.Contains("model.npz", config, StringComparison.Ordinal);
+            Assert.Contains("source.spm", config, StringComparison.Ordinal);
+            Assert.Contains("target.spm", config, StringComparison.Ordinal);
+            Assert.DoesNotContain("gemm-precision: int8", config, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InstallPinnedModelAsync_WhenRequiredVocabIsMissing_DoesNotPromotePartialInstall()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var archive = Zip(
+                ("model.npz", "MODEL"),
+                ("source.spm", "SOURCE"));
+            var assets = new OfflineMtAssetManager(root);
+            var manager = new OpusMarianAssetManager(
+                assets,
+                (url, cancellationToken) => Task.FromResult(archive));
+
+            var error = await Assert.ThrowsAsync<InvalidDataException>(
+                () => manager.InstallPinnedModelAsync());
+
+            Assert.Contains("target.spm", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(await assets.IsInstalledAsync());
+            Assert.False(File.Exists(Path.Combine(root, "model.npz")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static byte[] Zip(params (string Name, string Content)[] entries)
+    {
+        using var buffer = new MemoryStream();
+        using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, content) in entries)
+            {
+                var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+                using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+                writer.Write(content);
+            }
+        }
+        return buffer.ToArray();
+    }
+
+    private static string TempDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "subflow-opus-installer-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
     }
 }
