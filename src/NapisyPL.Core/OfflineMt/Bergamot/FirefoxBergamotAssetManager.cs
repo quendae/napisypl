@@ -6,14 +6,14 @@ namespace NapisyPL.Core.OfflineMt.Bergamot;
 public sealed class FirefoxBergamotAssetManager(
     OfflineMtAssetManager assetManager,
     Func<string, CancellationToken, Task<byte[]>> downloadAsync,
-    Func<byte[], byte[]> decompressZstd)
+    Func<byte[], long, byte[]> decompressZstd)
 {
     private const string BackendId = "bergamot-firefox-en-pl";
     private const string EngineVersion = "0.4.5";
 
     private readonly OfflineMtAssetManager _assetManager = assetManager ?? throw new ArgumentNullException(nameof(assetManager));
     private readonly Func<string, CancellationToken, Task<byte[]>> _downloadAsync = downloadAsync ?? throw new ArgumentNullException(nameof(downloadAsync));
-    private readonly Func<byte[], byte[]> _decompressZstd = decompressZstd ?? throw new ArgumentNullException(nameof(decompressZstd));
+    private readonly Func<byte[], long, byte[]> _decompressZstd = decompressZstd ?? throw new ArgumentNullException(nameof(decompressZstd));
 
     public Task InstallResolvedModelAsync(
         BergamotModelDescriptor descriptor,
@@ -39,7 +39,7 @@ public sealed class FirefoxBergamotAssetManager(
             var downloaded = await _downloadAsync(asset.Url, cancellationToken);
             ValidateBytes(downloaded, asset.DownloadSizeBytes, asset.DownloadSha256, "downloaded");
 
-            var installed = asset.IsZstdCompressed ? _decompressZstd(downloaded) : downloaded;
+            var installed = asset.IsZstdCompressed ? _decompressZstd(downloaded, asset.SizeBytes) : downloaded;
             ValidateBytes(installed, asset.SizeBytes, asset.Sha256, "decompressed");
 
             var destination = ResolveChildPath(temporaryDirectory, asset.FileName);
