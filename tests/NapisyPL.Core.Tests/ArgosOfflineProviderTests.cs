@@ -45,6 +45,27 @@ public sealed class ArgosOfflineProviderTests
     }
 
     [Fact]
+    public async Task TranslateAsync_JoinsVisualSubtitleWrapBeforeSentenceSplit()
+    {
+        var client = new RecordingArgosClient(texts => texts.Select(text => text switch
+        {
+            "Do you think they're ever gonna forget today?" => "Myślisz, że kiedykolwiek zapomną ten dzień?",
+            "Never." => "Nigdy.",
+            _ => throw new InvalidOperationException(text)
+        }).ToArray());
+        var provider = new ArgosOfflineProvider(client);
+
+        var result = await provider.TranslateAsync([
+            new TranslationSegment(253, "Do you think they're ever gonna\nforget today? Never.")
+        ]);
+
+        Assert.Equal(
+            ["Do you think they're ever gonna forget today?", "Never."],
+            client.LastTexts);
+        Assert.Equal("Myślisz, że kiedykolwiek zapomną ten dzień? Nigdy.", result[253]);
+    }
+
+    [Fact]
     public async Task TranslateAsync_RejectsMismatchedResultCount()
     {
         var provider = new ArgosOfflineProvider(new FakeArgosClient(["Tylko jeden"]));
