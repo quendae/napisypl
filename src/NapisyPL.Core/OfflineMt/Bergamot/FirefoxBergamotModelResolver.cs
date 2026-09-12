@@ -71,15 +71,18 @@ public static class FirefoxBergamotModelResolver
         var attachment = element.GetProperty("attachment");
         var sourceLanguage = GetString(element, "sourceLanguage", "fromLang");
         var targetLanguage = GetString(element, "targetLanguage", "toLang");
+        var downloadHash = attachment.GetProperty("hash").GetString() ?? string.Empty;
+        var downloadSize = attachment.GetProperty("size").GetInt64();
+        var downloadFileName = attachment.GetProperty("filename").GetString() ?? string.Empty;
         var installedHash = element.TryGetProperty("decompressedHash", out var decompressedHash)
             ? decompressedHash.GetString() ?? string.Empty
-            : attachment.GetProperty("hash").GetString() ?? string.Empty;
+            : downloadHash;
         var installedSize = element.TryGetProperty("decompressedSize", out var decompressedSize)
             ? decompressedSize.GetInt64()
-            : attachment.GetProperty("size").GetInt64();
+            : downloadSize;
         var installedFileName = element.TryGetProperty("name", out var name) && !string.IsNullOrWhiteSpace(name.GetString())
             ? name.GetString()!
-            : attachment.GetProperty("filename").GetString() ?? string.Empty;
+            : downloadFileName;
 
         return new RegistryRecord(
             SourceLanguage: sourceLanguage,
@@ -88,10 +91,13 @@ public static class FirefoxBergamotModelResolver
             Version: element.GetProperty("version").GetString() ?? string.Empty,
             FileType: element.GetProperty("fileType").GetString() ?? string.Empty,
             FilterExpression: element.TryGetProperty("filter_expression", out var filter) ? filter.GetString() ?? string.Empty : string.Empty,
-            Hash: installedHash,
-            Size: installedSize,
+            InstalledHash: installedHash,
+            InstalledSize: installedSize,
+            DownloadHash: downloadHash,
+            DownloadSize: downloadSize,
             Location: attachment.GetProperty("location").GetString() ?? string.Empty,
-            FileName: installedFileName);
+            InstalledFileName: installedFileName,
+            DownloadFileName: downloadFileName);
     }
 
     private static string GetString(JsonElement element, string primaryName, string legacyName)
@@ -120,10 +126,15 @@ public static class FirefoxBergamotModelResolver
     private static BergamotRemoteAsset ToAsset(RegistryRecord record) => new()
     {
         FileType = record.FileType,
-        FileName = record.FileName,
+        FileName = record.InstalledFileName,
         Url = AttachmentBaseUrl + record.Location.TrimStart('/'),
-        Sha256 = record.Hash,
-        SizeBytes = record.Size,
+        Sha256 = record.InstalledHash,
+        SizeBytes = record.InstalledSize,
+        DownloadSha256 = record.DownloadHash,
+        DownloadSizeBytes = record.DownloadSize,
+        DownloadFileName = record.DownloadFileName,
+        IsZstdCompressed = record.DownloadFileName.EndsWith(".zst", StringComparison.OrdinalIgnoreCase) ||
+            record.Location.EndsWith(".zst", StringComparison.OrdinalIgnoreCase),
     };
 
     private sealed record RegistryRecord(
@@ -133,10 +144,13 @@ public static class FirefoxBergamotModelResolver
         string Version,
         string FileType,
         string FilterExpression,
-        string Hash,
-        long Size,
+        string InstalledHash,
+        long InstalledSize,
+        string DownloadHash,
+        long DownloadSize,
         string Location,
-        string FileName);
+        string InstalledFileName,
+        string DownloadFileName);
 
     private sealed class VersionStringComparer : IComparer<string>
     {
