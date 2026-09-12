@@ -41,8 +41,7 @@ public static class TargetedGenderReviewProtocol
                 !string.IsNullOrWhiteSpace(speaker) &&
                 speakerGenderEvidence is not null &&
                 speakerGenderEvidence.TryGetValue(speaker, out var candidateEvidence) &&
-                candidateEvidence.Gender != SpeakerVoiceGender.Unknown &&
-                candidateEvidence.Confidence >= 0.85)
+                SpeakerGenderReviewEligibility.IsEligible(candidateEvidence))
             {
                 candidateSpeakerGender = candidateEvidence.Gender.ToString().ToLowerInvariant();
                 candidateSpeakerGenderConfidence = Math.Round(candidateEvidence.Confidence, 3);
@@ -92,17 +91,19 @@ public static class TargetedGenderReviewProtocol
         - target="speaker": the changed Polish form describes the person SPEAKING the candidate line, e.g. "byłem" -> "byłam" or "zrobiłem" -> "zrobiłam".
         - target="addressee": the changed Polish form directly addresses the LISTENER, e.g. "byłeś" -> "byłaś" or "zrobiłeś" -> "zrobiłaś".
 
-        speakerGenderEvidence is produced by a separate local acoustic classifier over multiple diarized speech fragments.
-        - gender="male" or "female" is usable evidence for that stable speaker ID.
+        speakerGenderEvidence is produced by a separate local acoustic classifier over diarized speech fragments.
+        - It is included for diagnostics/context, but raw speakerGenderEvidence is NOT by itself permission to make a speaker-target edit.
         - gender="unknown" is no evidence.
         - confidence describes consistency of the acoustic classification; do not treat it as certainty about identity.
-        - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond this supplied classifier result.
-        - For a speaker-target correction, known male/female speakerGenderEvidence with confidence >= 0.85 is sufficient on its own without explicit dialogue confirmation when the current Polish form clearly uses the opposite grammatical gender and there is no conflicting context evidence.
+        - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond the supplied classifier result.
+        - For speaker-target edits, use ONLY candidateSpeakerGender on that candidate as the actionable acoustic signal.
+        - candidateSpeakerGender is present only when the classifier has male/female evidence with confidence >= 0.85 from at least 2 samples.
         - If supplied acoustic evidence conflicts with explicit dialogue evidence or remains uncertain, return no edit.
 
         IMPORTANT KNOWN-SPEAKER CHECK:
-        - candidateSpeakerGender is copied directly onto a candidate when that candidate's own speaker has known male/female acoustic evidence with confidence >= 0.85.
+        - candidateSpeakerGender is copied directly onto a candidate only when that candidate's own speaker passes the application's speaker-gender safety gate.
         - For EVERY candidate with candidateSpeakerGender="male" or "female", you MUST perform the speaker-target check before deciding that no edit is needed.
+        - For a candidate where candidateSpeakerGender is null, NEVER return target="speaker".
         - Compare the current Polish candidate line against candidateSpeakerGender. Check past-tense verbs, conditional/person forms, adjectives, participles and other Polish forms that grammatically describe the speaker.
         - If a speaker-describing Polish form clearly encodes the opposite gender, return the smallest exact replacement with target="speaker".
         - A gender-neutral English source is not a reason to abstain. English often omits speaker gender where Polish grammar requires it.
@@ -130,7 +131,7 @@ public static class TargetedGenderReviewProtocol
         - Change only grammatical gender/number agreement.
         - Use stable speaker IDs only for turn identity; speaker IDs do NOT imply gender.
         - Never infer gender from speaker number, stereotypes, or a name alone.
-        - Prefer explicit pronouns, gendered titles, relationships, supplied speakerGenderEvidence, or unambiguous dialogue evidence.
+        - Prefer explicit pronouns, gendered titles, relationships, candidateSpeakerGender, or unambiguous dialogue evidence.
         - If evidence is uncertain, return no edit for that candidate.
         - Give confidence >= 0.85 only when a speaker-target correction is strongly supported.
         - Give confidence >= 0.95 only when an addressee-target correction is strongly supported.
