@@ -189,7 +189,13 @@ public sealed class EnhancedTranslationPipeline(
         if (cached is not null)
         {
             status?.Report("Enhanced: używam zapisanego tłumaczenia Argos…");
-            translationProgress?.Report(new TranslationProgress(sourceCues.Count, sourceCues.Count, sourceCues.Count));
+            translationProgress?.Report(new TranslationProgress(
+                sourceCues.Count,
+                sourceCues.Count,
+                1,
+                1,
+                false,
+                DateTimeOffset.Now));
             return cached;
         }
 
@@ -252,13 +258,13 @@ public sealed class EnhancedTranslationPipeline(
             ("knownGenderEvidenceCount", coverage.KnownRelevantGenderEvidenceCount),
             ("knownSpeakerCandidateCount", coverage.KnownSpeakerCandidateCount),
             ("knownAddresseeCandidateCount", coverage.KnownAddresseeCandidateCount),
-            ("knownSpeakerCandidateIds", string.Join(',', coverage.KnownSpeakerCandidateIds)),
-            ("knownAddresseeCandidateIds", string.Join(',', coverage.KnownAddresseeCandidateIds)));
+            ("knownSpeakerCandidateIds", string.Join(",", coverage.KnownSpeakerCandidateIds)),
+            ("knownAddresseeCandidateIds", string.Join(",", coverage.KnownAddresseeCandidateIds)));
 
         var batches = GenderReviewCandidateSelector.BuildReviewBatches(
             source,
             candidateIds,
-            contextRadius: 2,
+            radius: 2,
             maxCandidatesPerBatch: 5,
             maxContextCuesPerBatch: 25);
         for (var i = 0; i < batches.Count; i++)
@@ -276,8 +282,8 @@ public sealed class EnhancedTranslationPipeline(
                 ("knownGenderEvidenceCount", windowCoverage.KnownRelevantGenderEvidenceCount),
                 ("knownSpeakerCandidateCount", windowCoverage.KnownSpeakerCandidateCount),
                 ("knownAddresseeCandidateCount", windowCoverage.KnownAddresseeCandidateCount),
-                ("knownSpeakerCandidateIds", string.Join(',', windowCoverage.KnownSpeakerCandidateIds)),
-                ("knownAddresseeCandidateIds", string.Join(',', windowCoverage.KnownAddresseeCandidateIds)));
+                ("knownSpeakerCandidateIds", string.Join(",", windowCoverage.KnownSpeakerCandidateIds)),
+                ("knownAddresseeCandidateIds", string.Join(",", windowCoverage.KnownAddresseeCandidateIds)));
         }
     }
 
