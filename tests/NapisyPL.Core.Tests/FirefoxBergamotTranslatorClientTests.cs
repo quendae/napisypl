@@ -1,5 +1,7 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.OfflineMt;
 using NapisyPL.Core.OfflineMt.Bergamot;
@@ -94,6 +96,35 @@ public sealed class FirefoxBergamotTranslatorClientTests
         }
     }
 
+    [Fact]
+    public async Task ProductionConstructor_WhenModelIsMissing_WiresRemoteSettingsAndAttachmentDownloads()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var model = Encoding.UTF8.GetBytes("fixture-firefox-model");
+            var vocab = Encoding.UTF8.GetBytes("fixture-firefox-vocab");
+            var lex = Encoding.UTF8.GetBytes("fixture-firefox-lex");
+            var registry = RegistryJson(model, vocab, lex);
+            using var http = new HttpClient(new FirefoxFixtureHandler(registry, model, vocab, lex));
+            var assets = new OfflineMtAssetManager(root);
+            var channel = new FakeChannel();
+            await using var runtime = Runtime(root, channel);
+            await using var client = new FirefoxBergamotTranslatorClient(http, assets, runtime);
+
+            await client.EnsureReadyAsync();
+            var translated = await client.TranslateAsync(["hello"]);
+
+            Assert.True(await assets.IsInstalledAsync());
+            Assert.Equal(new[] { "HELLO-PL" }, translated);
+            Assert.Equal("9.0", client.GetInfo().ModelVersion);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static BergamotRuntimeManager Runtime(string modelDirectory, FakeChannel channel) =>
         new(
             new BergamotRuntimeOptions("fake-helper.exe", TimeSpan.FromSeconds(5)),
@@ -134,7 +165,42 @@ public sealed class FirefoxBergamotTranslatorClientTests
     }
 
     private static OfflineMtManifestFile ManifestFile(string path, byte[] bytes) =>
-        new(path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.LongLength);
+        new(path, Sha(bytes), bytes.LongLength);
+
+    private static string Sha(byte[] bytes) =>
+        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static string RegistryJson(byte[] model, byte[] vocab, byte[] lex)
+    {
+        object Record(string fileType, string name, string location, byte[] bytes) => new
+        {
+            sourceLanguage = "en",
+            targetLanguage = "pl",
+            architecture = "base",
+            version = "9.0",
+            fileType,
+            name,
+            decompressedHash = Sha(bytes),
+            decompressedSize = bytes.LongLength,
+            attachment = new
+            {
+                hash = Sha(bytes),
+                size = bytes.LongLength,
+                filename = name,
+                location
+            }
+        };
+
+        return JsonSerializer.Serialize(new
+        {
+            changes = new[]
+            {
+                Record("model", "model.bin", "fixture/model.bin", model),
+                Record("vocab", "vocab.spm", "fixture/vocab.spm", vocab),
+                Record("lex", "lex.bin", "fixture/lex.bin", lex)
+            }
+        });
+    }
 
     private static BergamotModelDescriptor Descriptor(string version)
     {
@@ -168,6 +234,38 @@ public sealed class FirefoxBergamotTranslatorClientTests
         var path = Path.Combine(Path.GetTempPath(), "subflow-firefox-client-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private sealed class FirefoxFixtureHandler(
+        string registryJson,
+        byte[] model,
+        byte[] vocab,
+        byte[] lex) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri.Contains("translations-models-v2/changeset", StringComparison.Ordinal))
+                return Response(Encoding.UTF8.GetBytes(registryJson), "application/json");
+            if (uri.EndsWith("/fixture/model.bin", StringComparison.Ordinal))
+                return Response(model);
+            if (uri.EndsWith("/fixture/vocab.spm", StringComparison.Ordinal))
+                return Response(vocab);
+            if (uri.EndsWith("/fixture/lex.bin", StringComparison.Ordinal))
+                return Response(lex);
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> Response(byte[] body, string? contentType = null)
+        {
+            var content = new ByteArrayContent(body);
+            if (contentType is not null)
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        }
     }
 
     private sealed class FakeChannel : IBergamotRuntimeChannel
