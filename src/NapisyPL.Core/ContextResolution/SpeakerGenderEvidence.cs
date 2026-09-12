@@ -28,6 +28,18 @@ public sealed record SpeakerGenderEvidence(
     double Confidence,
     int SampleCount);
 
+public static class SpeakerGenderReviewEligibility
+{
+    public const double MinimumConfidence = 0.85;
+    public const int MinimumSampleCount = 2;
+
+    public static bool IsEligible(SpeakerGenderEvidence? evidence) =>
+        evidence is not null &&
+        evidence.Gender != SpeakerVoiceGender.Unknown &&
+        evidence.Confidence >= MinimumConfidence &&
+        evidence.SampleCount >= MinimumSampleCount;
+}
+
 public sealed record SpeakerGenderEvaluation(
     SpeakerGenderEvidence Evidence,
     SpeakerGenderUnknownReason UnknownReason,
