@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Diagnostics;
+using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.Models;
 using NapisyPL.Core.Translation;
 
@@ -16,8 +17,12 @@ public sealed class EnhancedTranslationPipeline(
     SpeakerDiarizationAnalysisService speakerAnalysis,
     LocalContextRuntimeManager runtimeManager,
     LocalTargetedGenderReviewService targetedReview,
-    IAppLogger? logger = null) : ITranslationPipeline
+    IAppLogger? logger = null,
+    EnhancedTranslationCache? translationCache = null) : ITranslationPipeline
 {
+    private const string ArgosDisplayName = "Argos EN→PL";
+    private readonly EnhancedTranslationCache _translationCache = translationCache ?? EnhancedTranslationCache.CreateDefault();
+
     public async Task<TranslationResult> TranslateAsync(
         string inputPath,
         SubtitleTrack? selectedTrack,
@@ -64,9 +69,12 @@ public sealed class EnhancedTranslationPipeline(
             var knownGenderCount = speakers.SpeakerGenderEvidence.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
             status?.Report($"Enhanced: wykryto {speakers.SpeakerSegmentCount} fragmentów mowy, pewna klasyfikacja głosu dla {knownGenderCount} rozmówców. Tłumaczę przez {provider.DisplayName}…");
             var timer = Stopwatch.StartNew();
-            var translated = translationProgress is null
-                ? await translationCoordinator.TranslateCuesAsync(sourceCues, provider, progress: (IProgress<double>?)null, cancellationToken)
-                : await translationCoordinator.TranslateCuesAsync(sourceCues, provider, translationProgress, cancellationToken);
+            var translated = await TranslateWithOptionalArgosCacheAsync(
+                sourceCues,
+                provider,
+                translationProgress,
+                status,
+                cancellationToken);
             logger?.Info("enhanced_phase", ("file", file), ("stage", "translation"), ("provider", provider.DisplayName), ("elapsedMs", timer.ElapsedMilliseconds), ("segmentCount", translated.Count), ("result", "success"));
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -76,6 +84,13 @@ public sealed class EnhancedTranslationPipeline(
 
             if (candidateIds.Count > 0)
             {
+                LogReviewCoverage(
+                    logger,
+                    sourceCues,
+                    candidateIds,
+                    speakers.CueSpeakers,
+                    speakers.SpeakerGenderEvidence);
+
                 status?.Report($"Enhanced: {candidateIds.Count} kwestii może wymagać korekty rodzaju — przygotowuję lokalny korektor…");
                 timer.Restart();
                 await runtimeManager.EnsureRunningAsync(status, cancellationToken);
@@ -132,6 +147,137 @@ public sealed class EnhancedTranslationPipeline(
             {
                 try { File.Delete(temporarySrt); } catch { }
             }
+        }
+    }
+
+    private async Task<IReadOnlyList<SubtitleCue>> TranslateWithOptionalArgosCacheAsync(
+        IReadOnlyList<SubtitleCue> sourceCues,
+        ITranslationProvider provider,
+        IProgress<TranslationProgress>? translationProgress,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(provider.DisplayName, ArgosDisplayName, StringComparison.Ordinal))
+            return await TranslateNormallyAsync(sourceCues, provider, translationProgress, cancellationToken);
+
+        var providerIdentity = BuildArgosCacheIdentity(provider);
+        IReadOnlyList<SubtitleCue>? cached = null;
+        try
+        {
+            cached = await _translationCache.TryLoadAsync(sourceCues, providerIdentity, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger?.Error(
+                "translation_cache",
+                ("provider", provider.DisplayName),
+                ("segmentCount", sourceCues.Count),
+                ("category", ex.GetType().Name),
+                ("result", "read_error"));
+        }
+
+        logger?.Info(
+            "translation_cache",
+            ("provider", provider.DisplayName),
+            ("segmentCount", sourceCues.Count),
+            ("result", cached is null ? "miss" : "hit"));
+
+        if (cached is not null)
+        {
+            status?.Report("Enhanced: używam zapisanego tłumaczenia Argos…");
+            translationProgress?.Report(new TranslationProgress(sourceCues.Count, sourceCues.Count, sourceCues.Count));
+            return cached;
+        }
+
+        var translated = await TranslateNormallyAsync(sourceCues, provider, translationProgress, cancellationToken);
+        try
+        {
+            await _translationCache.SaveAsync(sourceCues, translated, providerIdentity, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger?.Error(
+                "translation_cache",
+                ("provider", provider.DisplayName),
+                ("segmentCount", sourceCues.Count),
+                ("category", ex.GetType().Name),
+                ("result", "write_error"));
+        }
+
+        return translated;
+    }
+
+    private Task<IReadOnlyList<SubtitleCue>> TranslateNormallyAsync(
+        IReadOnlyList<SubtitleCue> sourceCues,
+        ITranslationProvider provider,
+        IProgress<TranslationProgress>? translationProgress,
+        CancellationToken cancellationToken) =>
+        translationProgress is null
+            ? translationCoordinator.TranslateCuesAsync(sourceCues, provider, progress: (IProgress<double>?)null, cancellationToken)
+            : translationCoordinator.TranslateCuesAsync(sourceCues, provider, translationProgress, cancellationToken);
+
+    private static string BuildArgosCacheIdentity(ITranslationProvider provider)
+    {
+        var options = ArgosRuntimeOptions.CreateDefault();
+        return $"{provider.DisplayName}|{options.ModelFileName}|enhanced-cache-v1";
+    }
+
+    private static void LogReviewCoverage(
+        IAppLogger? logger,
+        IReadOnlyList<SubtitleCue> source,
+        IReadOnlySet<int> candidateIds,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence)
+    {
+        if (logger is null)
+            return;
+
+        var coverage = GenderReviewCoverageDiagnostics.Summarize(
+            source,
+            candidateIds,
+            cueSpeakers,
+            speakerGenderEvidence);
+
+        logger.Info(
+            "review_coverage",
+            ("candidateCount", coverage.CandidateCount),
+            ("knownGenderEvidenceCount", coverage.KnownRelevantGenderEvidenceCount),
+            ("knownSpeakerCandidateCount", coverage.KnownSpeakerCandidateCount),
+            ("knownAddresseeCandidateCount", coverage.KnownAddresseeCandidateCount),
+            ("knownSpeakerCandidateIds", string.Join(',', coverage.KnownSpeakerCandidateIds)),
+            ("knownAddresseeCandidateIds", string.Join(',', coverage.KnownAddresseeCandidateIds)));
+
+        var batches = GenderReviewCandidateSelector.BuildReviewBatches(
+            source,
+            candidateIds,
+            contextRadius: 2,
+            maxCandidatesPerBatch: 5,
+            maxContextCuesPerBatch: 25);
+        for (var i = 0; i < batches.Count; i++)
+        {
+            var windowCoverage = GenderReviewCoverageDiagnostics.Summarize(
+                source,
+                batches[i].CandidateIds,
+                cueSpeakers,
+                speakerGenderEvidence);
+            logger.Info(
+                "review_window_coverage",
+                ("windowIndex", i + 1),
+                ("windowCount", batches.Count),
+                ("candidateCount", windowCoverage.CandidateCount),
+                ("knownGenderEvidenceCount", windowCoverage.KnownRelevantGenderEvidenceCount),
+                ("knownSpeakerCandidateCount", windowCoverage.KnownSpeakerCandidateCount),
+                ("knownAddresseeCandidateCount", windowCoverage.KnownAddresseeCandidateCount),
+                ("knownSpeakerCandidateIds", string.Join(',', windowCoverage.KnownSpeakerCandidateIds)),
+                ("knownAddresseeCandidateIds", string.Join(',', windowCoverage.KnownAddresseeCandidateIds)));
         }
     }
 
