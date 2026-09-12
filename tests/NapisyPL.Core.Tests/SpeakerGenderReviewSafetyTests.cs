@@ -78,6 +78,74 @@ public sealed class SpeakerGenderReviewSafetyTests
             currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.94, 2)));
     }
 
+    [Fact]
+    public void ContextGuard_RejectsMasculineToFeminineEditForMaleSpeaker()
+    {
+        var edit = new SurgicalGenderEdit(
+            141,
+            "Chciałem",
+            "Chciałam",
+            0.96,
+            GenderAgreementTarget.Speaker);
+
+        Assert.False(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_43",
+            probableAddressee: null,
+            currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Male, 0.984, 3)));
+    }
+
+    [Fact]
+    public void ContextGuard_AllowsFeminineToMasculineEditForMaleSpeaker()
+    {
+        var edit = new SurgicalGenderEdit(
+            141,
+            "Chciałam",
+            "Chciałem",
+            0.96,
+            GenderAgreementTarget.Speaker);
+
+        Assert.True(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_43",
+            probableAddressee: null,
+            currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Male, 0.984, 3)));
+    }
+
+    [Fact]
+    public void ContextGuard_RejectsFeminineToMasculineEditForFemaleSpeaker()
+    {
+        var edit = new SurgicalGenderEdit(
+            12,
+            "Chciałam",
+            "Chciałem",
+            0.96,
+            GenderAgreementTarget.Speaker);
+
+        Assert.False(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_F",
+            probableAddressee: null,
+            currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.97, 3)));
+    }
+
+    [Fact]
+    public void ContextGuard_AllowsMasculineToFeminineEditForFemaleSpeaker()
+    {
+        var edit = new SurgicalGenderEdit(
+            12,
+            "Chciałem",
+            "Chciałam",
+            0.96,
+            GenderAgreementTarget.Speaker);
+
+        Assert.True(SurgicalGenderContextGuard.CanApply(
+            edit,
+            "SPEAKER_F",
+            probableAddressee: null,
+            currentSpeakerGenderEvidence: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.97, 3)));
+    }
+
     private static SubtitleCue Cue(int id, string text) =>
         new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
 }
