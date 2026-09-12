@@ -75,6 +75,18 @@ public static class DialogueAddresseeResolver
             }
         }
 
+        var localOthers = CollectLocalOtherSpeakers(
+            cues,
+            cueSpeakers,
+            position,
+            speaker,
+            LocalCueRadius,
+            MaxTurnGap);
+        if (localOthers is null)
+            return DialogueAddresseeResolution.Unresolved("missing_local_speaker");
+        if (localOthers.Count > 1)
+            return DialogueAddresseeResolution.Unresolved("third_speaker");
+
         var nextSpeaker = FindNextOtherSpeaker(
             cues,
             cueSpeakers,
@@ -82,29 +94,18 @@ public static class DialogueAddresseeResolver
             speaker,
             ForwardCueDistance,
             MaxTurnGap);
-        if (!string.IsNullOrWhiteSpace(nextSpeaker))
+        if (!string.IsNullOrWhiteSpace(nextSpeaker) &&
+            localOthers.Count == 1 &&
+            localOthers.Contains(nextSpeaker!))
         {
-            var localOthers = CollectLocalOtherSpeakers(
-                cues,
-                cueSpeakers,
-                position,
-                speaker,
-                LocalCueRadius,
-                MaxTurnGap);
-
-            if (localOthers is null)
-                return DialogueAddresseeResolution.Unresolved("missing_local_speaker");
-            if (localOthers.Count > 1)
-                return DialogueAddresseeResolution.Unresolved("third_speaker");
-            if (localOthers.Count == 1 && localOthers.Contains(nextSpeaker!))
-                return new DialogueAddresseeResolution(nextSpeaker, 0.94, "next_turn_two_speaker");
+            return new DialogueAddresseeResolution(nextSpeaker, 0.94, "next_turn_two_speaker");
         }
 
         var persistentPartner = ResolvePersistentPartner(cues, cueSpeakers, position, speaker);
         if (persistentPartner.IsResolved)
             return persistentPartner;
 
-        return persistentPartner.ReasonCode == "third_speaker"
+        return persistentPartner.ReasonCode is "third_speaker" or "missing_local_speaker"
             ? persistentPartner
             : DialogueAddresseeResolution.Unresolved("insufficient_turn_evidence");
     }
