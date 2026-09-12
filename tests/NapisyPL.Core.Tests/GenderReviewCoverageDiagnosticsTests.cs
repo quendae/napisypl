@@ -37,6 +37,8 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(new[] { 2 }, result.KnownSpeakerCandidateIds);
         Assert.Equal(1, result.KnownAddresseeCandidateCount);
         Assert.Equal(new[] { 2 }, result.KnownAddresseeCandidateIds);
+        Assert.Equal(1, result.EligibleAddresseeCandidateCount);
+        Assert.Equal(new[] { 2 }, result.EligibleAddresseeCandidateIds);
         Assert.Equal(2, result.KnownRelevantGenderEvidenceCount);
         Assert.Equal(1, result.EligibleSpeakerCandidateCount);
         Assert.Equal(new[] { 2 }, result.EligibleSpeakerCandidateIds);
@@ -64,6 +66,8 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(1, result.KnownSpeakerCandidateCount);
         Assert.Equal(0, result.EligibleSpeakerCandidateCount);
         Assert.Empty(result.EligibleSpeakerCandidateIds);
+        Assert.Equal(0, result.EligibleAddresseeCandidateCount);
+        Assert.Empty(result.EligibleAddresseeCandidateIds);
         Assert.Equal("141:SPEAKER_13:female:940:1:false|addressee=", result.SpeakerCandidateEvidence);
     }
 
@@ -87,6 +91,8 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Empty(result.KnownSpeakerCandidateIds);
         Assert.Equal(0, result.KnownAddresseeCandidateCount);
         Assert.Empty(result.KnownAddresseeCandidateIds);
+        Assert.Equal(0, result.EligibleAddresseeCandidateCount);
+        Assert.Empty(result.EligibleAddresseeCandidateIds);
         Assert.Equal(0, result.KnownRelevantGenderEvidenceCount);
         Assert.Equal(0, result.EligibleSpeakerCandidateCount);
         Assert.Empty(result.EligibleSpeakerCandidateIds);
