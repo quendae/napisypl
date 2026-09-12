@@ -13,7 +13,7 @@
 #include "translator/translation_model.h"
 
 using json = nlohmann::json;
-using namespace marian::bergamot;
+namespace bergamot = marian::bergamot;
 
 namespace {
 
@@ -44,8 +44,8 @@ std::filesystem::path resolveConfigPath(const std::string &modelPath) {
 int main() {
   std::ios::sync_with_stdio(false);
 
-  std::unique_ptr<BlockingService> service;
-  std::shared_ptr<TranslationModel> model;
+  std::unique_ptr<bergamot::BlockingService> service;
+  std::shared_ptr<bergamot::TranslationModel> model;
   std::string line;
 
   while (std::getline(std::cin, line)) {
@@ -80,13 +80,13 @@ int main() {
           continue;
         }
 
-        BlockingService::Config serviceConfig;
+        bergamot::BlockingService::Config serviceConfig;
         serviceConfig.cacheSize = 0;
         serviceConfig.logger.level = "off";
-        auto modelConfig = parseOptionsFromFilePath(configPath.string());
+        auto modelConfig = bergamot::parseOptionsFromFilePath(configPath.string());
 
-        auto nextService = std::make_unique<BlockingService>(serviceConfig);
-        auto nextModel = std::make_shared<TranslationModel>(modelConfig);
+        auto nextService = std::make_unique<bergamot::BlockingService>(serviceConfig);
+        auto nextModel = std::make_shared<bergamot::TranslationModel>(modelConfig);
 
         service = std::move(nextService);
         model = std::move(nextModel);
@@ -137,7 +137,7 @@ int main() {
           continue;
         }
 
-        std::vector<ResponseOptions> responseOptions(ids.size());
+        std::vector<bergamot::ResponseOptions> responseOptions(ids.size());
         auto responses = service->translateMultiple(model, std::move(texts), responseOptions);
         if (responses.size() != ids.size()) {
           emitError(jobId, "translation_failed", "Bergamot returned an unexpected result count.");
