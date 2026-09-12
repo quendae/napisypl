@@ -8,7 +8,10 @@ public sealed record GenderReviewCoverageSummary(
     IReadOnlyList<int> KnownSpeakerCandidateIds,
     int KnownAddresseeCandidateCount,
     IReadOnlyList<int> KnownAddresseeCandidateIds,
-    int KnownRelevantGenderEvidenceCount);
+    int KnownRelevantGenderEvidenceCount,
+    int EligibleSpeakerCandidateCount,
+    IReadOnlyList<int> EligibleSpeakerCandidateIds,
+    string SpeakerCandidateEvidence);
 
 public static class GenderReviewCoverageDiagnostics
 {
@@ -20,16 +23,27 @@ public static class GenderReviewCoverageDiagnostics
     {
         var knownSpeakerCandidates = new List<int>();
         var knownAddresseeCandidates = new List<int>();
+        var eligibleSpeakerCandidates = new List<int>();
         var relevantKnownSpeakers = new HashSet<string>(StringComparer.Ordinal);
+        var evidenceEntries = new List<string>();
 
         foreach (var candidateId in candidateIds.OrderBy(id => id))
         {
-            if (cueSpeakers.TryGetValue(candidateId, out var speaker) &&
-                IsKnown(speaker, speakerGenderEvidence))
+            cueSpeakers.TryGetValue(candidateId, out var speaker);
+            SpeakerGenderEvidence? ownEvidence = null;
+            if (!string.IsNullOrWhiteSpace(speaker))
+                speakerGenderEvidence.TryGetValue(speaker!, out ownEvidence);
+
+            if (IsKnown(ownEvidence))
             {
                 knownSpeakerCandidates.Add(candidateId);
                 relevantKnownSpeakers.Add(speaker!);
             }
+
+            if (SpeakerGenderReviewEligibility.IsEligible(ownEvidence))
+                eligibleSpeakerCandidates.Add(candidateId);
+
+            evidenceEntries.Add(FormatCandidateEvidence(candidateId, speaker, ownEvidence));
 
             var addressee = DialogueAddresseeResolver.Resolve(source, cueSpeakers, candidateId);
             if (IsKnown(addressee, speakerGenderEvidence))
@@ -45,13 +59,37 @@ public static class GenderReviewCoverageDiagnostics
             knownSpeakerCandidates,
             knownAddresseeCandidates.Count,
             knownAddresseeCandidates,
-            relevantKnownSpeakers.Count);
+            relevantKnownSpeakers.Count,
+            eligibleSpeakerCandidates.Count,
+            eligibleSpeakerCandidates,
+            string.Join(";", evidenceEntries));
     }
+
+    private static string FormatCandidateEvidence(
+        int candidateId,
+        string? speaker,
+        SpeakerGenderEvidence? evidence)
+    {
+        var speakerId = string.IsNullOrWhiteSpace(speaker) ? "-" : speaker;
+        var gender = evidence?.Gender.ToString().ToLowerInvariant() ?? "unknown";
+        var confidencePermille = evidence is null
+            ? 0
+            : SpeakerGenderObservationDiagnostics.ToPermille(evidence.Confidence);
+        var sampleCount = evidence?.SampleCount ?? 0;
+        var eligible = SpeakerGenderReviewEligibility.IsEligible(evidence)
+            ? "true"
+            : "false";
+
+        return $"{candidateId}:{speakerId}:{gender}:{confidencePermille}:{sampleCount}:{eligible}";
+    }
+
+    private static bool IsKnown(SpeakerGenderEvidence? evidence) =>
+        evidence is not null && evidence.Gender != SpeakerVoiceGender.Unknown;
 
     private static bool IsKnown(
         string? speaker,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence) =>
         !string.IsNullOrWhiteSpace(speaker) &&
         speakerGenderEvidence.TryGetValue(speaker, out var evidence) &&
-        evidence.Gender != SpeakerVoiceGender.Unknown;
+        IsKnown(evidence);
 }
