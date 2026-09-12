@@ -25,7 +25,7 @@ public sealed class TargetedGenderReviewTests
     [Fact]
     public async Task ReviewAsync_AppliesOnlySurgicalEditsInsideCandidateIds()
     {
-        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłem gotowy\",\"replace\":\"Byłam gotowa\",\"confidence\":0.97,\"target\":\"speaker\"},{\"id\":2,\"find\":\"Dobrze\",\"replace\":\"Źle\",\"confidence\":0.99,\"target\":\"speaker\"}]"},\"finish_reason\":\"stop\"}]}""");
+        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłem gotowy\",\"replace\":\"Byłam gotowa\",\"confidence\":0.97,\"target\":\"speaker\"},{\"id\":2,\"find\":\"Dobrze\",\"replace\":\"Źle\",\"confidence\":0.99,\"target\":\"speaker\"}]"},"finish_reason":"stop"}]}""");
         using var http = new HttpClient(handler);
         var service = new LocalTargetedGenderReviewService(http, "http://127.0.0.1:17843/v1", "qwen3-1.7b");
         var source = new[] { Cue(1, "I was ready."), Cue(2, "Okay.") };
