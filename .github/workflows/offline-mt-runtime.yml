@@ -21,4 +21,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test Bergamot helper protocol
-        run: python -m unittest tools.offline-mt.test_bergamot_protocol -v
+        run: python -m unittest discover -s tools/offline-mt -p "test_*.py" -v
