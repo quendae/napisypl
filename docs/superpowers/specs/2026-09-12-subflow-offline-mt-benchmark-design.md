@@ -29,13 +29,13 @@ Nowe modele są eksperymentalne i pobierane wyłącznie na żądanie. Nie zwięk
 
 Obecnie logika przygotowania tekstu do klasycznego MT znajduje się wewnątrz `ArgosOfflineProvider` (`BuildLogicalLines`, wykrywanie dialogue-turn oraz sentence split). Benchmark nie może porównywać różnych sposobów dzielenia napisów.
 
-Logikę tę wyciągamy do wspólnego komponentu, np. `MachineTranslationTextPreprocessor`, używanego przez:
+Logikę tę wyciągamy do wspólnego komponentu `MachineTranslationTextPreprocessor`, używanego przez:
 - Argos,
 - Bergamot,
 - OPUS/Marian,
 - NLLB.
 
-Kontrakt preprocessor-a:
+Kontrakt preprocessora:
 - zachowuje soft-wrap jako jedno logiczne zdanie,
 - rozdziela prawdziwe tury dialogowe również po tagach `<i>`, `{...}` itp.,
 - zachowuje dotychczasowe reguły skrótów i sentence split,
@@ -46,7 +46,7 @@ Istniejące regresje 3.2.5 muszą przejść bez zmian semantycznych. Cues 141, 2
 
 ## Wspólny kontrakt lokalnego MT
 
-Dodajemy neutralny wobec silnika interfejs klienta, np.:
+Dodajemy neutralny wobec silnika interfejs klienta:
 
 ```csharp
 public interface IOfflineMachineTranslatorClient
@@ -68,7 +68,7 @@ public interface IOfflineMachineTranslatorClient
 - device (`cpu` w pierwszej wersji benchmarku),
 - informacje licencyjne potrzebne do raportu.
 
-`ArgosTranslationRuntimeManager` może nadal zachować swój publiczny kontrakt kompatybilności, ale provider benchmarkowy używa wspólnej abstrakcji albo cienkiego adaptera. Nie wykonujemy dużego refactoru niezwiązanego z benchmarkiem.
+`ArgosTranslationRuntimeManager` zachowuje publiczny kontrakt kompatybilności, a dla wspólnego benchmarku dostaje cienki adapter do `IOfflineMachineTranslatorClient`. Nie wykonujemy dużego refactoru niezwiązanego z benchmarkiem.
 
 ## Backend 1 — Argos
 
@@ -89,10 +89,10 @@ Używamy rzeczywistego `bergamot-translator`, a nie modelu Firefox uruchomionego
 
 Silnik:
 - projekt `browsermt/bergamot-translator`,
+- stabilny tag `v0.4.5` jako przypięty runtime pierwszego benchmarku,
 - licencja silnika MPL-2.0,
-- wersja/runtime przypięte w manifeście benchmarku,
 - Windows x64 CPU,
-- proces helpera utrzymywany przy życiu przez cały job, aby nie ładować modelu dla każdego cue.
+- helper budowany/pakowany dla SubFlow i utrzymywany przy życiu przez cały job, aby nie ładować modelu dla każdego cue.
 
 Model:
 - English → Polish z publicznego registry modeli Mozilla/Firefox Translations,
@@ -114,11 +114,9 @@ Używamy oryginalnego checkpointu Marian/Tatoeba English→Polish, nie aktualneg
 - source `en`, target `pl`,
 - model instalowany on-demand i pinowany w lokalnym manifeście przez URL/hash.
 
-Runtime:
-- preferujemy natywny Marian/Bergamot-compatible runtime CPU, jeśli checkpoint jest bezpośrednio kompatybilny po minimalnej, udokumentowanej konwersji/config patch,
-- jeśli wymagany będzie osobny Marian executable, pozostaje on osobnym helperem za tym samym `IOfflineMachineTranslatorClient`, dzięki czemu nie wpływa na provider ani benchmark harness.
+Runtime jest dokładnie ten sam `bergamot-translator v0.4.5` co dla backendu Firefox/Bergamot. Bergamot ma natywną obsługę modeli Marian oraz repozytoriów `browsermt` i `opus`; jego API udostępnia również patchowanie konfiguracji Marian do formatu Bergamot. Dzięki temu benchmark Bergamot-vs-OPUS porównuje przede wszystkim inne wagi/model training, a nie dwa różne silniki inference.
 
-Nie używamy chat-LLM ani promptów.
+Nie używamy chat-LLM, Transformers ani promptów dla OPUS/Marian.
 
 ## Backend 4 — NLLB-200 distilled 600M
 
@@ -131,7 +129,7 @@ Model:
 
 Runtime benchmarkowy:
 - lokalny Python helper,
-- `transformers` w wersji przypiętej do gałęzi 4.x (model card wskazuje, że high-level translation pipeline nie jest obsługiwany w Transformers 5.x),
+- `transformers` przypięte do ostatniej przetestowanej wersji `4.x` zapisanej w manifeście builda; nie używamy Transformers 5.x,
 - bezpośrednie `AutoTokenizer` + `AutoModelForSeq2SeqLM`,
 - CPU jako pierwszy wspólny punkt porównania,
 - model pobierany on-demand do osobnego cache SubFlow.
@@ -157,6 +155,8 @@ offline-mt/
     model/
     manifest.json
 ```
+
+Bergamot i OPUS mogą współdzielić identyczny fizyczny runtime `v0.4.5`; ich katalogi/model manifests pozostają oddzielne, a installer nie pobiera drugiej kopii runtime, jeśli hash zgodnego runtime już istnieje.
 
 Manifest zawiera:
 - backend id,
@@ -194,7 +194,7 @@ Nie tworzymy osobnego rozbudowanego ekranu ustawień modeli w tej iteracji.
 Dodajemy developerski benchmark uruchamialny niezależnie od Enhanced review. Przyjmuje istniejący plik SRT/tekstowe segmenty i listę backendów.
 
 Dla każdego backendu wykonuje:
-1. warm/cold runtime setup jest raportowany osobno,
+1. warm/cold runtime setup raportowany osobno,
 2. ten sam preprocessing,
 3. to samo wejście i kolejność segmentów,
 4. tłumaczenie,
@@ -248,7 +248,7 @@ Stałe sentinele:
 - cue 253 — musi zachować 3. osobę liczby mnogiej; brak regresji `Zapomniałaś/Zapomniałeś`,
 - cue 437 — brak fałszywej feminizacji.
 
-Dodatkowo kontrolujemy cue 30 i 137 pod kątem zachowania obu tur dialogu/pełnej treści.
+Dodatkowo kontrolujemy cue 30 i 137 pod kątem zachowania pełnej treści i poprawnej separacji tur dialogowych.
 
 Automatyczny BLEU/COMET nie jest kryterium wyboru w tej iteracji. Finalna decyzja opiera się na jakości rzeczywistych napisów + koszcie runtime/modelu.
 
