@@ -41,7 +41,7 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(1, result.EligibleSpeakerCandidateCount);
         Assert.Equal(new[] { 2 }, result.EligibleSpeakerCandidateIds);
         Assert.Equal(
-            "2:SPEAKER_A:female:940:3:true;4:SPEAKER_C:unknown:910:2:false",
+            "2:SPEAKER_A:female:940:3:true;4:SPEAKER_C:unknown:910:2:false|addressee=2:SPEAKER_B:990:sandwich_turn:male:980:3:true",
             result.SpeakerCandidateEvidence);
     }
 
@@ -64,7 +64,7 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(1, result.KnownSpeakerCandidateCount);
         Assert.Equal(0, result.EligibleSpeakerCandidateCount);
         Assert.Empty(result.EligibleSpeakerCandidateIds);
-        Assert.Equal("141:SPEAKER_13:female:940:1:false", result.SpeakerCandidateEvidence);
+        Assert.Equal("141:SPEAKER_13:female:940:1:false|addressee=", result.SpeakerCandidateEvidence);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class GenderReviewCoverageDiagnosticsTests
         Assert.Equal(0, result.KnownRelevantGenderEvidenceCount);
         Assert.Equal(0, result.EligibleSpeakerCandidateCount);
         Assert.Empty(result.EligibleSpeakerCandidateIds);
-        Assert.Equal("1:SPEAKER_X:unknown:990:3:false", result.SpeakerCandidateEvidence);
+        Assert.Equal("1:SPEAKER_X:unknown:990:3:false|addressee=", result.SpeakerCandidateEvidence);
     }
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
