@@ -95,4 +95,28 @@ public sealed class FirefoxBergamotV2ResolverTests
             "https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models-v2/base-model.zst",
             descriptor.Model.Url);
     }
+
+    [Fact]
+    public void ResolveRegistryV2_RetainsTransportAndDecompressedMetadata()
+    {
+        var json = """
+        {
+          "data": [
+            {"name":"model.enpl.bin","sourceLanguage":"en","targetLanguage":"pl","architecture":"base","version":"3.0","fileType":"model","decompressedHash":"raw-model","decompressedSize":101,"filter_expression":"","attachment":{"hash":"zst-model","size":51,"location":"main-workspace/translations-models-v2/model.zst","filename":"transport-model.zst"}},
+            {"name":"vocab.enpl.spm","sourceLanguage":"en","targetLanguage":"pl","architecture":"base","version":"3.0","fileType":"vocab","decompressedHash":"raw-vocab","decompressedSize":102,"filter_expression":"","attachment":{"hash":"zst-vocab","size":52,"location":"main-workspace/translations-models-v2/vocab.zst","filename":"transport-vocab.zst"}},
+            {"name":"lex.enpl.bin","sourceLanguage":"en","targetLanguage":"pl","architecture":"base","version":"3.0","fileType":"lex","decompressedHash":"raw-lex","decompressedSize":103,"filter_expression":"","attachment":{"hash":"zst-lex","size":53,"location":"main-workspace/translations-models-v2/lex.zst","filename":"transport-lex.zst"}}
+          ]
+        }
+        """;
+
+        var descriptor = FirefoxBergamotModelResolver.Resolve(json, "en", "pl");
+
+        Assert.Equal("model.enpl.bin", descriptor.Model.FileName);
+        Assert.Equal("raw-model", descriptor.Model.Sha256);
+        Assert.Equal(101, descriptor.Model.SizeBytes);
+        Assert.Equal("zst-model", descriptor.Model.DownloadSha256);
+        Assert.Equal(51, descriptor.Model.DownloadSizeBytes);
+        Assert.Equal("transport-model.zst", descriptor.Model.DownloadFileName);
+        Assert.True(descriptor.Model.IsZstdCompressed);
+    }
 }
