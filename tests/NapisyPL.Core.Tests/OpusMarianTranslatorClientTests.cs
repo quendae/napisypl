@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using NapisyPL.Core.LocalTranslation;
@@ -76,6 +78,37 @@ public sealed class OpusMarianTranslatorClientTests
         }
     }
 
+    [Fact]
+    public async Task ProductionConstructor_DownloadsPinnedArchiveInstallsAndTranslates()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var archive = Zip(
+                ("nested/model.npz", "MODEL"),
+                ("nested/source.spm", "SOURCE"),
+                ("nested/target.spm", "TARGET"));
+            var handler = new FixtureHttpHandler(archive);
+            using var httpClient = new HttpClient(handler);
+            var assets = new OfflineMtAssetManager(root);
+            var channel = new FakeChannel();
+            await using var runtime = Runtime(root, channel);
+            await using var client = new OpusMarianTranslatorClient(httpClient, assets, runtime);
+
+            await client.EnsureReadyAsync();
+            var translated = await client.TranslateAsync(["hello"]);
+
+            Assert.Equal(OpusMarianModelDescriptor.Pinned.ArchiveUrl, handler.RequestedUrl);
+            Assert.True(await assets.IsInstalledAsync());
+            Assert.Equal(new[] { "HELLO-PL" }, translated);
+            Assert.Equal("Apache-2.0", client.GetInfo().LicenseId);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static BergamotRuntimeManager Runtime(string modelDirectory, FakeChannel channel) =>
         new(
             new BergamotRuntimeOptions("fake-helper.exe", TimeSpan.FromSeconds(5)),
@@ -97,7 +130,7 @@ public sealed class OpusMarianTranslatorClientTests
             ModelId: "opus-marian-eng-pol-2021-02-19",
             ModelVersion: "2021-02-19",
             ModelSource: "fixture",
-            LicenseId: "NOASSERTION",
+            LicenseId: "Apache-2.0",
             BenchmarkOnly: true,
             InstalledSizeBytes: modelBytes.LongLength + sourceBytes.LongLength + targetBytes.LongLength + configBytes.LongLength,
             InstalledAtUtc: DateTimeOffset.UtcNow,
@@ -124,11 +157,42 @@ public sealed class OpusMarianTranslatorClientTests
     private static OfflineMtManifestFile ManifestFile(string path, byte[] bytes) =>
         new(path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.LongLength);
 
+    private static byte[] Zip(params (string Name, string Content)[] entries)
+    {
+        using var buffer = new MemoryStream();
+        using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (name, content) in entries)
+            {
+                var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+                using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+                writer.Write(content);
+            }
+        }
+        return buffer.ToArray();
+    }
+
     private static string TempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "subflow-opus-client-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private sealed class FixtureHttpHandler(byte[] responseBytes) : HttpMessageHandler
+    {
+        public string? RequestedUrl { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestedUrl = request.RequestUri?.AbsoluteUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(responseBytes)
+            });
+        }
     }
 
     private sealed class FakeChannel : IBergamotRuntimeChannel
