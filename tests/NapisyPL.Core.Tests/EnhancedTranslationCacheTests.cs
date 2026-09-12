@@ -92,10 +92,11 @@ public sealed class EnhancedTranslationCacheTests
         var root = TempDirectory();
         try
         {
-            Directory.CreateDirectory(root);
-            await File.WriteAllTextAsync(Path.Combine(root, "not-a-cache-entry.json"), "broken");
             var cache = new EnhancedTranslationCache(root);
             var source = new[] { Cue(1, 1, 2, "Hello.") };
+            await cache.SaveAsync(source, new[] { source[0] with { Text = "Cześć." } }, "argos-en-pl-1_9");
+            var cacheFile = Assert.Single(Directory.GetFiles(root, "*.json"));
+            await File.WriteAllTextAsync(cacheFile, "broken");
 
             var loaded = await cache.TryLoadAsync(source, "argos-en-pl-1_9");
 
