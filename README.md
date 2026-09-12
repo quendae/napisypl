@@ -2,6 +2,8 @@
 
 **NapisyPL** to mała aplikacja desktopowa dla Windows, która robi jedną rzecz: bierze angielskie napisy i zapisuje ich polskie tłumaczenie.
 
+> Aktualny checkpoint rozwoju trybu Enhanced, wyniki benchmarków i plan dalszych prac: [`docs/ENHANCED_STATUS_AND_PLAN.md`](docs/ENHANCED_STATUS_AND_PLAN.md).
+
 ## Jak to działa
 
 1. Przeciągnij do okna film albo plik napisów.
