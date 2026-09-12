@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using NapisyPL.Core.Models;
 using NapisyPL.Core.Services;
 
@@ -87,6 +90,37 @@ public sealed class EnhancedTranslationCacheTests
     }
 
     [Fact]
+    public async Task TryLoad_LegacySchemaV1Entry_ReturnsMiss()
+    {
+        var root = TempDirectory();
+        try
+        {
+            Directory.CreateDirectory(root);
+            const string providerIdentity = "Argos EN→PL|translate-en_pl-1_9.argosmodel|enhanced-cache-v2";
+            var source = new[] { Cue(253, 1, 2, "Do you think they're ever gonna\nforget today? Never.") };
+            var legacyHash = ComputeLegacyV1Hash(source, providerIdentity);
+            var legacyEntry = new
+            {
+                Version = 1,
+                ProviderIdentity = providerIdentity,
+                SourceHash = legacyHash,
+                Translations = new Dictionary<int, string> { [253] = "STALE" }
+            };
+            await File.WriteAllTextAsync(
+                Path.Combine(root, legacyHash + ".json"),
+                JsonSerializer.Serialize(legacyEntry));
+
+            var loaded = await new EnhancedTranslationCache(root).TryLoadAsync(source, providerIdentity);
+
+            Assert.Null(loaded);
+        }
+        finally
+        {
+            DeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task TryLoad_WhenEntryIsCorrupt_ReturnsMissInsteadOfThrowing()
     {
         var root = TempDirectory();
@@ -107,6 +141,27 @@ public sealed class EnhancedTranslationCacheTests
             DeleteDirectory(root);
         }
     }
+
+    private static string ComputeLegacyV1Hash(IReadOnlyList<SubtitleCue> source, string providerIdentity)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Append(hash, "subflow-enhanced-translation-cache-v1\n");
+        Append(hash, providerIdentity);
+        Append(hash, "\n");
+        foreach (var cue in source)
+        {
+            Append(hash, cue.Index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(hash, ":");
+            Append(hash, cue.Text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(hash, ":");
+            Append(hash, cue.Text);
+            Append(hash, "\n");
+        }
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void Append(IncrementalHash hash, string value) =>
+        hash.AppendData(Encoding.UTF8.GetBytes(value));
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
         new(id, TimeSpan.FromSeconds(start), TimeSpan.FromSeconds(end), text);
