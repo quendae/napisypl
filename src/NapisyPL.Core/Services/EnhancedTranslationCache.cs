@@ -7,7 +7,7 @@ namespace NapisyPL.Core.Services;
 
 public sealed class EnhancedTranslationCache(string cacheDirectory)
 {
-    private const int CacheVersion = 1;
+    private const int CacheVersion = 2;
     private readonly string _cacheDirectory = cacheDirectory;
 
     public static EnhancedTranslationCache CreateDefault()
