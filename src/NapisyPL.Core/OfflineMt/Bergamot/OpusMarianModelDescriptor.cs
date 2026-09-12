@@ -13,6 +13,6 @@ public sealed record OpusMarianModelDescriptor(
         SourceLanguage: "eng",
         TargetLanguage: "pol",
         Release: "2021-02-19",
-        ArchiveUrl: "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip",
+        ArchiveUrl: "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip/eng-pol/opus-2021-02-19.zip",
         Preprocessing: "normalization + SentencePiece spm32k/spm32k");
 }
