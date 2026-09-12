@@ -39,7 +39,7 @@ public sealed class LocalTargetedGenderReviewAddresseeTests
     }
 
     [Fact]
-    public async Task ReviewAsync_WhenTurnTakingHasOneStrongAddressee_AllowsHighConfidenceSecondPersonEdit()
+    public async Task ReviewAsync_WhenTurnTakingHasOneStrongFemaleAddressee_AllowsHighConfidenceSecondPersonEdit()
     {
         using var http = new HttpClient(new StubHandler("""
             {"choices":[{"message":{"content":"[{\"id\":2,\"find\":\"zrobiłeś\",\"replace\":\"zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
@@ -63,8 +63,16 @@ public sealed class LocalTargetedGenderReviewAddresseeTests
             [2] = "SPEAKER_A",
             [3] = "SPEAKER_B"
         };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_B"] = new(SpeakerVoiceGender.Female, 0.96, 3)
+        };
 
-        var result = await service.ReviewAsync(source, translated, speakers);
+        var result = await service.ReviewAsync(
+            source,
+            translated,
+            speakers,
+            speakerGenderEvidence: evidence);
 
         Assert.Equal("Za to, co zrobiłaś...", result[1].Text);
     }
