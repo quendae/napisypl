@@ -116,6 +116,7 @@ public static class TargetedGenderReviewProtocol
         - For speaker-target edits, use ONLY candidateSpeakerGender on that candidate as the actionable acoustic signal.
         - For addressee-target edits, use ONLY candidateAddresseeGender on that candidate as the actionable acoustic signal.
         - These candidate gender fields are present only when the corresponding stable speaker has male/female evidence with confidence >= 0.85 from at least 2 samples.
+        - An eligible candidateSpeakerGender is sufficient on its own without explicit dialogue confirmation when the current Polish form clearly uses the opposite grammatical gender and there is no conflicting context evidence.
         - If supplied acoustic evidence conflicts with explicit dialogue evidence or remains uncertain, return no edit.
 
         IMPORTANT KNOWN-SPEAKER CHECK:
