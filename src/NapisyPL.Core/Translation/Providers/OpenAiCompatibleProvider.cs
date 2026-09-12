@@ -9,6 +9,7 @@ public sealed class OpenAiCompatibleProvider(HttpClient httpClient, string? apiK
 {
     private readonly string _baseUrl = baseUrl.TrimEnd('/');
     public string DisplayName => "OpenAI-compatible";
+    public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.LlmDefault;
 
     public async Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
     {

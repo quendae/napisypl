@@ -8,6 +8,7 @@ public sealed class DeepLProvider(HttpClient httpClient, string apiKey, string? 
 {
     private readonly string _baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "https://api-free.deepl.com" : baseUrl.TrimEnd('/');
     public string DisplayName => "DeepL";
+    public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.MachineTranslation;
 
     public async Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
     {

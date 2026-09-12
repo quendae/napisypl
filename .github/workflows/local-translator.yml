@@ -1,0 +1,23 @@
+name: Local Translator
+
+on:
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "tools/local-translator/**"
+      - ".github/workflows/local-translator.yml"
+  pull_request:
+    paths:
+      - "tools/local-translator/**"
+      - ".github/workflows/local-translator.yml"
+
+jobs:
+  unit-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Test helper protocol
+        run: python -m unittest discover -s tools/local-translator -p "test_*.py" -v
