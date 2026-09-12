@@ -36,11 +36,16 @@ public sealed class GptOssReviewCompatibilityTests
             """);
         using var http = new HttpClient(handler);
         var service = new LocalTargetedGenderReviewService(http, "http://127.0.0.1:17843/v1", "gpt-oss-20b");
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.98, 2)
+        };
 
         var result = await service.ReviewAsync(
             new[] { Cue(1, "I was ready.") },
             new[] { Cue(1, "Byłem gotowy.") },
-            new Dictionary<int, string?> { [1] = "SPEAKER_00" });
+            new Dictionary<int, string?> { [1] = "SPEAKER_00" },
+            speakerGenderEvidence: evidence);
 
         Assert.Equal("Byłam gotowa.", result[0].Text);
     }
