@@ -38,8 +38,16 @@ public sealed class LocalTargetedGenderReviewContinuationTests
             [1] = "SPEAKER_A",
             [2] = "SPEAKER_B"
         };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_B"] = new(SpeakerVoiceGender.Female, 0.96, 2)
+        };
 
-        var result = await service.ReviewAsync(source, translated, speakers);
+        var result = await service.ReviewAsync(
+            source,
+            translated,
+            speakers,
+            speakerGenderEvidence: evidence);
 
         Assert.Equal(2, handler.RequestCount);
         Assert.Equal("Byłem gotowy.", result[0].Text);
