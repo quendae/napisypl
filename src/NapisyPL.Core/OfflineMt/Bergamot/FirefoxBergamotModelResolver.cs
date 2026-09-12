@@ -26,9 +26,12 @@ public static class FirefoxBergamotModelResolver
                 string.IsNullOrWhiteSpace(record.FilterExpression))
             .ToArray();
 
-        foreach (var group in records
-                     .GroupBy(record => record.Version, StringComparer.Ordinal)
-                     .OrderByDescending(group => group.Key, VersionStringComparer.Instance))
+        var groups = records
+            .GroupBy(record => (record.Architecture, record.Version))
+            .OrderBy(group => ArchitecturePriority(group.Key.Architecture))
+            .ThenByDescending(group => group.Key.Version, VersionStringComparer.Instance);
+
+        foreach (var group in groups)
         {
             var model = group.FirstOrDefault(record => record.FileType == "model");
             var shortlist = group.FirstOrDefault(record => record.FileType == "lex");
@@ -52,7 +55,7 @@ public static class FirefoxBergamotModelResolver
             {
                 SourceLanguage = sourceLanguage,
                 TargetLanguage = targetLanguage,
-                ModelVersion = group.Key,
+                ModelVersion = group.Key.Version,
                 Model = modelAsset,
                 SourceVocab = sourceVocabAsset,
                 TargetVocab = targetVocabAsset,
@@ -66,17 +69,53 @@ public static class FirefoxBergamotModelResolver
     private static RegistryRecord ParseRecord(JsonElement element)
     {
         var attachment = element.GetProperty("attachment");
+        var sourceLanguage = GetString(element, "sourceLanguage", "fromLang");
+        var targetLanguage = GetString(element, "targetLanguage", "toLang");
+        var installedHash = element.TryGetProperty("decompressedHash", out var decompressedHash)
+            ? decompressedHash.GetString() ?? string.Empty
+            : attachment.GetProperty("hash").GetString() ?? string.Empty;
+        var installedSize = element.TryGetProperty("decompressedSize", out var decompressedSize)
+            ? decompressedSize.GetInt64()
+            : attachment.GetProperty("size").GetInt64();
+        var installedFileName = element.TryGetProperty("name", out var name) && !string.IsNullOrWhiteSpace(name.GetString())
+            ? name.GetString()!
+            : attachment.GetProperty("filename").GetString() ?? string.Empty;
+
         return new RegistryRecord(
-            SourceLanguage: element.GetProperty("fromLang").GetString() ?? string.Empty,
-            TargetLanguage: element.GetProperty("toLang").GetString() ?? string.Empty,
+            SourceLanguage: sourceLanguage,
+            TargetLanguage: targetLanguage,
+            Architecture: element.TryGetProperty("architecture", out var architecture) ? architecture.GetString() ?? string.Empty : string.Empty,
             Version: element.GetProperty("version").GetString() ?? string.Empty,
             FileType: element.GetProperty("fileType").GetString() ?? string.Empty,
             FilterExpression: element.TryGetProperty("filter_expression", out var filter) ? filter.GetString() ?? string.Empty : string.Empty,
-            Hash: attachment.GetProperty("hash").GetString() ?? string.Empty,
-            Size: attachment.GetProperty("size").GetInt64(),
+            Hash: installedHash,
+            Size: installedSize,
             Location: attachment.GetProperty("location").GetString() ?? string.Empty,
-            FileName: attachment.GetProperty("filename").GetString() ?? string.Empty);
+            FileName: installedFileName);
     }
+
+    private static string GetString(JsonElement element, string primaryName, string legacyName)
+    {
+        if (element.TryGetProperty(primaryName, out var primary))
+        {
+            return primary.GetString() ?? string.Empty;
+        }
+
+        if (element.TryGetProperty(legacyName, out var legacy))
+        {
+            return legacy.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static int ArchitecturePriority(string architecture) => architecture switch
+    {
+        "base" => 0,
+        "base-memory" => 1,
+        "tiny" => 2,
+        _ => 3,
+    };
 
     private static BergamotRemoteAsset ToAsset(RegistryRecord record) => new()
     {
@@ -90,6 +129,7 @@ public static class FirefoxBergamotModelResolver
     private sealed record RegistryRecord(
         string SourceLanguage,
         string TargetLanguage,
+        string Architecture,
         string Version,
         string FileType,
         string FilterExpression,
