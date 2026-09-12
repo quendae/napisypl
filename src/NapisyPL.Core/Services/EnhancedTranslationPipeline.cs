@@ -262,6 +262,8 @@ public sealed class EnhancedTranslationPipeline(
             ("knownAddresseeCandidateIds", string.Join(",", coverage.KnownAddresseeCandidateIds)),
             ("eligibleSpeakerCandidateCount", coverage.EligibleSpeakerCandidateCount),
             ("eligibleSpeakerCandidateIds", string.Join(",", coverage.EligibleSpeakerCandidateIds)),
+            ("eligibleAddresseeCandidateCount", coverage.EligibleAddresseeCandidateCount),
+            ("eligibleAddresseeCandidateIds", string.Join(",", coverage.EligibleAddresseeCandidateIds)),
             ("speakerCandidateEvidence", coverage.SpeakerCandidateEvidence));
 
         var batches = GenderReviewCandidateSelector.BuildReviewBatches(
@@ -289,6 +291,8 @@ public sealed class EnhancedTranslationPipeline(
                 ("knownAddresseeCandidateIds", string.Join(",", windowCoverage.KnownAddresseeCandidateIds)),
                 ("eligibleSpeakerCandidateCount", windowCoverage.EligibleSpeakerCandidateCount),
                 ("eligibleSpeakerCandidateIds", string.Join(",", windowCoverage.EligibleSpeakerCandidateIds)),
+                ("eligibleAddresseeCandidateCount", windowCoverage.EligibleAddresseeCandidateCount),
+                ("eligibleAddresseeCandidateIds", string.Join(",", windowCoverage.EligibleAddresseeCandidateIds)),
                 ("speakerCandidateEvidence", windowCoverage.SpeakerCandidateEvidence));
         }
     }
