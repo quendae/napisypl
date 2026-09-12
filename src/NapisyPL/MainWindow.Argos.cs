@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NapisyPL.Core.LocalTranslation;
+using NapisyPL.Core.OfflineMt.Bergamot;
 using NapisyPL.Core.Security;
 using NapisyPL.Core.Translation;
 
@@ -10,15 +11,25 @@ namespace NapisyPL;
 public partial class MainWindow
 {
     private const string ArgosProviderName = "Local Argos (offline)";
+    private const string FirefoxProviderName = "Firefox/Bergamot (offline)";
+    private const string OpusProviderName = "OPUS-MT / Marian (offline)";
+    private static readonly string[] LocalMtProviderNames =
+    [
+        ArgosProviderName,
+        FirefoxProviderName,
+        OpusProviderName
+    ];
+
     private readonly ApiKeyStore _apiKeyStore = new();
     private bool _modernUiHooked;
     private bool _loadingSecretUi;
 
     private void OnArgosWindowOpened(object? sender, EventArgs e)
     {
-        var items = ProviderNames.Contains(ArgosProviderName, StringComparer.Ordinal)
-            ? ProviderNames
-            : ProviderNames.Append(ArgosProviderName).ToArray();
+        var items = ProviderNames
+            .Concat(LocalMtProviderNames)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         ProviderComboBox.ItemsSource = items;
 
         if (!_modernUiHooked)
@@ -33,8 +44,8 @@ public partial class MainWindow
         Dispatcher.UIThread.Post(async () =>
         {
             var settings = await _settingsStore.LoadAsync();
-            if (string.Equals(settings.Provider, ArgosProviderName, StringComparison.Ordinal))
-                ProviderComboBox.SelectedItem = ArgosProviderName;
+            if (items.Contains(settings.Provider, StringComparer.Ordinal))
+                ProviderComboBox.SelectedItem = settings.Provider;
 
             ApplyModernProviderUi();
             await LoadRememberedApiKeyAsync();
@@ -74,6 +85,12 @@ public partial class MainWindow
                 ProviderHintText.Text = "Szybkie tłumaczenie lokalne przez Argos/CTranslate2. Bez API i bez wysyłania napisów do chmury.";
                 break;
             }
+            case FirefoxProviderName:
+                ProviderHintText.Text = "Firefox/Bergamot EN→PL — lokalny silnik Mozilli. Przy pierwszym użyciu pobiera model, później działa offline.";
+                break;
+            case OpusProviderName:
+                ProviderHintText.Text = "OPUS-MT / Marian EN→PL — przypięty model 2021-02-19 do benchmarku. Przy pierwszym użyciu pobiera model, później działa offline.";
+                break;
             case "Local Qwen (offline)":
                 ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced używa Qwena osobno tylko jako korektora.";
                 break;
@@ -172,6 +189,7 @@ public partial class MainWindow
 
     private async void OnArgosWindowClosed(object? sender, EventArgs e)
     {
+        await OfflineMtRuntimeRegistry.DisposeAsync();
         await ArgosRuntimeRegistry.DisposeAsync();
     }
 }
