@@ -103,7 +103,8 @@ public static class SurgicalGenderContextGuard
     public static bool CanApply(
         SurgicalGenderEdit edit,
         string? currentSpeaker,
-        string? probableAddressee)
+        string? probableAddressee,
+        SpeakerGenderEvidence? currentSpeakerGenderEvidence = null)
     {
         if (string.IsNullOrWhiteSpace(currentSpeaker) || edit.Target == GenderAgreementTarget.Unknown)
             return false;
@@ -114,7 +115,8 @@ public static class SurgicalGenderContextGuard
 
         return edit.Target switch
         {
-            GenderAgreementTarget.Speaker => true,
+            GenderAgreementTarget.Speaker =>
+                SpeakerGenderReviewEligibility.IsEligible(currentSpeakerGenderEvidence),
             GenderAgreementTarget.Addressee =>
                 edit.Confidence >= MinimumAddresseeConfidence &&
                 !string.IsNullOrWhiteSpace(probableAddressee) &&
