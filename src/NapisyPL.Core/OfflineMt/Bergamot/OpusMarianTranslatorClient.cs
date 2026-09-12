@@ -18,6 +18,14 @@ public sealed class OpusMarianTranslatorClient : IOfflineMachineTranslatorClient
     private bool _disposed;
 
     public OpusMarianTranslatorClient(
+        HttpClient httpClient,
+        OfflineMtAssetManager assets,
+        BergamotRuntimeManager runtime)
+        : this(assets, runtime, CreateInstaller(httpClient, assets))
+    {
+    }
+
+    public OpusMarianTranslatorClient(
         OfflineMtAssetManager assets,
         BergamotRuntimeManager runtime,
         Func<CancellationToken, Task> installModelAsync)
@@ -125,6 +133,19 @@ public sealed class OpusMarianTranslatorClient : IOfflineMachineTranslatorClient
         {
             return null;
         }
+    }
+
+    private static Func<CancellationToken, Task> CreateInstaller(
+        HttpClient httpClient,
+        OfflineMtAssetManager assets)
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(assets);
+        var installer = new OpusMarianAssetManager(
+            assets,
+            async (url, cancellationToken) =>
+                await httpClient.GetByteArrayAsync(new Uri(url, UriKind.Absolute), cancellationToken));
+        return installer.InstallPinnedModelAsync;
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
