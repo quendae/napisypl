@@ -86,7 +86,7 @@ public sealed class FirefoxBergamotTranslatorClientTests
             Assert.Equal(1, remoteCalls);
             Assert.Equal(1, installCalls);
             Assert.Equal(new[] { "HELLO-PL" }, translated);
-            Assert.Equal(1, channel.SentCommands.OfType<LoadCommand>().Count());
+            Assert.Single(channel.SentCommands.OfType<LoadCommand>());
         }
         finally
         {
@@ -124,11 +124,11 @@ public sealed class FirefoxBergamotTranslatorClientTests
             ]);
 
         await assets.InstallAsync(
-            manifest,
             async (stagingDirectory, ct) =>
             {
                 await File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "config.yml"), configBytes, ct);
                 await File.WriteAllBytesAsync(Path.Combine(stagingDirectory, "model.bin"), modelBytes, ct);
+                return manifest;
             },
             cancellationToken);
     }
