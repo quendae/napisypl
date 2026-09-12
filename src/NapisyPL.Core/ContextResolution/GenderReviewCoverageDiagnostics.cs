@@ -8,6 +8,8 @@ public sealed record GenderReviewCoverageSummary(
     IReadOnlyList<int> KnownSpeakerCandidateIds,
     int KnownAddresseeCandidateCount,
     IReadOnlyList<int> KnownAddresseeCandidateIds,
+    int EligibleAddresseeCandidateCount,
+    IReadOnlyList<int> EligibleAddresseeCandidateIds,
     int KnownRelevantGenderEvidenceCount,
     int EligibleSpeakerCandidateCount,
     IReadOnlyList<int> EligibleSpeakerCandidateIds,
@@ -23,6 +25,7 @@ public static class GenderReviewCoverageDiagnostics
     {
         var knownSpeakerCandidates = new List<int>();
         var knownAddresseeCandidates = new List<int>();
+        var eligibleAddresseeCandidates = new List<int>();
         var eligibleSpeakerCandidates = new List<int>();
         var relevantKnownSpeakers = new HashSet<string>(StringComparer.Ordinal);
         var evidenceEntries = new List<string>();
@@ -59,6 +62,9 @@ public static class GenderReviewCoverageDiagnostics
                 knownAddresseeCandidates.Add(candidateId);
                 relevantKnownSpeakers.Add(addresseeResolution.SpeakerId!);
             }
+
+            if (SpeakerGenderReviewEligibility.IsEligible(addresseeEvidence))
+                eligibleAddresseeCandidates.Add(candidateId);
         }
 
         var combinedEvidence = string.Join(";", evidenceEntries) +
@@ -70,6 +76,8 @@ public static class GenderReviewCoverageDiagnostics
             knownSpeakerCandidates,
             knownAddresseeCandidates.Count,
             knownAddresseeCandidates,
+            eligibleAddresseeCandidates.Count,
+            eligibleAddresseeCandidates,
             relevantKnownSpeakers.Count,
             eligibleSpeakerCandidates.Count,
             eligibleSpeakerCandidates,
