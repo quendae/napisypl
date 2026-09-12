@@ -46,7 +46,7 @@ public sealed class FirefoxRemoteSettingsClient
             throw new ArgumentException("Firefox Remote Settings server URI must be absolute.", nameof(uri));
 
         var text = uri.AbsoluteUri;
-        return text.EndsWith('/', StringComparison.Ordinal)
+        return text.EndsWith("/", StringComparison.Ordinal)
             ? uri
             : new Uri(text + "/", UriKind.Absolute);
     }
