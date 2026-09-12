@@ -279,6 +279,7 @@ public sealed class LocalTargetedGenderReviewService(
                 ("dropApplyFindMissing", droppedApplyFindMissing),
                 ("dropApplyFindAmbiguous", droppedApplyFindAmbiguous),
                 ("dropApplyThirdPersonSubjectConflict", droppedApplyThirdPersonSubjectConflict),
+                ("dropApplyThirdPersonAgreementConflict", droppedApplyThirdPersonSubjectConflict),
                 ("result", "success"));
 
             progress?.Report((double)oneBasedBatch / batches.Count);
