@@ -8,7 +8,7 @@ namespace NapisyPL.Core.Tests;
 public sealed class TurnTakingGenderUserScenarioTests
 {
     [Fact]
-    public async Task MaleSpeaker_WhenNextResponderIsEligibleFemale_UsesFemaleSecondPersonForm()
+    public async Task MaleSpeaker_WhenAudioClassifiesNextResponderAsFemale_UsesFemaleSecondPersonForm()
     {
         using var http = new HttpClient(new StubHandler("""
             {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zrobiłeś\",\"replace\":\"Zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
@@ -35,8 +35,18 @@ public sealed class TurnTakingGenderUserScenarioTests
         };
         var evidence = new Dictionary<string, SpeakerGenderEvidence>
         {
-            ["SPEAKER_MALE"] = new(SpeakerVoiceGender.Male, 0.97, 3),
-            ["SPEAKER_FEMALE"] = new(SpeakerVoiceGender.Female, 0.96, 3)
+            ["SPEAKER_MALE"] = SpeakerGenderEvidenceAggregator.Aggregate(
+            [
+                new SpeakerGenderObservation(0.82, 0.05, 2.3),
+                new SpeakerGenderObservation(0.77, 0.07, 2.0),
+                new SpeakerGenderObservation(0.80, 0.06, 1.8)
+            ]),
+            ["SPEAKER_FEMALE"] = SpeakerGenderEvidenceAggregator.Aggregate(
+            [
+                new SpeakerGenderObservation(0.05, 0.84, 2.2),
+                new SpeakerGenderObservation(0.06, 0.79, 2.0),
+                new SpeakerGenderObservation(0.04, 0.82, 1.9)
+            ])
         };
 
         var resolution = DialogueAddresseeResolver.ResolveDetailed(source, speakers, cueId: 1);
@@ -46,6 +56,10 @@ public sealed class TurnTakingGenderUserScenarioTests
             speakers,
             speakerGenderEvidence: evidence);
 
+        Assert.Equal(SpeakerVoiceGender.Male, evidence["SPEAKER_MALE"].Gender);
+        Assert.Equal(SpeakerVoiceGender.Female, evidence["SPEAKER_FEMALE"].Gender);
+        Assert.True(evidence["SPEAKER_FEMALE"].Confidence >= 0.85);
+        Assert.True(evidence["SPEAKER_FEMALE"].SampleCount >= 2);
         Assert.True(resolution.IsResolved);
         Assert.Equal("SPEAKER_FEMALE", resolution.SpeakerId);
         Assert.Equal("next_turn_two_speaker", resolution.ReasonCode);
@@ -80,7 +94,12 @@ public sealed class TurnTakingGenderUserScenarioTests
         };
         var evidence = new Dictionary<string, SpeakerGenderEvidence>
         {
-            ["SPEAKER_MALE"] = new(SpeakerVoiceGender.Male, 0.97, 3)
+            ["SPEAKER_MALE"] = SpeakerGenderEvidenceAggregator.Aggregate(
+            [
+                new SpeakerGenderObservation(0.82, 0.05, 2.3),
+                new SpeakerGenderObservation(0.77, 0.07, 2.0),
+                new SpeakerGenderObservation(0.80, 0.06, 1.8)
+            ])
         };
 
         var resolution = DialogueAddresseeResolver.ResolveDetailed(source, speakers, cueId: 1);
@@ -90,6 +109,7 @@ public sealed class TurnTakingGenderUserScenarioTests
             speakers,
             speakerGenderEvidence: evidence);
 
+        Assert.Equal(SpeakerVoiceGender.Male, evidence["SPEAKER_MALE"].Gender);
         Assert.False(resolution.IsResolved);
         Assert.Equal("Zrobiłeś to?", result[0].Text);
     }
