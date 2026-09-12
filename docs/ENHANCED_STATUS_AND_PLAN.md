@@ -1,40 +1,65 @@
 # Enhanced mode — status i plan kontynuacji
 
-Aktualizacja: 2026-09-12, po benchmarku SubFlow 3.1.16.
+Aktualizacja: 2026-09-12, po wdrożeniu fundamentu SubFlow 3.2 **addressee-first**.
 
 ## Stan repo / punkt wznowienia
 
 - Repo: `quendae/napisypl`
 - Branch roboczy: `feature/local-translator-batch-v2`
 - Draft PR: `#2` — **nie merge'ować bez wyraźnej decyzji użytkownika**.
-- Ostatni commit kodu przed tym checkpointem: `19b3987310db5bdc844518721c30c84be0757f5c` (`fix: enforce speaker gender edit direction`).
-- Ostatni CI dla tego commita: run `34692842299` — success.
-- Testy .NET: `154/154` pass.
-- Local Translator workflow: run `34692842288` — success.
-- Windows x64 artifact digest: `sha256:ea46d115fd01d87c6ab5368fe898062f88f972ca2e1bd1009a2e8a2a82675e87`.
+- Aktualny zweryfikowany commit kodu: `e0ca55a0328fbda385c06857134cb70ae614ac8f`.
+- CI: run `34694701111` — success.
+- Testy .NET: `157/157` pass.
+- Local Translator: run `34694701103` — success.
+- Windows x64 artifact: `SubFlow-win-x64`, ID `10298403707`.
+- SHA-256 artefaktu: `3891f44e774a5e062ac15bd35f4343a7e4c3968a6042dd563e76d53b15d6b990`.
 
-Ten dokument jest checkpointem do dalszej pracy. Jeśli nowa sesja/agent nie ma historii rozmowy, zacząć od tego pliku, PR #2 i wymienionych niżej plików kodu.
+Ten dokument jest checkpointem do dalszej pracy. Nowa sesja/agent powinien zacząć od tego pliku, PR #2 oraz wymienionych niżej plików kodu.
+
+## Najważniejsza korekta celu
+
+**Nie próbujemy przede wszystkim ustalić płci osoby mówiącej. Chcemy poprawnie ustalić, do kogo skierowana jest wypowiedź i jaki rodzaj gramatyczny powinny mieć formy odnoszące się do tej osoby.**
+
+Przykłady najważniejszego przypadku:
+
+- `zrobiłeś` / `zrobiłaś`
+- `byłeś` / `byłaś`
+- `gotowy` / `gotowa` w bezpośrednim zwrocie do rozmówcy
+- inne drugioosobowe czasowniki, przymiotniki i imiesłowy zależne od płci adresata
+
+Gender osoby mówiącej nadal może być przydatny jako profil stabilnego `SPEAKER_xx`, ale głównie dlatego, że ten sam `SPEAKER_xx` może później zostać rozpoznany jako **adresat** wypowiedzi innej osoby.
+
+Przykład:
+
+`SPEAKER_A mówi → resolver ustala probableAddressee=SPEAKER_B → gender evidence SPEAKER_B pochodzi z własnych wypowiedzi B → sprawdzamy formy skierowane przez A do B`.
+
+Nigdy nie wolno używać gender `SPEAKER_A` do decyzji `zrobiłeś ↔ zrobiłaś`, jeśli forma dotyczy `SPEAKER_B`.
 
 ## Obecna architektura Enhanced
 
-Praktyczny pipeline:
+Praktyczny pipeline po 3.2:
 
-`speaker diarization → acoustic speaker-gender evidence → base translator (najczęściej Argos) → candidate selection → local Qwen targeted review → deterministic safety guards → SRT`
+`speaker diarization → stable speaker IDs → acoustic gender profile per speaker → Argos baseline → candidate detection → addressee resolution → candidateAddresseeGender → targeted Qwen review → deterministic guards → SRT`
 
-Aktualne założenia:
+Dodatkowo nadal obsługujemy prawdziwe speaker-target forms pierwszej osoby (`byłem/byłam`, `zrobiłem/zrobiłam`), ale nie są już głównym kierunkiem rozwoju.
 
-- Bazowy translator Argos EN→PL jest traktowany jako stabilny baseline.
-- Enhanced nie ma ponownie tłumaczyć całego pliku Qwenem; Qwen służy tylko do małych korekt rodzaju/liczby/adresata.
-- Domyślny reviewer: `Qwen3.5-9B`, lokalnie przez `llama.cpp`, preferowany backend Vulkan.
-- GPT-OSS-20B był wolniejszy i problematyczny z formatem odpowiedzi; nie jest obecnie preferowany.
-- Qwen3-1.7B był za słaby semantycznie i został tylko historycznym/dev baseline'em.
-- Runtime Qwena jest preloadowany równolegle z audio/Argos.
-- Argos baseline ma persistent cache w `%LocalAppData%\SubFlow\cache\translations`.
-- Cache przechowuje tylko czysty baseline Argosa, nie wynik po review; dzięki temu reviewer jest uruchamiany ponownie na każdym benchmarku.
+### Bazowy translator
 
-## Speaker-gender classifier — aktualna polityka
+- Argos EN→PL jest stabilnym baseline'em.
+- Persistent cache: `%LocalAppData%\SubFlow\cache\translations`.
+- Cache przechowuje czysty baseline, nie wynik po review.
+- Enhanced nie ma ponownie tłumaczyć całego pliku Qwenem.
 
-Model acoustic tagging: SherpaOnnx audio tagging (`k2-fsa/sherpa-onnx-zipformer-small-audio-tagging-2024-04-15`).
+### Reviewer
+
+- Domyślny: `Qwen3.5-9B`.
+- Runtime: lokalny `llama.cpp`, preferowany Vulkan.
+- Runtime jest preloadowany równolegle z audio/Argos.
+- Qwen ma wykonywać tylko małe, kontrolowane korekty, a nie swobodne przepisywanie napisów.
+
+## Acoustic gender evidence
+
+Model: SherpaOnnx audio tagging (`k2-fsa/sherpa-onnx-zipformer-small-audio-tagging-2024-04-15`).
 
 Aggregator:
 
@@ -42,248 +67,251 @@ Aggregator:
 - min combined speech evidence: `0.03`
 - min normalized winner confidence: `0.75`
 - min per-sample direction confidence: `0.65`
-- spójność kierunku: około `2/3` próbek
+- spójność: około `2/3` próbek
 
-Osobna polityka dopuszczenia evidence do automatycznej speaker correction (`SpeakerGenderReviewEligibility`):
+Eligibility do automatycznej korekty:
 
-- Gender != `Unknown`
-- Confidence >= `0.85`
-- **SampleCount >= 2**
+- gender != `Unknown`
+- confidence >= `0.85`
+- sampleCount >= `2`
 
-To ostatnie ograniczenie zostało dodane po wykryciu jednopróbkowego `SPEAKER_13:female:0.94`, który nie powinien samodzielnie autoryzować edycji.
+W 3.2 ta sama polityka jest używana dla gender profilu **resolved addressee**.
 
-## Safety stack po 3.1.16
+## Safety stack 3.1.x
 
-### 3.1.14 — reviewer zaczął reagować
+### 3.1.14
 
-Prompt dostał jawne per-candidate `candidateSpeakerGender` i instrukcję, że neutralny angielski source nie jest powodem do abstencji, jeśli mamy mocne acoustic evidence.
+Jawny `candidateSpeakerGender` sprawił, że Qwen zaczął proponować edycje. Ujawniło to false positives.
 
-Efekt: Qwen przestał zwracać wyłącznie `[]`, ale ujawnił błędne propozycje.
+### 3.1.15
 
-### 3.1.15 — evidence eligibility + diagnostyka
+Dodano minimum 2 próbki, evidence-aware context guard oraz privacy-safe diagnostykę. Cue 437 przestało być błędnie zmieniane `Myślałem → Myślałam`.
 
-Dodano:
+### 3.1.16
 
-- min 2 próbki dla speaker correction,
-- twardy evidence-aware `SurgicalGenderContextGuard`,
-- privacy-safe diagnostykę `speakerCandidateEvidence`, np. `141:SPEAKER_43:male:984:3:true`,
-- `eligibleSpeakerCandidateCount` i `eligibleSpeakerCandidateIds`.
+Dodano deterministic gender-direction guard. Cue 141 z poprawnym `SPEAKER_43:male:984:3:true` nie może już przyjąć błędnej zmiany `Chciałem → Chciałam`.
 
-To naprawiło błędny cue 437 (`Myślałam` → bazowe `Myślałem`), ponieważ jego speaker jest `SPEAKER_01:unknown`, więc `eligible=false`.
+Referencyjny benchmark BCS S01E02 po 3.1.16 wrócił byte-for-byte do czystego Argos baseline'u.
 
-### 3.1.16 — deterministic gender-direction guard
+## 3.2 — addressee-first foundation
 
-W 3.1.15 cue 141 nadal był błędnie zmieniany `Chciałem → Chciałam`, mimo że diagnostyka pokazała:
+Zweryfikowany commit kodu: `e0ca55a0328fbda385c06857134cb70ae614ac8f`.
 
-`141:SPEAKER_43:male:984:3:true`
+### Co zmieniono
 
-Przyczyną była luka: guard sprawdzał, czy evidence jest wiarygodne, ale nie czy **kierunek odmiany** zgadza się z płcią speakera.
+`TargetedGenderReviewProtocol` dodaje per candidate:
 
-3.1.16 dodał `SpeakerGenderEditDirectionGuard`:
+- `probableAddressee`
+- `candidateAddresseeGender`
+- `candidateAddresseeGenderConfidence`
 
-- jeśli można rozpoznać masculine→feminine, edycja jest dozwolona tylko dla `Female`,
-- jeśli można rozpoznać feminine→masculine, edycja jest dozwolona tylko dla `Male`,
-- sprzeczny kierunek jest odrzucany,
-- nieznany kierunek zachowuje dotychczasowe zachowanie; nie rozszerzamy blokady na formy, których jeszcze deterministycznie nie umiemy sklasyfikować.
+`candidateAddresseeGender` istnieje tylko wtedy, gdy:
 
-TDD 3.1.16:
+1. aplikacja rozwiązała `probableAddressee`,
+2. ten speaker ma known male/female evidence,
+3. confidence >= 0.85,
+4. sampleCount >= 2.
 
-- RED: `152 pass / 2 fail` — dokładnie dwa nowe przypadki kierunku,
-- GREEN: `154/154 pass`.
+Prompt jawnie mówi, że:
+
+- główną niejednoznacznością jest często płeć **osoby, do której mówi się w zdaniu**,
+- `candidateAddresseeGender` pochodzi z własnych fragmentów mowy probableAddressee,
+- nie jest genderem current speaker,
+- przy `candidateAddresseeGender` model ma wykonać addressee-target check,
+- bez `candidateAddresseeGender` nie wolno proponować `target="addressee"`.
+
+### Deterministic guard
+
+`SurgicalGenderContextGuard` dla `target="addressee"` wymaga teraz jednocześnie:
+
+- confidence edycji >= 0.95,
+- `probableAddressee != null`,
+- probableAddressee != currentSpeaker,
+- eligible gender evidence **probableAddressee**,
+- kierunek odmiany zgodny z gender probableAddressee.
+
+Czyli np.:
+
+- resolved B=female: `zrobiłeś → zrobiłaś` może przejść,
+- resolved B=male: taka sama zmiana jest twardo odrzucona,
+- resolved B=male: `zrobiłaś → zrobiłeś` może przejść,
+- brak eligible evidence B: żadna automatyczna addressee correction nie przejdzie.
+
+### TDD 3.2
+
+RED:
+
+- testy wymagały nowego `probableAddresseeGenderEvidence`, którego produkcja nie miała — oczekiwany compile failure.
+
+GREEN:
+
+- `157/157` testów pass,
+- Argos helper build + smoke success,
+- Windows x64 publish success,
+- desktop startup smoke success,
+- Local Translator workflow success.
+
+Nowe/zmienione testy:
+
+- `tests/NapisyPL.Core.Tests/AddresseeGenderReviewSafetyTests.cs`
+- `tests/NapisyPL.Core.Tests/SurgicalGenderContextGuardTests.cs`
+- `tests/NapisyPL.Core.Tests/LocalTargetedGenderReviewAddresseeTests.cs`
 
 ## Referencyjny benchmark — Better Call Saul S01E02
 
-Plik używany do wszystkich ostatnich porównań:
+Plik:
 
 `Better.Call.Saul.S01E02.1080p.x264.EAC3-SURGE.mkv`
 
 Tryb:
 
-- base: Argos EN→PL
-- Enhanced: ON
-- reviewer: Qwen3.5-9B
-- backend: Vulkan
+- Argos EN→PL
+- Enhanced ON
+- Qwen3.5-9B
+- Vulkan
 
-Czysty referencyjny baseline SRT:
+Referencyjny czysty baseline:
 
 - 471 cue
 - 35,527 bytes
-- SHA-256: `8bd73dffe19cc0fb09bbe63cbcf983f615e05ffedeef3cf3501cbffaa4758407`
+- SHA-256 `8bd73dffe19cc0fb09bbe63cbcf983f615e05ffedeef3cf3501cbffaa4758407`
 
-### Historia regresji
+Benchmark 3.1.16:
 
-3.1.14 finalny SRT różnił się od baseline'u w 2 cue:
+- diarization cache hit, 641 segmentów,
+- 60 speakerów,
+- knownGenderCount=8,
+- Argos cache hit, 471 segmentów w około 9 ms,
+- candidateCount=100,
+- eligibleSpeakerCandidateCount=9,
+- knownAddresseeCandidateCount=1 — **cue 414**,
+- window 7 (`141,144,145,147,149`): Qwen proposed=5, completed=0, dropped=5,
+- final completed=0,
+- wynik byte-for-byte identyczny z baseline'em Argosa.
 
-- cue 141: `Chciałem...` → **błędne** `Chciałam...`
-- cue 437: `Myślałem...` → **błędne** `Myślałam...`
+Regresje, których nie wolno przywrócić:
 
-3.1.15:
+- cue 141 musi pozostać `Chciałem...`,
+- cue 437 musi pozostać `Myślałem...`.
 
-- cue 437 naprawione przez eligibility guard,
-- cue 141 nadal błędne.
-
-3.1.16, benchmark 2026-09-12 około 14:25 lokalnego czasu:
-
-- reviewer preload: ~`4869 ms`
-- diarization cache: `hit`, 641 segmentów
-- audio_extract_gender: ~`2945 ms`
-- speaker_gender: ~`2994 ms`
-- speakerCount: `60`
-- knownGenderCount: `8`
-- Argos translation cache: `hit`, 471 segmentów, ~`9 ms`
-- candidateCount: `100`
-- knownSpeakerCandidateCount: `10`
-- eligibleSpeakerCandidateCount: `9`
-- eligible speaker cue IDs: `99,141,144,145,147,149,168,238,412`
-- knownAddresseeCandidateCount: `1` (cue `414`)
-- gender review: ~`45359 ms`
-- final `completed=0`
-
-Najważniejsze mapowania:
-
-- cue 141 → `SPEAKER_43:male:984:3:true`
-- cue 144/145/147/149 → ten sam `SPEAKER_43`, male, eligible
-- cue 437 → `SPEAKER_01:unknown:0:3:false`
-- cue 12 → `SPEAKER_13:female:940:1:false`
-
-W window 7 (`141,144,145,147,149`) Qwen nadal zaproponował **5 edycji**, ale w 3.1.16 wszystkie zostały odrzucone:
-
-- `proposed=5`
-- `completed=0`
-- `dropped=5`
-- `dropContextGuard=2`
-- `dropApplyGuard=3`
-- `dropApplyInflection=3`
-
-Finalny 3.1.16 SRT jest **byte-for-byte identyczny z czystym baseline'em Argosa**:
-
-`SHA-256 8bd73dffe19cc0fb09bbe63cbcf983f615e05ffedeef3cf3501cbffaa4758407`
-
-Czyli obecny safety stack zapobiegł obu wcześniej zaobserwowanym regresjom: cue 141 pozostało `Chciałem...`, cue 437 pozostało `Myślałem...`.
-
-## Co obecnie wiemy
-
-1. **Diarization + mapping nie były przyczyną błędu 141.** Cue 141 prawidłowo trafia do `SPEAKER_43`, a classifier daje mocne male evidence.
-2. **Reviewer nadal bywa semantycznie zły.** W window 7 potrafi proponować edycje mimo jawnego male evidence.
-3. **Deterministic guards są konieczne i działają.** Bez nich 3.1.14/3.1.15 psuły poprawny Argos baseline.
-4. **Na referencyjnym odcinku nie udowodniliśmy jeszcze dodatniej wartości Enhanced.** 3.1.16 jest bezpieczny na tym benchmarku, ale kończy z `completed=0`; recall/realne poprawki nie są jeszcze zmierzone.
-5. Classifier jest konserwatywny: większość speakerów pozostaje `Unknown`; nie obniżać ponownie progów bez nowego, kontrolowanego benchmarku.
-6. Obecne `dropContextGuard` agreguje kilka powodów. Nie widać wprost w logu, czy konkretną edycję zatrzymał direction mismatch, ineligible evidence, target mismatch itd.
-7. Speaker-gender analysis nadal jest wykonywane ponownie przy każdym runie (~3 s klasyfikacji + extraction), mimo że diarization i Argos baseline są już cachowane.
+**Najciekawszy przypadek dla benchmarku 3.2: cue 414**, bo poprzednia diagnostyka wskazywała go jako jedyny known-addressee candidate. Trzeba sprawdzić, czy jego resolved addressee ma teraz eligible gender evidence i czy Qwen dostaje `candidateAddresseeGender`.
 
 ## Plan dalszych działań
 
-### P0 — zachować 3.1.16 jako safety baseline
+### P0 — utrzymać safety baseline
 
-Nie luzować obecnych guardów i nie obniżać classifier thresholds. Każda dalsza zmiana review ma przechodzić regression benchmark BCS S01E02 i nie może ponownie zmieniać cue 141/437 w złą stronę.
+Nie luzować guardów 3.1.15/3.1.16. Każda kolejna wersja musi przejść BCS S01E02 bez ponownego popsucia cue 141/437.
 
-### P1 — dokładniejsze reason codes dla odrzuconych edycji
+### P1 — benchmark 3.2 addressee-first
 
-Następny mały TDD safety/diagnostic pass:
+Uruchomić BCS S01E02 na nowym buildzie i zbadać:
 
-- rozbić `dropContextGuard` na privacy-safe powody, co najmniej:
-  - `ineligible_speaker_evidence`
-  - `speaker_gender_direction_mismatch`
-  - `target_mismatch`
-  - `missing_or_invalid_addressee`
-- logować cue ID + reason code, **bez tekstu napisów**.
+- czy cue 414 ma resolved probableAddressee,
+- czy adresat ma eligible gender evidence,
+- czy reviewer proponuje addressee-target edits,
+- czy którekolwiek poprawne zmiany faktycznie przechodzą,
+- czy finalny wynik zachowuje safety 141/437.
 
-Cel: wiedzieć dokładnie, które z 5 propozycji window 7 są błędnym kierunkiem, a które odpadają z innych powodów.
+Jeżeli log nie daje wystarczającej widoczności, dodać privacy-safe diagnostykę `candidateId:addresseeId:gender:confidence:samples:eligible`.
 
-### P2 — osobny micro-review lane dla known/eligible speaker candidates
+### P2 — lepszy resolver adresata + reason codes
 
-Zamiast dalej zwiększać agresywność ogólnego promptu:
+Obecny `DialogueAddresseeResolver` jest bardzo konserwatywny: głównie wzorzec `B -> A -> B`, do 2 cue i 8 sekund.
 
-1. Wykryć deterministycznie kandydatów, gdzie polska forma w baseline wygląda na gender-coded i jest sprzeczna z eligible speaker evidence.
-2. Tylko takie przypadki wysyłać do bardzo wąskiego requestu Qwena (najlepiej 1 candidate/request lub mała, jednoznaczna paczka).
-3. W promptcie podać wymagany docelowy gender wprost.
-4. Nadal przepuścić wynik przez obecne context + direction + inflection guards.
-5. Nie zmieniać baseline'u, jeśli deterministyczny pre-check nie wykazuje sprzeczności.
+Rozwinąć go stopniowo i mierzalnie, np. o:
 
-To powinno ograniczyć halucynacyjne propozycje typu `male → female` oraz zmniejszyć liczbę niepotrzebnych 20-window requestów.
+- dłuższe ciągi A/A vs B/B,
+- bezpieczne utrzymanie aktualnego partnera dialogowego,
+- rozpoznanie scen z dokładnie dwiema aktywnymi osobami,
+- reset partnera po zmianie sceny / dłuższej przerwie / wejściu trzeciej osoby.
 
-### P3 — golden benchmark corpus
+Dodać reason codes:
 
-BCS S01E02 jest dobrym regression testem dla false positives, ale nie wystarcza do mierzenia jakości.
+- `missing_addressee`
+- `ineligible_addressee_evidence`
+- `addressee_gender_direction_mismatch`
+- `target_mismatch`
+- analogiczne speaker reason codes dla drugorzędnego speaker-target lane.
 
-Przygotować mały, ręcznie oznaczony zestaw kilkudziesięciu cue z co najmniej:
+Logować tylko cue ID / speaker ID / reason, bez tekstu napisów.
 
-- poprawnym masculine baseline,
-- poprawnym feminine baseline,
-- celowo błędnym masculine→feminine,
-- celowo błędnym feminine→masculine,
-- speaker-target,
-- addressee-target,
-- third-person forms, które nie mogą być mylone ze speakerem,
-- neutralnymi formami, których nie należy zmieniać.
+### P3 — addressee-first micro-review
 
-Mierzyć osobno:
+Docelowo nie wysyłać 100 kandydatów w 20 ogólnych oknach.
 
-- false positive rate,
-- true corrections,
-- rejected correct proposals,
-- coverage classifiera.
+Najpierw deterministycznie znaleźć cue, które:
 
-Priorytet: **precision przed recall**. Jeden błędny automatyczny gender edit jest gorszy niż pozostawienie poprawnego/bazowego tłumaczenia bez zmiany.
+1. zawierają formę drugiej osoby zależną od rodzaju,
+2. mają resolved probableAddressee,
+3. adresat ma eligible gender evidence,
+4. obecna polska forma wygląda na sprzeczną z gender adresata.
 
-### P4 — cache speaker-gender evidence
+Dopiero wtedy wysłać bardzo wąski request Qwena — najlepiej 1 candidate/request lub małą jednoznaczną paczkę — a odpowiedź ponownie przepuścić przez wszystkie guardy.
 
-Po ustabilizowaniu correctness można dodać cache wyników acoustic gender evidence, keyed przynajmniej przez:
+To jest główny plan jakościowy 3.2+, nie dalsze agresywne promptowanie speaker gender.
 
-- identyfikację pliku/audio,
-- diarization/model revision,
-- classifier model revision,
-- sampling/threshold schema version.
+### P4 — golden corpus skupiony na adresacie
 
-Potencjalna oszczędność na obecnym benchmarku: kilka sekund na każdy kolejny run. Nie robić tego przed P1/P2, żeby optymalizacja nie utrudniła diagnostyki correctness.
+Przygotować ręcznie oznaczony zestaw obejmujący przede wszystkim:
 
-### P5 — addressee lane później
+- `zrobiłeś/zrobiłaś`,
+- `byłeś/byłaś`,
+- drugioosobowe przymiotniki i imiesłowy,
+- poprawny male addressee,
+- poprawny female addressee,
+- celowo błędny kierunek w obie strony,
+- brak pewnego adresata,
+- rozmowę 3+ osób,
+- speaker-target first-person jako kontrolę,
+- third-person jako kontrolę negatywną.
 
-Addressee correction zostawić bardziej konserwatywną niż speaker correction. Obecnie wymaga wysokiego confidence i resolved probableAddressee. Najpierw ustabilizować speaker micro-review i benchmark corpus.
+Mierzyć precision, true corrections, rejected correct proposals i addressee-resolution coverage. Priorytet: **precision przed recall**.
+
+### P5 — video tylko jeśli identity/addressee resolution pozostanie bottleneckiem
+
+Jeśli audio + turn-taking nie wystarczą do ustalenia, kto jest adresatem, można używać krótkiego klipu wokół problematycznego cue i active-speaker / face tracking do ustalenia uczestników sceny oraz kto aktualnie mówi.
+
+**Nie używać obrazu do zgadywania płci osoby po wyglądzie.** Video ma pomagać w relacji `kto mówi / kto jest rozmówcą`, a gender profilu nadal powinien pochodzić z kontrolowanego evidence lub jednoznacznego kontekstu.
+
+Nie analizować całego filmu klatka-po-klatce, dopóki benchmark nie pokaże, że resolver adresata jest głównym ograniczeniem.
+
+### P6 — cache acoustic gender evidence
+
+Dopiero po ustabilizowaniu correctness. Cache powinien uwzględniać plik/audio, diarization/model revision, classifier revision i sampling/threshold schema version.
 
 ## Ważne pliki
 
-- `src/NapisyPL.Core/Services/EnhancedTranslationPipeline.cs`
-- `src/NapisyPL.Core/Services/EnhancedTranslationCache.cs`
-- `src/NapisyPL.Core/ContextResolution/LocalTargetedGenderReviewService.cs`
+- `src/NapisyPL.Core/ContextResolution/DialogueAddresseeResolver.cs`
 - `src/NapisyPL.Core/ContextResolution/TargetedGenderReviewProtocol.cs`
+- `src/NapisyPL.Core/ContextResolution/LocalTargetedGenderReviewService.cs`
 - `src/NapisyPL.Core/ContextResolution/SurgicalGenderEditProtocol.cs`
 - `src/NapisyPL.Core/ContextResolution/SpeakerGenderEvidence.cs`
 - `src/NapisyPL.Core/ContextResolution/SpeakerVoiceGenderService.cs`
-- `src/NapisyPL.Core/ContextResolution/GenderReviewCoverageDiagnostics.cs`
 - `src/NapisyPL.Core/ContextResolution/GenderReviewCandidateSelector.cs`
-- `src/NapisyPL.Core/ContextResolution/DialogueAddresseeResolver.cs`
+- `src/NapisyPL.Core/ContextResolution/GenderReviewCoverageDiagnostics.cs`
+- `src/NapisyPL.Core/Services/EnhancedTranslationPipeline.cs`
+- `src/NapisyPL.Core/Services/EnhancedTranslationCache.cs`
 - `src/NapisyPL.Core/Diagnostics/AppLogger.cs`
-
-Najważniejsze testy:
-
-- `tests/NapisyPL.Core.Tests/SpeakerGenderReviewSafetyTests.cs`
-- `tests/NapisyPL.Core.Tests/SurgicalGenderContextGuardTests.cs`
-- `tests/NapisyPL.Core.Tests/TargetedGenderReviewTests.cs`
-- `tests/NapisyPL.Core.Tests/GenderReviewCoverageDiagnosticsTests.cs`
-- `tests/NapisyPL.Core.Tests/LocalTargetedGenderReviewDiagnosticsTests.cs`
 
 ## Kluczowe milestone commits
 
-- 3.1.12 acoustic reviewer prompt: `2c1e6a9b4b9e10aa59c305b9b27be5f2980ddfd7`
-- 3.1.13 Argos cache + review coverage: branch kończył tę fazę na `fc57b6ca415a2b34ce7fcb58edfe30d55d31c20e`
-- 3.1.14 explicit candidate speaker gender prompt: `3a33847e34c5bc5932e2a830cd232e7fa3041980`
-- 3.1.15 speaker safety + eligibility diagnostics: `2cbc86c1c7d04e35f2904732abe8f596ce48bd17`
+- 3.1.12 acoustic reviewer: `2c1e6a9b4b9e10aa59c305b9b27be5f2980ddfd7`
+- 3.1.13 Argos cache + coverage: `fc57b6ca415a2b34ce7fcb58edfe30d55d31c20e`
+- 3.1.14 explicit speaker signal: `3a33847e34c5bc5932e2a830cd232e7fa3041980`
+- 3.1.15 speaker safety/eligibility: `2cbc86c1c7d04e35f2904732abe8f596ce48bd17`
 - 3.1.16 direction guard: `19b3987310db5bdc844518721c30c84be0757f5c`
+- 3.2 addressee-first foundation: `e0ca55a0328fbda385c06857134cb70ae614ac8f`
 
-## Zasady pracy przy kontynuacji
+## Zasady kontynuacji
 
-1. Strict TDD: RED test commit/run → minimal production change → GREEN full suite.
-2. Przy każdym safety bugfixie najpierw reprodukcja testem, nie prompt-tuning „na oko”.
-3. Po GREEN uruchomić pełny CI i osobny Local Translator workflow.
-4. Windows build przekazywać dopiero po CI + startup smoke + weryfikacji SHA-256 artefaktu.
-5. Benchmark lokalny: preferowany `Argos + Enhanced + Qwen3.5-9B + Vulkan`.
-6. Nie logować tekstu napisów ani audio; diagnostyka tylko IDs, speaker IDs, confidence, sampleCount, reason codes.
+1. Strict TDD: RED → potwierdzony fail → minimal production change → pełny GREEN.
+2. Nie mieszać zmian classifier thresholds z reviewer/resolver behavior w jednym benchmarku.
+3. Nie logować treści napisów ani audio; tylko IDs, confidence, sampleCount, eligibility, reason codes.
+4. Każda automatyczna korekta addressee ma być autoryzowana przez resolved addressee, nie current speaker.
+5. Po kodzie: pełny CI + Local Translator + Windows startup smoke.
+6. Preferowany benchmark: `Argos + Enhanced + Qwen3.5-9B + Vulkan`.
 7. Nie merge'ować draft PR #2 bez jawnej zgody użytkownika.
-8. Nie zmieniać równocześnie classifier thresholds i reviewer behavior — benchmarki mają izolować jedną zmienną naraz.
 
-## Najbliższy sensowny następny krok
+## Najbliższy krok
 
-**P1: reason-coded context guard diagnostics**, a zaraz po nim **P2: micro-review lane dla eligible speaker contradictions**.
-
-3.1.16 należy traktować jako aktualny bezpieczny checkpoint: na referencyjnym BCS S01E02 Enhanced nie poprawia jeszcze niczego, ale również nie psuje już poprawnego baseline'u Argosa.
+**Benchmark 3.2 na BCS S01E02, ze szczególną obserwacją cue 414.** Następnie — zależnie od wyniku — privacy-safe addressee diagnostics i addressee-first micro-review/resolver improvements.
