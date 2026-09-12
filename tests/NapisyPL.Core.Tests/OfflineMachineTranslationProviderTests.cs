@@ -48,7 +48,7 @@ public sealed class OfflineMachineTranslationProviderTests
             ["<i>- Yeah, sí, problema.</i>", "<i>- And now dos problemas.</i>"],
             client.LastTexts);
         Assert.Equal(
-            "<i>- Tak, sí, problema.</i>\n<i>- A teraz dos problemas.</i>",
+            "<i>- Tak, sí, problema.</i> <i>- A teraz dos problemas.</i>",
             result[30]);
     }
 
