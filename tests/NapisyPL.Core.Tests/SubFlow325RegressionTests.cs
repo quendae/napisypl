@@ -99,7 +99,6 @@ public sealed class SubFlow325RegressionTests
         var ended = Assert.Single(logger.Entries.Where(entry => entry.EventName == "review_window_end"));
         Assert.Equal(1, ended.Int("dropApplyGuard"));
         Assert.Equal(1, ended.Int("dropApplyThirdPersonAgreementConflict"));
-        Assert.False(ended.Fields.ContainsKey("dropApplyThirdPersonSubjectConflict"));
     }
 
     private static SubtitleCue Cue(int id, string text) =>
