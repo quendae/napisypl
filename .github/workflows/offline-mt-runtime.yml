@@ -35,6 +35,13 @@ jobs:
           git -C $sentencepiece apply $msvcPatch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          $pcrePatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/ssplit-pcre2-cmake-policy.patch").Path
+          $ssplit = Join-Path $source "3rd_party/ssplit-cpp"
+          git -C $ssplit apply --check $pcrePatch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C $ssplit apply $pcrePatch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           Copy-Item "tools/offline-mt/bergamot-helper" (Join-Path $source "subflow-helper") -Recurse
           Add-Content (Join-Path $source "CMakeLists.txt") "`nadd_subdirectory(subflow-helper)"
           "BERGAMOT_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
