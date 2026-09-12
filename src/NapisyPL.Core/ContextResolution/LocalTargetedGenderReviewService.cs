@@ -210,7 +210,14 @@ public sealed class LocalTargetedGenderReviewService(
                     continue;
                 }
 
-                if (!SurgicalGenderContextGuard.CanApply(edit, currentSpeaker, probableAddressee))
+                SpeakerGenderEvidence? currentSpeakerGenderEvidence = null;
+                speakerGenderEvidence?.TryGetValue(currentSpeaker!, out currentSpeakerGenderEvidence);
+
+                if (!SurgicalGenderContextGuard.CanApply(
+                        edit,
+                        currentSpeaker,
+                        probableAddressee,
+                        currentSpeakerGenderEvidence))
                 {
                     dropped++;
                     droppedContextGuard++;
