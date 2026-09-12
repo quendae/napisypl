@@ -74,6 +74,22 @@ public static class TargetedGenderReviewProtocol
             };
         }).ToArray();
 
+        var mandatoryAddresseeChecks = lines
+            .Where(line =>
+                line.candidate &&
+                !string.IsNullOrWhiteSpace(line.probableAddressee) &&
+                !string.IsNullOrWhiteSpace(line.candidateAddresseeGender))
+            .Select(line => new
+            {
+                line.id,
+                line.probableAddressee,
+                line.candidateAddresseeGender,
+                line.candidateAddresseeGenderConfidence,
+                line.source,
+                line.polish
+            })
+            .ToArray();
+
         var relevantSpeakerIds = lines
             .Where(line => line.candidate)
             .SelectMany(line => new[] { line.speaker, line.probableAddressee })
@@ -132,6 +148,9 @@ public static class TargetedGenderReviewProtocol
         IMPORTANT KNOWN-ADDRESSEE CHECK:
         - probableAddressee is computed by the application only when conservative turn-taking heuristics resolve one likely listener: a strong B -> A -> B sandwich, a quick next-speaker reply inside a two-speaker window, or a stable two-speaker dialogue partner.
         - candidateAddresseeGender is the eligible gender of the probableAddressee, learned from that person's own diarized speech elsewhere; it is NOT the gender of the current speaker.
+        - mandatoryAddresseeChecks is a short priority list containing ONLY candidate lines whose probable addressee already passed the application's acoustic safety gate.
+        - BEFORE reviewing the remaining candidates, inspect EVERY item in mandatoryAddresseeChecks word-by-word for second-person Polish forms whose grammatical gender conflicts with candidateAddresseeGender.
+        - Do not skip an item merely because the English source is gender-neutral. Forms such as zrobiłeś/zrobiłaś, byłeś/byłaś, chciałeś/chciałaś and zapomniałeś/zapomniałaś encode the listener's gender in Polish.
         - For EVERY candidate with probableAddressee non-null and candidateAddresseeGender="male" or "female", you MUST perform the addressee-target check before deciding that no edit is needed.
         - Compare second-person Polish forms in the candidate against the gender of the probableAddressee.
         - If a form directly addressing the listener clearly encodes the opposite gender, return the smallest exact replacement with target="addressee".
@@ -160,6 +179,9 @@ public static class TargetedGenderReviewProtocol
         - Give confidence >= 0.95 only when an addressee-target correction is strongly supported.
         - If nothing should change, return [].
         - No explanations or chain of thought.
+
+        mandatoryAddresseeChecks:
+        {{JsonSerializer.Serialize(mandatoryAddresseeChecks, JsonOptions)}}
 
         candidateIds:
         {{JsonSerializer.Serialize(candidateIds.OrderBy(id => id).ToArray(), JsonOptions)}}
