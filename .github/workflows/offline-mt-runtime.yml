@@ -29,6 +29,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $msvcPatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/sentencepiece-modern-msvc.patch").Path
+          git -C $source apply --check $msvcPatch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git -C $source apply $msvcPatch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
