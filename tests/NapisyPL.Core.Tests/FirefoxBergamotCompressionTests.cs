@@ -15,4 +15,14 @@ public sealed class FirefoxBergamotCompressionTests
 
         Assert.Equal("SubFlow Firefox Bergamot zstd test", Encoding.UTF8.GetString(decompressed));
     }
+
+    [Fact]
+    public void DecompressZstd_WithExpectedSize_RejectsFrameThatWouldExceedLimit()
+    {
+        var compressed = Convert.FromBase64String(
+            "KLUv/SQiEQEAU3ViRmxvdyBGaXJlZm94IEJlcmdhbW90IHpzdGQgdGVzdAj6KbQ=");
+
+        Assert.Throws<InvalidDataException>(() =>
+            FirefoxBergamotCompression.DecompressZstd(compressed, expectedDecompressedSize: 8));
+    }
 }
