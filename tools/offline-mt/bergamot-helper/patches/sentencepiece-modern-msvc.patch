@@ -1,7 +1,7 @@
 diff --git a/third_party/protobuf-lite/google/protobuf/stubs/hash.h b/third_party/protobuf-lite/google/protobuf/stubs/hash.h
 --- a/third_party/protobuf-lite/google/protobuf/stubs/hash.h
 +++ b/third_party/protobuf-lite/google/protobuf/stubs/hash.h
-@@ -235,9 +235,9 @@ class hash_set : public std::set<Key, HashFcn> {
+@@ -235,8 +235,8 @@ class hash_set : public std::set<Key, HashFcn> {
    HashFcn hash_function() const { return HashFcn(); }
  };
  
