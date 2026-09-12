@@ -259,7 +259,10 @@ public sealed class EnhancedTranslationPipeline(
             ("knownSpeakerCandidateCount", coverage.KnownSpeakerCandidateCount),
             ("knownAddresseeCandidateCount", coverage.KnownAddresseeCandidateCount),
             ("knownSpeakerCandidateIds", string.Join(",", coverage.KnownSpeakerCandidateIds)),
-            ("knownAddresseeCandidateIds", string.Join(",", coverage.KnownAddresseeCandidateIds)));
+            ("knownAddresseeCandidateIds", string.Join(",", coverage.KnownAddresseeCandidateIds)),
+            ("eligibleSpeakerCandidateCount", coverage.EligibleSpeakerCandidateCount),
+            ("eligibleSpeakerCandidateIds", string.Join(",", coverage.EligibleSpeakerCandidateIds)),
+            ("speakerCandidateEvidence", coverage.SpeakerCandidateEvidence));
 
         var batches = GenderReviewCandidateSelector.BuildReviewBatches(
             source,
@@ -283,7 +286,10 @@ public sealed class EnhancedTranslationPipeline(
                 ("knownSpeakerCandidateCount", windowCoverage.KnownSpeakerCandidateCount),
                 ("knownAddresseeCandidateCount", windowCoverage.KnownAddresseeCandidateCount),
                 ("knownSpeakerCandidateIds", string.Join(",", windowCoverage.KnownSpeakerCandidateIds)),
-                ("knownAddresseeCandidateIds", string.Join(",", windowCoverage.KnownAddresseeCandidateIds)));
+                ("knownAddresseeCandidateIds", string.Join(",", windowCoverage.KnownAddresseeCandidateIds)),
+                ("eligibleSpeakerCandidateCount", windowCoverage.EligibleSpeakerCandidateCount),
+                ("eligibleSpeakerCandidateIds", string.Join(",", windowCoverage.EligibleSpeakerCandidateIds)),
+                ("speakerCandidateEvidence", windowCoverage.SpeakerCandidateEvidence));
         }
     }
 
