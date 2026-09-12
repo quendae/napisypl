@@ -130,7 +130,7 @@ public static class TargetedGenderReviewProtocol
         - If the Polish candidate already matches candidateSpeakerGender, or the form is genuinely gender-neutral, return no speaker edit for that form.
 
         IMPORTANT KNOWN-ADDRESSEE CHECK:
-        - probableAddressee is computed by the application only when turn-taking strongly looks like B -> A -> B.
+        - probableAddressee is computed by the application only when conservative turn-taking heuristics resolve one likely listener: a strong B -> A -> B sandwich, a quick next-speaker reply inside a two-speaker window, or a stable two-speaker dialogue partner.
         - candidateAddresseeGender is the eligible gender of the probableAddressee, learned from that person's own diarized speech elsewhere; it is NOT the gender of the current speaker.
         - For EVERY candidate with probableAddressee non-null and candidateAddresseeGender="male" or "female", you MUST perform the addressee-target check before deciding that no edit is needed.
         - Compare second-person Polish forms in the candidate against the gender of the probableAddressee.
