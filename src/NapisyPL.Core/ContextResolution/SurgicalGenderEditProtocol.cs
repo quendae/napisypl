@@ -99,13 +99,17 @@ public static class SurgicalGenderEditProtocol
 public static class SurgicalGenderContextGuard
 {
     private const double MinimumAddresseeConfidence = 0.95;
+    private static readonly Regex ExplicitThirdPersonSubjectRegex = new(
+        @"(?<!\p{L})(?:on|ona|ono|oni|one)(?!\p{L})",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public static bool CanApply(
         SurgicalGenderEdit edit,
         string? currentSpeaker,
         string? probableAddressee,
         SpeakerGenderEvidence? currentSpeakerGenderEvidence = null,
-        SpeakerGenderEvidence? probableAddresseeGenderEvidence = null)
+        SpeakerGenderEvidence? probableAddresseeGenderEvidence = null,
+        string? currentPolishText = null)
     {
         if (string.IsNullOrWhiteSpace(currentSpeaker) || edit.Target == GenderAgreementTarget.Unknown)
             return false;
@@ -124,9 +128,33 @@ public static class SurgicalGenderContextGuard
                 !string.IsNullOrWhiteSpace(probableAddressee) &&
                 !string.Equals(currentSpeaker, probableAddressee, StringComparison.Ordinal) &&
                 SpeakerGenderReviewEligibility.IsEligible(probableAddresseeGenderEvidence) &&
-                SpeakerGenderEditDirectionGuard.IsCompatible(edit, probableAddresseeGenderEvidence),
+                SpeakerGenderEditDirectionGuard.IsCompatible(edit, probableAddresseeGenderEvidence) &&
+                !HasExplicitThirdPersonSubjectInCurrentClause(edit, currentPolishText),
             _ => false
         };
+    }
+
+    private static bool HasExplicitThirdPersonSubjectInCurrentClause(
+        SurgicalGenderEdit edit,
+        string? currentPolishText)
+    {
+        if (string.IsNullOrWhiteSpace(currentPolishText))
+            return false;
+
+        var findIndex = currentPolishText.IndexOf(edit.Find, StringComparison.Ordinal);
+        if (findIndex <= 0)
+            return false;
+
+        var clauseStart = 0;
+        foreach (var boundary in new[] { ',', '.', ';', ':', '!', '?', '\n', '\r' })
+        {
+            var boundaryIndex = currentPolishText.LastIndexOf(boundary, findIndex - 1);
+            if (boundaryIndex >= clauseStart)
+                clauseStart = boundaryIndex + 1;
+        }
+
+        var prefix = currentPolishText[clauseStart..findIndex];
+        return ExplicitThirdPersonSubjectRegex.IsMatch(prefix);
     }
 }
 
