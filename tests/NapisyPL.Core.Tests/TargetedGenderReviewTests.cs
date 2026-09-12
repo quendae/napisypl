@@ -25,16 +25,22 @@ public sealed class TargetedGenderReviewTests
     [Fact]
     public async Task ReviewAsync_AppliesOnlySurgicalEditsInsideCandidateIds()
     {
-        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłem gotowy\",\"replace\":\"Byłam gotowa\",\"confidence\":0.97,\"target\":\"speaker\"},{\"id\":2,\"find\":\"Dobrze\",\"replace\":\"Źle\",\"confidence\":0.99,\"target\":\"speaker\"}]"},"finish_reason":"stop"}]}""");
+        var handler = new CountingHandler("""{"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Byłem gotowy\",\"replace\":\"Byłam gotowa\",\"confidence\":0.97,\"target\":\"speaker\"},{\"id\":2,\"find\":\"Dobrze\",\"replace\":\"Źle\",\"confidence\":0.99,\"target\":\"speaker\"}]"},\"finish_reason\":\"stop\"}]}""");
         using var http = new HttpClient(handler);
         var service = new LocalTargetedGenderReviewService(http, "http://127.0.0.1:17843/v1", "qwen3-1.7b");
         var source = new[] { Cue(1, "I was ready."), Cue(2, "Okay.") };
         var translated = new[] { Cue(1, "Byłem gotowy."), Cue(2, "Dobrze.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_01" };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.97, 2)
+        };
 
         var result = await service.ReviewAsync(
             source,
             translated,
-            new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_01" });
+            speakers,
+            speakerGenderEvidence: evidence);
 
         Assert.Equal("Byłam gotowa.", result[0].Text);
         Assert.Equal("Dobrze.", result[1].Text);
