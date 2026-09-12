@@ -47,8 +47,7 @@ public sealed class FirefoxBergamotInstallerTests
         var root = Path.Combine(Path.GetTempPath(), "subflow-firefox-installer-" + Guid.NewGuid().ToString("N"));
         var backendDirectory = Path.Combine(root, "bergamot-firefox");
         var assetManager = new OfflineMtAssetManager(backendDirectory);
-        var fixture = CreateFixture();
-        fixture.Descriptor.Model.DownloadSha256 = new string('0', 64);
+        var fixture = CreateFixture(corruptModelTransportHash: true);
         var installer = new FirefoxBergamotAssetManager(
             assetManager,
             (url, _) => Task.FromResult(fixture.Downloads[url]),
@@ -68,7 +67,7 @@ public sealed class FirefoxBergamotInstallerTests
         }
     }
 
-    private static Fixture CreateFixture()
+    private static Fixture CreateFixture(bool corruptModelTransportHash = false)
     {
         var modelRaw = Encoding.UTF8.GetBytes("raw-model");
         var vocabRaw = Encoding.UTF8.GetBytes("raw-vocab");
@@ -86,7 +85,14 @@ public sealed class FirefoxBergamotInstallerTests
             SourceLanguage = "en",
             TargetLanguage = "pl",
             ModelVersion = "3.0",
-            Model = Asset("model", "model.enpl.bin", "transport-model.zst", modelUrl, modelRaw, modelCompressed),
+            Model = Asset(
+                "model",
+                "model.enpl.bin",
+                "transport-model.zst",
+                modelUrl,
+                modelRaw,
+                modelCompressed,
+                corruptModelTransportHash ? new string('0', 64) : null),
             SourceVocab = Asset("vocab", "vocab.enpl.spm", "transport-vocab.zst", vocabUrl, vocabRaw, vocabCompressed),
             TargetVocab = Asset("vocab", "vocab.enpl.spm", "transport-vocab.zst", vocabUrl, vocabRaw, vocabCompressed),
             Shortlist = Asset("lex", "lex.enpl.bin", "transport-lex.zst", lexUrl, lexRaw, lexCompressed),
@@ -117,14 +123,15 @@ public sealed class FirefoxBergamotInstallerTests
         string downloadFileName,
         string url,
         byte[] raw,
-        byte[] compressed) => new()
+        byte[] compressed,
+        string? downloadSha256Override = null) => new()
     {
         FileType = fileType,
         FileName = fileName,
         Url = url,
         Sha256 = Sha256(raw),
         SizeBytes = raw.LongLength,
-        DownloadSha256 = Sha256(compressed),
+        DownloadSha256 = downloadSha256Override ?? Sha256(compressed),
         DownloadSizeBytes = compressed.LongLength,
         DownloadFileName = downloadFileName,
         IsZstdCompressed = true,
