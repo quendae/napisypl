@@ -34,11 +34,27 @@ public static class TargetedGenderReviewProtocol
                                     probableAddressees.TryGetValue(pair.First.Index, out var resolvedAddressee)
                 ? resolvedAddressee
                 : null;
+
+            string? candidateSpeakerGender = null;
+            double? candidateSpeakerGenderConfidence = null;
+            if (isCandidate &&
+                !string.IsNullOrWhiteSpace(speaker) &&
+                speakerGenderEvidence is not null &&
+                speakerGenderEvidence.TryGetValue(speaker, out var candidateEvidence) &&
+                candidateEvidence.Gender != SpeakerVoiceGender.Unknown &&
+                candidateEvidence.Confidence >= 0.85)
+            {
+                candidateSpeakerGender = candidateEvidence.Gender.ToString().ToLowerInvariant();
+                candidateSpeakerGenderConfidence = Math.Round(candidateEvidence.Confidence, 3);
+            }
+
             return new
             {
                 id = pair.First.Index,
                 candidate = isCandidate,
                 speaker,
+                candidateSpeakerGender,
+                candidateSpeakerGenderConfidence,
                 probableAddressee,
                 source = pair.First.Text,
                 polish = pair.Second.Text
@@ -83,6 +99,16 @@ public static class TargetedGenderReviewProtocol
         - Never derive gender yourself from voice pitch, speaker number, a name, stereotypes, or acoustic impressions beyond this supplied classifier result.
         - For a speaker-target correction, known male/female speakerGenderEvidence with confidence >= 0.85 is sufficient on its own without explicit dialogue confirmation when the current Polish form clearly uses the opposite grammatical gender and there is no conflicting context evidence.
         - If supplied acoustic evidence conflicts with explicit dialogue evidence or remains uncertain, return no edit.
+
+        IMPORTANT KNOWN-SPEAKER CHECK:
+        - candidateSpeakerGender is copied directly onto a candidate when that candidate's own speaker has known male/female acoustic evidence with confidence >= 0.85.
+        - For EVERY candidate with candidateSpeakerGender="male" or "female", you MUST perform the speaker-target check before deciding that no edit is needed.
+        - Compare the current Polish candidate line against candidateSpeakerGender. Check past-tense verbs, conditional/person forms, adjectives, participles and other Polish forms that grammatically describe the speaker.
+        - If a speaker-describing Polish form clearly encodes the opposite gender, return the smallest exact replacement with target="speaker".
+        - A gender-neutral English source is not a reason to abstain. English often omits speaker gender where Polish grammar requires it.
+        - Do NOT require an English pronoun, title, relationship word or other textual gender confirmation when candidateSpeakerGender is present.
+        - If the Polish candidate already matches candidateSpeakerGender, or the form is genuinely gender-neutral, return no speaker edit for that form.
+        - This mandatory check does not weaken any output-format, confidence, minimal-edit or application-safety rule below.
 
         probableAddressee is computed by the application only when turn-taking strongly looks like B -> A -> B.
         For target="addressee":
