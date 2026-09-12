@@ -13,6 +13,7 @@ public sealed class AppLogger : IAppLogger
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
         "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",
         "knownSpeakerCandidateCount", "knownAddresseeCandidateCount", "knownSpeakerCandidateIds", "knownAddresseeCandidateIds",
+        "eligibleSpeakerCandidateCount", "eligibleSpeakerCandidateIds", "speakerCandidateEvidence",
         "genderSampleCount", "maleTagSampleCount", "femaleTagSampleCount", "anyGenderTagSampleCount",
         "maleScoreMaxPermille", "femaleScoreMaxPermille", "combinedScoreMeanPermille", "combinedScoreMaxPermille",
         "speaker", "sampleCount", "voiceGender", "maleMeanPermille", "femaleMeanPermille",
