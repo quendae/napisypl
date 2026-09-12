@@ -19,6 +19,18 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
     private bool _disposed;
 
     public FirefoxBergamotTranslatorClient(
+        HttpClient httpClient,
+        OfflineMtAssetManager assets,
+        BergamotRuntimeManager runtime)
+        : this(
+            assets,
+            runtime,
+            CreateResolver(httpClient),
+            CreateInstaller(httpClient, assets))
+    {
+    }
+
+    public FirefoxBergamotTranslatorClient(
         OfflineMtAssetManager assets,
         BergamotRuntimeManager runtime,
         Func<string, string, CancellationToken, Task<BergamotModelDescriptor>> resolveModelAsync,
@@ -131,6 +143,28 @@ public sealed class FirefoxBergamotTranslatorClient : IOfflineMachineTranslatorC
         {
             return null;
         }
+    }
+
+    private static Func<string, string, CancellationToken, Task<BergamotModelDescriptor>> CreateResolver(
+        HttpClient httpClient)
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+        var remoteSettings = new FirefoxRemoteSettingsClient(httpClient);
+        return remoteSettings.ResolveModelAsync;
+    }
+
+    private static Func<BergamotModelDescriptor, CancellationToken, Task> CreateInstaller(
+        HttpClient httpClient,
+        OfflineMtAssetManager assets)
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(assets);
+        var installer = new FirefoxBergamotAssetManager(
+            assets,
+            async (url, cancellationToken) =>
+                await httpClient.GetByteArrayAsync(new Uri(url, UriKind.Absolute), cancellationToken),
+            FirefoxBergamotCompression.DecompressZstd);
+        return installer.InstallResolvedModelAsync;
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
