@@ -1,6 +1,6 @@
-diff --git a/3rd_party/marian-dev/src/3rd_party/sentencepiece/third_party/protobuf-lite/google/protobuf/stubs/hash.h b/3rd_party/marian-dev/src/3rd_party/sentencepiece/third_party/protobuf-lite/google/protobuf/stubs/hash.h
---- a/3rd_party/marian-dev/src/3rd_party/sentencepiece/third_party/protobuf-lite/google/protobuf/stubs/hash.h
-+++ b/3rd_party/marian-dev/src/3rd_party/sentencepiece/third_party/protobuf-lite/google/protobuf/stubs/hash.h
+diff --git a/third_party/protobuf-lite/google/protobuf/stubs/hash.h b/third_party/protobuf-lite/google/protobuf/stubs/hash.h
+--- a/third_party/protobuf-lite/google/protobuf/stubs/hash.h
++++ b/third_party/protobuf-lite/google/protobuf/stubs/hash.h
 @@ -238 +238 @@
 -#elif defined(_MSC_VER) && !defined(_STLPORT_VERSION) && \
 +#elif defined(_MSC_VER) && _MSC_VER < 1600 && !defined(_STLPORT_VERSION) && \
