@@ -1,0 +1,14 @@
+diff --git a/cmake/FindPCRE2.cmake b/cmake/FindPCRE2.cmake
+--- a/cmake/FindPCRE2.cmake
++++ b/cmake/FindPCRE2.cmake
+@@ -45,10 +45,11 @@
+   set(PCRE2_CONFIGURE_OPTIONS
+     -DBUILD_SHARED_LIBS=OFF
+     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+     -DCMAKE_BUILD_TYPE=Release
++    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+     -DCMAKE_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+     ${PCRE2_JIT_OPTION}
+     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} # Necessary for proper MacOS compilation
+     -DCMAKE_CROSSCOMPILING_EMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR_WITH_SEMICOLON} # Necessary for proper MacOS compilation
+     -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=true # Added for pybind11
