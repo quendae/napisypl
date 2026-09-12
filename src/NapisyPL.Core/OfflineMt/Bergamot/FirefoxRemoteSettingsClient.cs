@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Text;
 
 namespace NapisyPL.Core.OfflineMt.Bergamot;
 
@@ -35,9 +37,22 @@ public sealed class FirefoxRemoteSettingsClient
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         response.EnsureSuccessStatusCode();
-        var registryJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var registryJson = await ReadResponseTextAsync(response.Content, cancellationToken);
 
         return FirefoxBergamotModelResolver.Resolve(registryJson, sourceLanguage, targetLanguage);
+    }
+
+    private static async Task<string> ReadResponseTextAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        var bytes = await content.ReadAsByteArrayAsync(cancellationToken);
+        if (!content.Headers.ContentEncoding.Any(encoding =>
+                string.Equals(encoding, "gzip", StringComparison.OrdinalIgnoreCase)))
+            return Encoding.UTF8.GetString(bytes);
+
+        await using var input = new MemoryStream(bytes, writable: false);
+        await using var gzip = new GZipStream(input, CompressionMode.Decompress, leaveOpen: false);
+        using var reader = new StreamReader(gzip, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(cancellationToken);
     }
 
     private static Uri NormalizeBaseUri(Uri uri)
