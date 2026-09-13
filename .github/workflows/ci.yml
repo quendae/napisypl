@@ -78,6 +78,25 @@ jobs:
           if ($null -eq $segment -or [string]::IsNullOrWhiteSpace($segment.text)) { throw 'Argos helper did not return translated text.' }
           Write-Host "Argos smoke translation: $($segment.text)"
 
+      - name: Build Bergamot helper
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "bergamot-translator"
+          $build = Join-Path $env:RUNNER_TEMP "bergamot-build"
+          & ./tools/offline-mt/build-bergamot-helper.ps1 `
+            -SourceDirectory $source `
+            -BuildDirectory $build `
+            -OutputPath "dist/SubFlow.BergamotHelper.exe"
+
+      - name: Smoke test Bergamot helper
+        shell: pwsh
+        run: |
+          $output = '{"type":"shutdown"}' | & .\dist\SubFlow.BergamotHelper.exe 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if ($exitCode -ne 0) { throw "Bergamot helper smoke test failed with exit code $exitCode" }
+          Get-Item dist/SubFlow.BergamotHelper.exe | Select-Object Name,Length
+
       - name: Publish Windows x64
         shell: pwsh
         run: |
@@ -89,6 +108,9 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -o artifacts/win-x64
           Copy-Item dist/SubFlow.ArgosHelper.exe artifacts/win-x64/SubFlow.ArgosHelper.exe
+          Copy-Item dist/SubFlow.BergamotHelper.exe artifacts/win-x64/SubFlow.BergamotHelper.exe
+          if (-not (Test-Path artifacts/win-x64/SubFlow.ArgosHelper.exe)) { throw 'SubFlow.ArgosHelper.exe missing from Windows package.' }
+          if (-not (Test-Path artifacts/win-x64/SubFlow.BergamotHelper.exe)) { throw 'SubFlow.BergamotHelper.exe missing from Windows package.' }
 
       - name: Smoke test desktop startup
         shell: pwsh
