@@ -81,8 +81,28 @@ async Task SmokeOpusAsync()
     Console.WriteLine("SMOKE OPUS-MT/Marian start");
     await client.EnsureReadyAsync(progress);
     DumpConfigIfPresent(directory, "OPUS-MT/Marian");
-    var output = await client.TranslateAsync(["Hello, how are you?"]);
-    AssertTranslation("OPUS-MT/Marian", output);
+
+    var probe = await client.TranslateAsync(["Hello, how are you?"]);
+    AssertTranslation("OPUS-MT/Marian", probe);
+    AssertPlausibleOpusTranslation(probe[0]);
+
+    // The desktop subtitle pipeline expands one subtitle batch into more helper segments
+    // (dialogue lines, formatting spans, etc.). Exercise the same order of magnitude as
+    // the real-world failure where 40 subtitle cues became 66 native translation requests.
+    var batch = Enumerable.Range(0, 66)
+        .Select(index => index % 6 switch
+        {
+            0 => "Good morning. Are you okay?",
+            1 => "I don't know what to do.",
+            2 => "Please wait here for a moment.",
+            3 => "What happened? Tell me the truth.",
+            4 => "No problem. We can talk later.",
+            _ => "This is a longer sentence used to verify stable offline translation on a realistic subtitle batch."
+        })
+        .ToArray();
+
+    var batchOutput = await client.TranslateAsync(batch);
+    AssertBatchTranslation("OPUS-MT/Marian", batch, batchOutput);
 }
 
 static void DumpConfigIfPresent(string directory, string provider)
@@ -101,4 +121,28 @@ static void AssertTranslation(string provider, IReadOnlyList<string> output)
         throw new InvalidOperationException($"{provider} did not return one non-empty translation.");
 
     Console.WriteLine($"SMOKE {provider} result: {output[0]}");
+}
+
+static void AssertPlausibleOpusTranslation(string output)
+{
+    var expectedMarkers = new[] { "jak", "cześć", "witaj", "witam" };
+    if (!expectedMarkers.Any(marker => output.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException(
+            $"OPUS-MT/Marian returned non-empty but implausible EN→PL output for the probe: '{output}'.");
+    }
+}
+
+static void AssertBatchTranslation(string provider, IReadOnlyList<string> input, IReadOnlyList<string> output)
+{
+    if (output.Count != input.Count)
+        throw new InvalidOperationException($"{provider} returned {output.Count} items for a {input.Count}-item batch.");
+
+    for (var index = 0; index < output.Count; index++)
+    {
+        if (string.IsNullOrWhiteSpace(output[index]))
+            throw new InvalidOperationException($"{provider} returned an empty item at batch index {index}.");
+    }
+
+    Console.WriteLine($"SMOKE {provider} 66-segment batch PASS");
 }
