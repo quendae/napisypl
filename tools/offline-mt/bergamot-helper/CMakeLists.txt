@@ -11,6 +11,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 add_executable(SubFlow.BergamotHelper main.cpp)
-target_link_libraries(SubFlow.BergamotHelper PRIVATE bergamot-translator nlohmann_json::nlohmann_json)
+target_link_libraries(SubFlow.BergamotHelper PRIVATE bergamot-translator-source nlohmann_json::nlohmann_json)
 target_include_directories(SubFlow.BergamotHelper PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(SubFlow.BergamotHelper PRIVATE cxx_std_17)
