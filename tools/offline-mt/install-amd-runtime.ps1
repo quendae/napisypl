@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Destination = (Join-Path $PSScriptRoot "nllb-amd-runtime"),
+    [string]$Destination = '',
     [switch]$Force,
     [switch]$PlanOnly
 )
@@ -8,6 +8,21 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 Set-StrictMode -Version Latest
+
+# Windows PowerShell 5.1 does not reliably initialize $PSScriptRoot while
+# evaluating default parameter expressions. Resolve the script directory only
+# after the param block so launching through powershell.exe -File works too.
+$ScriptRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ScriptRoot) -and
+    -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
+    $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+    throw "Could not resolve the SubFlow AMD installer directory."
+}
+if ([string]::IsNullOrWhiteSpace($Destination)) {
+    $Destination = Join-Path $ScriptRoot "nllb-amd-runtime"
+}
 
 # Keep this runtime aligned with the RX 6950 XT stack already hardware-accepted
 # in StableAMD. The private NuGet Python distribution includes a normal pip
@@ -22,7 +37,7 @@ $TorchSpec = "torch[device-$GfxTarget]==$TorchVersion"
 $TransformersVersion = "4.57.6"
 $SentencePieceVersion = "0.2.2"
 $SafeTensorsVersion = "0.6.2"
-$HelperSource = Join-Path $PSScriptRoot "nllb_helper.py"
+$HelperSource = Join-Path $ScriptRoot "nllb_helper.py"
 $RuntimeManifest = Join-Path $Destination "runtime.json"
 $PythonExe = Join-Path $Destination "python.exe"
 $InstalledHelper = Join-Path $Destination "nllb_helper.py"
