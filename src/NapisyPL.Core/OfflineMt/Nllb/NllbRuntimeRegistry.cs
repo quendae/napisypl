@@ -15,12 +15,12 @@ public static class NllbRuntimeRegistry
 
             var paths = OfflineMtPaths.CreateDefault();
             var assets = new OfflineMtAssetManager(paths.Nllb600mDirectory);
-            var helperPath = Path.Combine(AppContext.BaseDirectory, "tools", "offline-mt", "nllb_helper.py");
-            if (!File.Exists(helperPath))
-                helperPath = Path.Combine(AppContext.BaseDirectory, "nllb_helper.py");
-
+            var helperExecutable = Path.Combine(
+                AppContext.BaseDirectory,
+                "nllb-runtime",
+                "SubFlow.NllbHelper.exe");
             var runtime = new NllbRuntimeManager(
-                new NllbRuntimeOptions("python.exe", helperPath, TimeSpan.FromMinutes(5)),
+                new NllbRuntimeOptions(helperExecutable, string.Empty, TimeSpan.FromMinutes(10)),
                 paths.Nllb600mDirectory);
             var installer = new NllbAssetManager(httpClient, assets);
             _client = new NllbTranslatorClient(assets, runtime, installer.InstallPinnedModelAsync);

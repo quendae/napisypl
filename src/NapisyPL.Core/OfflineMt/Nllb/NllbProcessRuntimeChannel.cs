@@ -16,16 +16,19 @@ public sealed class NllbProcessRuntimeChannel : INllbRuntimeChannel
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.PythonPath))
-            throw new ArgumentException("Python path cannot be empty.", nameof(options));
-        if (string.IsNullOrWhiteSpace(options.HelperPath))
-            throw new ArgumentException("NLLB helper path cannot be empty.", nameof(options));
-        if (!File.Exists(options.HelperPath))
-            throw new FileNotFoundException("NLLB helper was not found.", options.HelperPath);
+            throw new ArgumentException("NLLB runtime executable path cannot be empty.", nameof(options));
 
+        var packagedHelper = string.IsNullOrWhiteSpace(options.HelperPath);
+        if (!packagedHelper && !File.Exists(options.HelperPath))
+            throw new FileNotFoundException("NLLB helper was not found.", options.HelperPath);
+        if (packagedHelper && !File.Exists(options.PythonPath))
+            throw new FileNotFoundException("Packaged NLLB helper was not found.", options.PythonPath);
+
+        var workingTarget = packagedHelper ? options.PythonPath : options.HelperPath;
         var startInfo = new ProcessStartInfo
         {
             FileName = options.PythonPath,
-            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(options.HelperPath)) ?? Environment.CurrentDirectory,
+            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(workingTarget)) ?? Environment.CurrentDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = true,
@@ -35,7 +38,8 @@ public sealed class NllbProcessRuntimeChannel : INllbRuntimeChannel
             StandardOutputEncoding = LocalTranslatorEncoding.Utf8NoBom,
             StandardErrorEncoding = LocalTranslatorEncoding.Utf8NoBom
         };
-        startInfo.ArgumentList.Add(options.HelperPath);
+        if (!packagedHelper)
+            startInfo.ArgumentList.Add(options.HelperPath);
         startInfo.Environment["PYTHONUTF8"] = "1";
 
         _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
@@ -107,7 +111,7 @@ public sealed class NllbProcessRuntimeChannel : INllbRuntimeChannel
                 if (line is null)
                     break;
                 _stderrTail.Enqueue(line);
-                while (_stderrTail.Count > 20 && _stderrTail.TryDequeue(out _))
+                while (_stderrTail.Count > 40 && _stderrTail.TryDequeue(out _))
                 {
                 }
             }

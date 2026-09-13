@@ -1,0 +1,113 @@
+name: Package NLLB Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/offline-mt-first-run
+    paths:
+      - '.github/workflows/package-nllb.yml'
+      - 'src/NapisyPL.Core/OfflineMt/Nllb/**'
+      - 'src/NapisyPL.Core/Translation/**'
+      - 'src/NapisyPL/**'
+      - 'tools/offline-mt/nllb_helper.py'
+      - 'tools/offline-mt/requirements-nllb.txt'
+      - 'tools/offline-mt/NllbSmoke/**'
+      - 'tests/NapisyPL.Core.Tests/**'
+
+jobs:
+  package-nllb:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore
+        run: dotnet restore NapisyPL.sln
+
+      - name: Test
+        run: dotnet test NapisyPL.sln -c Release --no-restore
+
+      - name: Install NLLB runtime dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -r tools/offline-mt/requirements-nllb.txt pyinstaller
+          python -m pip check
+
+      - name: Build self-contained NLLB helper with PyInstaller
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --name SubFlow.NllbHelper `
+            --collect-all transformers `
+            --collect-all tokenizers `
+            --collect-all sentencepiece `
+            --collect-all safetensors `
+            --hidden-import torch `
+            tools/offline-mt/nllb_helper.py
+          if (-not (Test-Path dist/SubFlow.NllbHelper/SubFlow.NllbHelper.exe)) {
+            throw 'SubFlow.NllbHelper.exe was not produced.'
+          }
+          Get-ChildItem dist/SubFlow.NllbHelper | Measure-Object -Property Length -Sum | Format-List
+
+      - name: Smoke test packaged NLLB helper startup
+        shell: pwsh
+        run: |
+          $output = '{"type":"shutdown"}' | & .\dist\SubFlow.NllbHelper\SubFlow.NllbHelper.exe 2> nllb-helper-startup.err
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if (Test-Path nllb-helper-startup.err) { Get-Content nllb-helper-startup.err | Write-Host }
+          if ($exitCode -ne 0) { throw "NLLB helper startup smoke failed with exit code $exitCode" }
+
+      - name: Integration smoke NLLB real model EN to PL
+        shell: pwsh
+        run: |
+          dotnet run --project tools/offline-mt/NllbSmoke/NllbSmoke.csproj -c Release -- `
+            "$PWD\dist\SubFlow.NllbHelper\SubFlow.NllbHelper.exe" 2>&1 | Tee-Object nllb-real-smoke.log
+          if ($LASTEXITCODE -ne 0) { throw "NLLB real-model smoke failed with exit code $LASTEXITCODE" }
+          if (-not (Select-String -Path nllb-real-smoke.log -Pattern 'NLLB_SMOKE_OK' -Quiet)) {
+            throw 'NLLB real-model smoke did not emit NLLB_SMOKE_OK.'
+          }
+
+      - name: Publish Windows x64
+        shell: pwsh
+        run: |
+          dotnet publish src/NapisyPL/NapisyPL.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o artifacts/win-x64
+          New-Item -ItemType Directory -Force artifacts/win-x64/nllb-runtime | Out-Null
+          Copy-Item dist/SubFlow.NllbHelper/* artifacts/win-x64/nllb-runtime/ -Recurse -Force
+          if (-not (Test-Path artifacts/win-x64/nllb-runtime/SubFlow.NllbHelper.exe)) {
+            throw 'SubFlow.NllbHelper.exe missing from Windows NLLB package.'
+          }
+
+      - name: Smoke test desktop startup
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath .\artifacts\win-x64\NapisyPL.exe -PassThru
+          Start-Sleep -Seconds 3
+          $process.Refresh()
+          if ($process.HasExited) {
+            throw "SubFlow exited during startup smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Upload NLLB Windows test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubFlow-win-x64-nllb-test
+          path: artifacts/win-x64/
+          if-no-files-found: error
+          compression-level: 1
