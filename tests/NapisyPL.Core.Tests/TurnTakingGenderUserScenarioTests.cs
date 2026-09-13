@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Models;
 
@@ -8,15 +6,9 @@ namespace NapisyPL.Core.Tests;
 public sealed class TurnTakingGenderUserScenarioTests
 {
     [Fact]
-    public async Task MaleSpeaker_WhenAudioClassifiesNextResponderAsFemale_UsesFemaleSecondPersonForm()
+    public void MaleSpeaker_WhenAudioClassifiesNextResponderAsFemale_UsesFemaleSecondPersonForm()
     {
-        using var http = new HttpClient(new StubHandler("""
-            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zrobiłeś\",\"replace\":\"Zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
-            """));
-        var service = new LocalTargetedGenderReviewService(
-            http,
-            "http://127.0.0.1:17843/v1",
-            "qwen3-1.7b");
+        var service = new DeterministicGenderReviewService();
 
         var source = new[]
         {
@@ -50,11 +42,7 @@ public sealed class TurnTakingGenderUserScenarioTests
         };
 
         var resolution = DialogueAddresseeResolver.ResolveDetailed(source, speakers, cueId: 1);
-        var result = await service.ReviewAsync(
-            source,
-            translated,
-            speakers,
-            speakerGenderEvidence: evidence);
+        var result = service.Review(source, translated, speakers, evidence);
 
         Assert.Equal(SpeakerVoiceGender.Male, evidence["SPEAKER_MALE"].Gender);
         Assert.Equal(SpeakerVoiceGender.Female, evidence["SPEAKER_FEMALE"].Gender);
@@ -67,15 +55,9 @@ public sealed class TurnTakingGenderUserScenarioTests
     }
 
     [Fact]
-    public async Task MaleSpeaker_MonologueWithoutOtherResponder_DoesNotGuessFemaleAddressee()
+    public void MaleSpeaker_MonologueWithoutOtherResponder_DoesNotGuessFemaleAddressee()
     {
-        using var http = new HttpClient(new StubHandler("""
-            {"choices":[{"message":{"content":"[{\"id\":1,\"find\":\"Zrobiłeś\",\"replace\":\"Zrobiłaś\",\"confidence\":0.99,\"target\":\"addressee\"}]"},"finish_reason":"stop"}]}
-            """));
-        var service = new LocalTargetedGenderReviewService(
-            http,
-            "http://127.0.0.1:17843/v1",
-            "qwen3-1.7b");
+        var service = new DeterministicGenderReviewService();
 
         var source = new[]
         {
@@ -103,11 +85,7 @@ public sealed class TurnTakingGenderUserScenarioTests
         };
 
         var resolution = DialogueAddresseeResolver.ResolveDetailed(source, speakers, cueId: 1);
-        var result = await service.ReviewAsync(
-            source,
-            translated,
-            speakers,
-            speakerGenderEvidence: evidence);
+        var result = service.Review(source, translated, speakers, evidence);
 
         Assert.Equal(SpeakerVoiceGender.Male, evidence["SPEAKER_MALE"].Gender);
         Assert.False(resolution.IsResolved);
@@ -116,15 +94,4 @@ public sealed class TurnTakingGenderUserScenarioTests
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
         new(id, TimeSpan.FromSeconds(start), TimeSpan.FromSeconds(end), text);
-
-    private sealed class StubHandler(string body) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
-    }
 }
