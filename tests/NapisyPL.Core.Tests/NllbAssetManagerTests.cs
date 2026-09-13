@@ -29,6 +29,52 @@ public sealed class NllbAssetManagerTests
     }
 
     [Fact]
+    public void Profiles_ExposeFastBalancedAndQualityModelsWithPinnedLicenses()
+    {
+        Assert.Same(NllbModelDescriptor.Fast600M, NllbModelDescriptor.Pinned);
+
+        var balanced = NllbModelDescriptor.Balanced1_3B;
+        Assert.Equal("nllb-200-distilled-1.3b-eng-pol", balanced.BackendId);
+        Assert.Equal("facebook/nllb-200-distilled-1.3B", balanced.ModelId);
+        Assert.Equal("CC-BY-NC-4.0", balanced.LicenseId);
+        Assert.True(balanced.BenchmarkOnly);
+        Assert.Contains(balanced.Files, file => file.RelativePath == "pytorch_model.bin");
+
+        var quality = NllbModelDescriptor.QualityMadlad3B;
+        Assert.Equal("madlad-400-3b-eng-pol", quality.BackendId);
+        Assert.Equal("google/madlad400-3b-mt", quality.ModelId);
+        Assert.Equal("fa184c675da0b5c9e1c8694fccd4e12e2d422094", quality.Revision);
+        Assert.Equal("en", quality.SourceLanguage);
+        Assert.Equal("pl", quality.TargetLanguage);
+        Assert.Equal("Apache-2.0", quality.LicenseId);
+        Assert.False(quality.BenchmarkOnly);
+        Assert.Contains(quality.Files, file => file.RelativePath == "model.safetensors");
+        Assert.Contains(quality.Files, file => file.RelativePath == "spiece.model");
+
+        foreach (var descriptor in new[] { NllbModelDescriptor.Fast600M, balanced, quality })
+        {
+            Assert.All(descriptor.Files, file =>
+            {
+                Assert.Contains(descriptor.Revision, file.DownloadUrl, StringComparison.Ordinal);
+                Assert.DoesNotContain("/main/", file.DownloadUrl, StringComparison.Ordinal);
+            });
+        }
+    }
+
+    [Fact]
+    public void OfflineMtPaths_ProvideDedicatedDirectoriesForAllProfiles()
+    {
+        var paths = new OfflineMtPaths("C:\\models");
+
+        Assert.EndsWith(Path.Combine("models", "nllb-600m"), paths.Nllb600mDirectory, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine("models", "nllb-1.3b"), paths.Nllb1_3bDirectory, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine("models", "madlad-400-3b"), paths.Madlad3bDirectory, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(paths.Nllb600mDirectory, paths.GetNllbProfileDirectory(NllbModelProfile.Fast600M));
+        Assert.Equal(paths.Nllb1_3bDirectory, paths.GetNllbProfileDirectory(NllbModelProfile.Balanced1_3B));
+        Assert.Equal(paths.Madlad3bDirectory, paths.GetNllbProfileDirectory(NllbModelProfile.QualityMadlad3B));
+    }
+
+    [Fact]
     public async Task InstallPinnedModelAsync_DownloadsToAtomicAssetDirectoryAndWritesBenchmarkManifest()
     {
         var root = TempDirectory();
