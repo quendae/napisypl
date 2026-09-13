@@ -39,6 +39,7 @@ public static class NllbRuntimeRegistry
     {
         NllbModelProfile.Fast600M => "NLLB 600M — Fast",
         NllbModelProfile.Balanced1_3B => "NLLB 1.3B — Balanced",
+        NllbModelProfile.QualityNllb3_3B => "NLLB 3.3B — Quality Test",
         NllbModelProfile.QualityMadlad3B => "MADLAD-400 3B — Quality",
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unknown offline MT model profile.")
     };
