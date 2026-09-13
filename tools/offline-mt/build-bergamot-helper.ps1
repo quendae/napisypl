@@ -96,6 +96,23 @@ $pcreLibraryReplacement = @'
 $pcreFind = $pcreFind.Replace($pcreLibraryNeedle, $pcreLibraryReplacement.TrimEnd())
 Set-Content -Path $pcreFindPath -Value $pcreFind -Encoding utf8NoBOM
 
+# pcre2.h marks functions as dllimport on Windows unless PCRE2_STATIC is defined.
+# Since ssplit links the static archive above, compile the ssplit target with that define.
+$ssplitCmakePath = Join-Path $SourceDirectory 'inference\3rd_party\ssplit-cpp\src\CMakeLists.txt'
+$ssplitCmake = Get-Content $ssplitCmakePath -Raw
+$ssplitNeedle = 'add_library(ssplit STATIC ssplit/ssplit.cpp ssplit/regex.cpp)'
+if (-not $ssplitCmake.Contains($ssplitNeedle)) {
+    throw 'Unexpected ssplit-cpp src/CMakeLists.txt layout; cannot apply PCRE2_STATIC fix safely.'
+}
+$ssplitReplacement = @'
+add_library(ssplit STATIC ssplit/ssplit.cpp ssplit/regex.cpp)
+if(MSVC)
+  target_compile_definitions(ssplit PRIVATE PCRE2_STATIC)
+endif()
+'@
+$ssplitCmake = $ssplitCmake.Replace($ssplitNeedle, $ssplitReplacement.TrimEnd())
+Set-Content -Path $ssplitCmakePath -Value $ssplitCmake -Encoding utf8NoBOM
+
 $inferenceSource = Join-Path $SourceDirectory 'inference'
 Copy-Item $helperSource (Join-Path $inferenceSource 'subflow-helper') -Recurse
 Add-Content (Join-Path $inferenceSource 'CMakeLists.txt') "`nadd_subdirectory(subflow-helper)"
