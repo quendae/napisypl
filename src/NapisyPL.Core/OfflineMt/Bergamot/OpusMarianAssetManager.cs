@@ -8,7 +8,7 @@ public sealed class OpusMarianAssetManager(
     OfflineMtAssetManager assetManager,
     Func<string, CancellationToken, Task<byte[]>> downloadAsync)
 {
-    private const string EngineVersion = "bergamot-translator-0.4.5";
+    private const string EngineVersion = "bergamot-translator-0.6.0";
 
     private readonly OfflineMtAssetManager _assetManager = assetManager ?? throw new ArgumentNullException(nameof(assetManager));
     private readonly Func<string, CancellationToken, Task<byte[]>> _downloadAsync = downloadAsync ?? throw new ArgumentNullException(nameof(downloadAsync));
@@ -44,7 +44,7 @@ public sealed class OpusMarianAssetManager(
             _ = ResolveArchiveEntryPath(temporaryDirectory, entry.FullName);
         }
 
-        var modelEntry = FindRequiredEntry(archive, "model.npz");
+        var modelEntry = FindRequiredModelEntry(archive);
         var sourceVocabEntry = FindRequiredEntry(archive, "source.spm");
         var targetVocabEntry = FindRequiredEntry(archive, "target.spm");
 
@@ -74,6 +74,28 @@ public sealed class OpusMarianAssetManager(
             InstalledSizeBytes: manifestFiles.Sum(file => file.SizeBytes),
             InstalledAtUtc: DateTimeOffset.UtcNow,
             Files: manifestFiles);
+    }
+
+    private static ZipArchiveEntry FindRequiredModelEntry(ZipArchive archive)
+    {
+        var canonical = archive.Entries
+            .Where(entry => string.Equals(entry.Name, "model.npz", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (canonical.Length == 1)
+            return canonical[0];
+        if (canonical.Length > 1)
+            throw new InvalidDataException("OPUS Marian archive contains multiple 'model.npz' files.");
+
+        var npzModels = archive.Entries
+            .Where(entry => !string.IsNullOrEmpty(entry.Name) &&
+                            entry.Name.EndsWith(".npz", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return npzModels.Length switch
+        {
+            1 => npzModels[0],
+            0 => throw new InvalidDataException("OPUS Marian archive does not contain a Marian .npz model file."),
+            _ => throw new InvalidDataException("OPUS Marian archive contains multiple .npz model files and no canonical model.npz.")
+        };
     }
 
     private static ZipArchiveEntry FindRequiredEntry(ZipArchive archive, string fileName)
