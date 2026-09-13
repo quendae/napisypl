@@ -42,7 +42,7 @@ try
     Console.WriteLine($"NLLB smoke translation: {translated[0]}");
 
     var batchSources = Enumerable.Range(0, 66)
-        .Select(index => index % 3 switch
+        .Select(index => (index % 3) switch
         {
             0 => "Hello, how are you?",
             1 => "Thank you very much.",
