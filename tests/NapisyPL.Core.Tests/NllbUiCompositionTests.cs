@@ -17,6 +17,19 @@ public sealed class NllbUiCompositionTests
         Assert.Contains("Model pozostaje w pamięci podczas całej kolejki folderu", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProviderSwitch_ReleasesPreviouslyLoadedOfflineMtModel()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.Argos.cs"));
+        var handlerStart = source.IndexOf("OnModernProviderSelectionChanged", StringComparison.Ordinal);
+        var handlerEnd = source.IndexOf("private void ApplyModernProviderUi", handlerStart, StringComparison.Ordinal);
+        Assert.True(handlerStart >= 0 && handlerEnd > handlerStart);
+
+        var handler = source[handlerStart..handlerEnd];
+        Assert.Contains("await NllbRuntimeRegistry.DisposeAsync();", handler, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var candidates = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };

@@ -22,21 +22,35 @@ public sealed class OfflineMtPackagingContractTests
     }
 
     [Fact]
-    public void NllbWindowsPackage_IsSelfContainedAndRealModelSmokeTested()
+    public void OfflineMtGpuProfilesWindowsPackage_ContainsCpuFallbackAndAmdRuntimeInstaller()
     {
         var root = FindRepositoryRoot();
         var workflowPath = Path.Combine(root, ".github", "workflows", "package-nllb.yml");
         var registryPath = Path.Combine(root, "src", "NapisyPL.Core", "OfflineMt", "Nllb", "NllbRuntimeRegistry.cs");
+        var amdInstallerPath = Path.Combine(root, "tools", "offline-mt", "install-amd-runtime.ps1");
+        var amdInstallerCmdPath = Path.Combine(root, "tools", "offline-mt", "install-amd-runtime.cmd");
 
-        Assert.True(File.Exists(workflowPath), $"Missing NLLB package workflow: {workflowPath}");
+        Assert.True(File.Exists(workflowPath), $"Missing offline MT package workflow: {workflowPath}");
+        Assert.True(File.Exists(amdInstallerPath), $"Missing AMD runtime installer: {amdInstallerPath}");
+        Assert.True(File.Exists(amdInstallerCmdPath), $"Missing AMD runtime installer wrapper: {amdInstallerCmdPath}");
+
         var workflow = File.ReadAllText(workflowPath);
         Assert.Contains("PyInstaller", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("SubFlow.NllbHelper.exe", workflow, StringComparison.Ordinal);
         Assert.Contains("NLLB_SMOKE_OK", workflow, StringComparison.Ordinal);
-        Assert.Contains("SubFlow-win-x64-nllb-test", workflow, StringComparison.Ordinal);
+        Assert.Contains("Test offline MT helper protocol", workflow, StringComparison.Ordinal);
+        Assert.Contains("Install-AMD-GPU-Runtime.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("Install-AMD-GPU-Runtime.cmd", workflow, StringComparison.Ordinal);
+        Assert.Contains("SubFlow-win-x64-offline-mt-gpu-profiles-test", workflow, StringComparison.Ordinal);
 
         var registry = File.ReadAllText(registryPath);
         Assert.Contains("SubFlow.NllbHelper.exe", registry, StringComparison.Ordinal);
+        Assert.Contains("nllb-amd-runtime", registry, StringComparison.Ordinal);
+        Assert.Contains("python.exe", registry, StringComparison.Ordinal);
+
+        var amdInstaller = File.ReadAllText(amdInstallerPath);
+        Assert.Contains("device-gfx1030", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("stable.repo.amd.com/rocm/whl-next", amdInstaller, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

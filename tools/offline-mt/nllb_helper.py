@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import importlib.metadata
 import json
 import pathlib
@@ -69,6 +70,21 @@ def model_weight_size(model_directory: pathlib.Path) -> int:
     return total
 
 
+def gpu_is_available(torch_module) -> bool:
+    try:
+        return bool(torch_module.cuda.is_available())
+    except Exception:
+        return False
+
+
+def clear_gpu_cache(torch_module) -> None:
+    gc.collect()
+    try:
+        torch_module.cuda.empty_cache()
+    except Exception:
+        pass
+
+
 def load_model(model_path: str) -> None:
     global _translate_texts, _model_name, _runtime_version
     global _device_name, _dtype_name, _batch_size
@@ -94,21 +110,36 @@ def load_model(model_path: str) -> None:
             "Offline MT Python runtime dependencies are not installed."
         ) from exc
 
-    gpu = bool(torch.cuda.is_available())
-    device = torch.device("cuda:0" if gpu else "cpu")
-    dtype = torch.float16 if gpu else torch.float32
-
     tokenizer_kwargs = {"local_files_only": True}
     if family == "nllb":
         tokenizer_kwargs["src_lang"] = SOURCE_LANGUAGE
     tokenizer = AutoTokenizer.from_pretrained(str(model_directory), **tokenizer_kwargs)
 
-    model_kwargs = {"local_files_only": True}
-    if gpu:
-        model_kwargs["torch_dtype"] = dtype
-    model = AutoModelForSeq2SeqLM.from_pretrained(str(model_directory), **model_kwargs)
-    model.to(device)
-    model.eval()
+    def create_model(use_gpu: bool):
+        device = torch.device("cuda:0" if use_gpu else "cpu")
+        dtype = torch.float16 if use_gpu else torch.float32
+        model_kwargs = {"local_files_only": True}
+        if use_gpu:
+            model_kwargs["torch_dtype"] = dtype
+        created = AutoModelForSeq2SeqLM.from_pretrained(str(model_directory), **model_kwargs)
+        created.to(device)
+        created.eval()
+        return created, device, dtype
+
+    gpu = gpu_is_available(torch)
+    try:
+        model, device, dtype = create_model(gpu)
+    except (RuntimeError, OSError) as exc:
+        if not gpu:
+            raise
+        # Auto mode must remain usable even when a Windows AMD runtime detects
+        # the adapter but cannot initialize this particular model/kernel.
+        clear_gpu_cache(torch)
+        gpu = False
+        try:
+            model, device, dtype = create_model(False)
+        except Exception:
+            raise exc
 
     target_language_id = None
     if family == "nllb":
@@ -127,6 +158,8 @@ def load_model(model_path: str) -> None:
             current_size = min(batch_size, len(texts) - start)
             batch = list(texts[start : start + current_size])
             prepared = prepare_source_texts(family, batch)
+            encoded = None
+            generated = None
             try:
                 encoded = tokenizer(
                     prepared,
@@ -149,11 +182,16 @@ def load_model(model_path: str) -> None:
             except RuntimeError as exc:
                 message = str(exc).lower()
                 if gpu and "out of memory" in message and current_size > 1:
+                    encoded = None
+                    generated = None
                     batch_size = max(1, current_size // 2)
                     _batch_size = batch_size
-                    torch.cuda.empty_cache()
+                    clear_gpu_cache(torch)
                     continue
                 raise
+            finally:
+                encoded = None
+                generated = None
         return output
 
     _translate_texts = translate_texts

@@ -67,6 +67,9 @@ public partial class MainWindow
         if (_loadingSettings)
             return;
 
+        // Switching quality profiles must release the previous model before the
+        // next one is loaded, otherwise multiple multi-GB models can remain in VRAM.
+        await NllbRuntimeRegistry.DisposeAsync();
         ApplyModernProviderUi();
         await LoadRememberedApiKeyAsync();
         await SaveSettingsAsync();
