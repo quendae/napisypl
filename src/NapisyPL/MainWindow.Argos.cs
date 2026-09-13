@@ -3,6 +3,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.OfflineMt.Bergamot;
+using NapisyPL.Core.OfflineMt.Nllb;
 using NapisyPL.Core.Security;
 using NapisyPL.Core.Translation;
 
@@ -13,11 +14,13 @@ public partial class MainWindow
     private const string ArgosProviderName = "Local Argos (offline)";
     private const string FirefoxProviderName = "Firefox/Bergamot (offline)";
     private const string OpusProviderName = "OPUS-MT / Marian (offline)";
+    private const string NllbProviderName = "NLLB-200 600M (offline, benchmark)";
     private static readonly string[] LocalMtProviderNames =
     [
         ArgosProviderName,
         FirefoxProviderName,
-        OpusProviderName
+        OpusProviderName,
+        NllbProviderName
     ];
 
     private readonly ApiKeyStore _apiKeyStore = new();
@@ -90,6 +93,9 @@ public partial class MainWindow
                 break;
             case OpusProviderName:
                 ProviderHintText.Text = "OPUS-MT / Marian EN→PL — przypięty model 2021-02-19 do benchmarku. Przy pierwszym użyciu pobiera model, później działa offline.";
+                break;
+            case NllbProviderName:
+                ProviderHintText.Text = "NLLB-200 distilled 600M EN→PL. Benchmark only · CC-BY-NC-4.0. Model jest pobierany przy pierwszym użyciu i później działa lokalnie.";
                 break;
             case "Local Qwen (offline)":
                 ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced używa Qwena osobno tylko jako korektora.";
@@ -189,6 +195,7 @@ public partial class MainWindow
 
     private async void OnArgosWindowClosed(object? sender, EventArgs e)
     {
+        await NllbRuntimeRegistry.DisposeAsync();
         await OfflineMtRuntimeRegistry.DisposeAsync();
         await ArgosRuntimeRegistry.DisposeAsync();
     }
