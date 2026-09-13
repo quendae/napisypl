@@ -19,6 +19,8 @@ A fourth profile will now be added for direct quality comparison:
 
 The goal is to compare NLLB 3.3B and MADLAD 3B on the same subtitle material before deciding which model should remain the default Quality profile.
 
+Detailed design checkpoint: `docs/superpowers/specs/2026-09-13-subflow-quality-and-deterministic-enhanced-design.md`.
+
 ## RX 6950 XT test results so far
 
 User-side testing on an RX 6950 XT confirms that the AMD GPU runtime works and that keeping the model resident in VRAM is worthwhile.
