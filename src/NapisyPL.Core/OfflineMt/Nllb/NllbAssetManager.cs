@@ -8,31 +8,46 @@ public sealed class NllbAssetManager
     public const string EngineVersion = "transformers-4.57.6";
 
     private readonly OfflineMtAssetManager _assetManager;
+    private readonly NllbModelDescriptor _descriptor;
     private readonly Func<string, string, CancellationToken, Task> _downloadToFileAsync;
 
     public NllbAssetManager(
         OfflineMtAssetManager assetManager,
         Func<string, string, CancellationToken, Task> downloadToFileAsync)
+        : this(assetManager, NllbModelDescriptor.Pinned, downloadToFileAsync)
+    {
+    }
+
+    public NllbAssetManager(
+        OfflineMtAssetManager assetManager,
+        NllbModelDescriptor descriptor,
+        Func<string, string, CancellationToken, Task> downloadToFileAsync)
     {
         _assetManager = assetManager ?? throw new ArgumentNullException(nameof(assetManager));
+        _descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
         _downloadToFileAsync = downloadToFileAsync ?? throw new ArgumentNullException(nameof(downloadToFileAsync));
     }
 
     public NllbAssetManager(HttpClient httpClient, OfflineMtAssetManager assetManager)
-        : this(assetManager, CreateHttpDownloader(httpClient))
+        : this(httpClient, assetManager, NllbModelDescriptor.Pinned)
     {
     }
 
-    public Task InstallPinnedModelAsync(CancellationToken cancellationToken = default)
+    public NllbAssetManager(
+        HttpClient httpClient,
+        OfflineMtAssetManager assetManager,
+        NllbModelDescriptor descriptor)
+        : this(assetManager, descriptor, CreateHttpDownloader(httpClient))
     {
-        var descriptor = NllbModelDescriptor.Pinned;
-        return _assetManager.InstallAsync(
+    }
+
+    public Task InstallPinnedModelAsync(CancellationToken cancellationToken = default) =>
+        _assetManager.InstallAsync(
             (temporaryDirectory, ct) => InstallIntoTemporaryDirectoryAsync(
                 temporaryDirectory,
-                descriptor,
+                _descriptor,
                 ct),
             cancellationToken);
-    }
 
     private async Task<OfflineMtManifest> InstallIntoTemporaryDirectoryAsync(
         string temporaryDirectory,
@@ -51,7 +66,7 @@ public sealed class NllbAssetManager
 
             await _downloadToFileAsync(file.DownloadUrl, destinationPath, cancellationToken);
             if (!File.Exists(destinationPath))
-                throw new InvalidDataException($"NLLB download did not produce '{file.RelativePath}'.");
+                throw new InvalidDataException($"Offline MT download did not produce '{file.RelativePath}'.");
 
             manifestFiles.Add(await CreateManifestFileAsync(
                 temporaryDirectory,
@@ -98,14 +113,14 @@ public sealed class NllbAssetManager
     private static string ResolveDestinationPath(string rootDirectory, string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
-            throw new InvalidDataException("NLLB model file path must be relative.");
+            throw new InvalidDataException("Offline MT model file path must be relative.");
 
         var root = Path.GetFullPath(rootDirectory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         var destination = Path.GetFullPath(Path.Combine(rootDirectory, relativePath));
         if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("NLLB model file path escapes the installation directory.");
+            throw new InvalidDataException("Offline MT model file path escapes the installation directory.");
 
         return destination;
     }

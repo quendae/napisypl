@@ -14,13 +14,18 @@ public partial class MainWindow
     private const string ArgosProviderName = "Local Argos (offline)";
     private const string FirefoxProviderName = "Firefox/Bergamot (offline)";
     private const string OpusProviderName = "OPUS-MT / Marian (offline)";
-    private const string NllbProviderName = "NLLB-200 600M (offline, benchmark)";
+    private const string NllbFastProviderName = "NLLB 600M — Fast";
+    private const string NllbBalancedProviderName = "NLLB 1.3B — Balanced";
+    private const string MadladQualityProviderName = "MADLAD-400 3B — Quality";
+    private const string LegacyNllbProviderName = "NLLB-200 600M (offline, benchmark)";
     private static readonly string[] LocalMtProviderNames =
     [
         ArgosProviderName,
         FirefoxProviderName,
         OpusProviderName,
-        NllbProviderName
+        NllbFastProviderName,
+        NllbBalancedProviderName,
+        MadladQualityProviderName
     ];
 
     private readonly ApiKeyStore _apiKeyStore = new();
@@ -42,13 +47,14 @@ public partial class MainWindow
             _modernUiHooked = true;
         }
 
-        // The legacy OnOpened handler runs in the same event and restores ordinary settings.
-        // Post our provider-specific visibility and encrypted secret restore afterwards.
         Dispatcher.UIThread.Post(async () =>
         {
             var settings = await _settingsStore.LoadAsync();
-            if (items.Contains(settings.Provider, StringComparer.Ordinal))
-                ProviderComboBox.SelectedItem = settings.Provider;
+            var restoredProvider = settings.Provider == LegacyNllbProviderName
+                ? NllbFastProviderName
+                : settings.Provider;
+            if (items.Contains(restoredProvider, StringComparer.Ordinal))
+                ProviderComboBox.SelectedItem = restoredProvider;
 
             ApplyModernProviderUi();
             await LoadRememberedApiKeyAsync();
@@ -61,8 +67,6 @@ public partial class MainWindow
         if (_loadingSettings)
             return;
 
-        // Existing SelectionChanged logic applies defaults first. We only decide what the user
-        // actually needs to see and then restore the provider-specific remembered secret.
         ApplyModernProviderUi();
         await LoadRememberedApiKeyAsync();
         await SaveSettingsAsync();
@@ -94,8 +98,14 @@ public partial class MainWindow
             case OpusProviderName:
                 ProviderHintText.Text = "OPUS-MT / Marian EN→PL — przypięty model 2021-02-19 do benchmarku. Przy pierwszym użyciu pobiera model, później działa offline.";
                 break;
-            case NllbProviderName:
-                ProviderHintText.Text = "NLLB-200 distilled 600M EN→PL. Benchmark only · CC-BY-NC-4.0. Model jest pobierany przy pierwszym użyciu i później działa lokalnie.";
+            case NllbFastProviderName:
+                ProviderHintText.Text = "NLLB distilled 600M · Fast. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
+                break;
+            case NllbBalancedProviderName:
+                ProviderHintText.Text = "NLLB distilled 1.3B · Balanced. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
+                break;
+            case MadladQualityProviderName:
+                ProviderHintText.Text = "MADLAD-400 3B · Quality. Auto GPU/CPU; GPU używa FP16. Apache-2.0. Model pozostaje w pamięci podczas całej kolejki folderu.";
                 break;
             case "Local Qwen (offline)":
                 ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced używa Qwena osobno tylko jako korektora.";

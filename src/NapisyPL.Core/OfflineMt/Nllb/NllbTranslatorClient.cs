@@ -5,13 +5,15 @@ namespace NapisyPL.Core.OfflineMt.Nllb;
 public sealed class NllbTranslatorClient : IOfflineMachineTranslatorClient, IAsyncDisposable
 {
     public const string BackendIdValue = "nllb-200-distilled-600m-eng-pol";
-    private const string DisplayNameValue = "NLLB-200 distilled 600M EN→PL";
+    private const string LegacyDisplayNameValue = "NLLB-200 distilled 600M EN→PL";
     private const string RuntimeNameValue = "transformers";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly OfflineMtAssetManager _assets;
     private readonly NllbRuntimeManager _runtime;
+    private readonly NllbModelDescriptor _descriptor;
+    private readonly string _displayName;
     private readonly Func<CancellationToken, Task> _installModelAsync;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private OfflineMtManifest? _manifest;
@@ -21,14 +23,28 @@ public sealed class NllbTranslatorClient : IOfflineMachineTranslatorClient, IAsy
         OfflineMtAssetManager assets,
         NllbRuntimeManager runtime,
         Func<CancellationToken, Task> installModelAsync)
+        : this(assets, runtime, NllbModelDescriptor.Pinned, LegacyDisplayNameValue, installModelAsync)
+    {
+    }
+
+    public NllbTranslatorClient(
+        OfflineMtAssetManager assets,
+        NllbRuntimeManager runtime,
+        NllbModelDescriptor descriptor,
+        string displayName,
+        Func<CancellationToken, Task> installModelAsync)
     {
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
+        _displayName = string.IsNullOrWhiteSpace(displayName)
+            ? throw new ArgumentException("Display name cannot be empty.", nameof(displayName))
+            : displayName;
         _installModelAsync = installModelAsync ?? throw new ArgumentNullException(nameof(installModelAsync));
     }
 
-    public string BackendId => BackendIdValue;
-    public string DisplayName => DisplayNameValue;
+    public string BackendId => _descriptor.BackendId;
+    public string DisplayName => _displayName;
 
     public async Task EnsureReadyAsync(
         IProgress<string>? status = null,
@@ -44,11 +60,11 @@ public sealed class NllbTranslatorClient : IOfflineMachineTranslatorClient, IAsy
             _manifest ??= await TryLoadInstalledManifestAsync(cancellationToken);
             if (_manifest is null)
             {
-                status?.Report("NLLB: pobieram przypięty model EN→PL…");
+                status?.Report($"{_displayName}: pobieram przypięty model EN→PL…");
                 await _installModelAsync(cancellationToken);
                 _manifest = await TryLoadInstalledManifestAsync(cancellationToken)
                     ?? throw new InvalidDataException(
-                        "NLLB model installation completed without a valid local manifest.");
+                        "Offline MT model installation completed without a valid local manifest.");
             }
 
             await _runtime.EnsureReadyAsync(status, cancellationToken);
@@ -76,23 +92,24 @@ public sealed class NllbTranslatorClient : IOfflineMachineTranslatorClient, IAsy
     {
         ThrowIfDisposed();
         var manifest = _manifest
-            ?? throw new InvalidOperationException("NLLB translator is not ready yet.");
+            ?? throw new InvalidOperationException("Offline MT translator is not ready yet.");
 
         var modelFile = manifest.Files.FirstOrDefault(file =>
-                string.Equals(Path.GetFileName(file.RelativePath), "pytorch_model.bin", StringComparison.OrdinalIgnoreCase))
+                string.Equals(Path.GetExtension(file.RelativePath), ".bin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetExtension(file.RelativePath), ".safetensors", StringComparison.OrdinalIgnoreCase))
             ?? manifest.Files.First();
 
         return new OfflineMachineTranslatorInfo(
             BackendId: manifest.BackendId,
-            DisplayName: DisplayNameValue,
+            DisplayName: _displayName,
             ModelId: manifest.ModelId,
             ModelVersion: manifest.ModelVersion,
             ModelSource: manifest.ModelSource,
             ModelSha256: modelFile.Sha256,
             InstalledSizeBytes: manifest.InstalledSizeBytes,
             RuntimeName: RuntimeNameValue,
-            RuntimeVersion: manifest.EngineVersion,
-            Device: "CPU",
+            RuntimeVersion: _runtime.RuntimeVersion ?? manifest.EngineVersion,
+            Device: _runtime.DeviceDescription,
             LicenseId: manifest.LicenseId,
             BenchmarkOnly: manifest.BenchmarkOnly);
     }
@@ -108,7 +125,8 @@ public sealed class NllbTranslatorClient : IOfflineMachineTranslatorClient, IAsy
             var json = await File.ReadAllTextAsync(_assets.ManifestPath, cancellationToken);
             var manifest = JsonSerializer.Deserialize<OfflineMtManifest>(json, JsonOptions);
             return manifest is not null &&
-                   string.Equals(manifest.BackendId, BackendIdValue, StringComparison.Ordinal)
+                   string.Equals(manifest.BackendId, _descriptor.BackendId, StringComparison.Ordinal) &&
+                   string.Equals(manifest.ModelVersion, _descriptor.Revision, StringComparison.Ordinal)
                 ? manifest
                 : null;
         }

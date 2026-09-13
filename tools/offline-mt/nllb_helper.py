@@ -8,11 +8,15 @@ from collections.abc import Callable, Sequence
 
 SOURCE_LANGUAGE = "eng_Latn"
 TARGET_LANGUAGE = "pol_Latn"
+MADLAD_TARGET_PREFIX = "<2pl> "
 DEFAULT_RUNTIME_VERSION = "transformers-4.57.6"
 
 _translate_texts: Callable[[Sequence[str]], list[str]] | None = None
 _model_name = "unknown"
 _runtime_version = DEFAULT_RUNTIME_VERSION
+_device_name = "CPU"
+_dtype_name = "float32"
+_batch_size = 8
 
 
 class RuntimeDependencyError(RuntimeError):
@@ -31,63 +35,139 @@ def emit(payload: dict) -> None:
     sys.stdout.flush()
 
 
+def infer_model_family(config: dict) -> str:
+    model_type = str(config.get("model_type", "")).strip().lower()
+    if model_type in {"m2m_100", "nllb_moe"}:
+        return "nllb"
+    if model_type in {"t5", "mt5"}:
+        return "madlad"
+    raise RuntimeError(f"unsupported offline MT model type: {model_type or 'missing'}")
+
+
+def prepare_source_texts(family: str, texts: Sequence[str]) -> list[str]:
+    if family == "nllb":
+        return list(texts)
+    if family == "madlad":
+        return [MADLAD_TARGET_PREFIX + text for text in texts]
+    raise RuntimeError(f"unsupported offline MT model family: {family}")
+
+
+def default_batch_size(family: str, model_size_bytes: int, gpu: bool) -> int:
+    if family == "madlad" or model_size_bytes >= 9_000_000_000:
+        return 8 if gpu else 2
+    if model_size_bytes >= 4_000_000_000:
+        return 16 if gpu else 4
+    return 32 if gpu else 8
+
+
+def model_weight_size(model_directory: pathlib.Path) -> int:
+    total = 0
+    for pattern in ("*.bin", "*.safetensors"):
+        for path in model_directory.glob(pattern):
+            if path.is_file():
+                total += path.stat().st_size
+    return total
+
+
 def load_model(model_path: str) -> None:
     global _translate_texts, _model_name, _runtime_version
+    global _device_name, _dtype_name, _batch_size
 
     model_directory = pathlib.Path(model_path) if model_path else None
     if model_directory is None or not model_directory.is_dir():
-        raise FileNotFoundError("NLLB model directory was not found.")
+        raise FileNotFoundError("Offline MT model directory was not found.")
+
+    config_path = model_directory / "config.json"
+    if not config_path.is_file():
+        raise FileNotFoundError("Offline MT model config.json was not found.")
+    with config_path.open("r", encoding="utf-8") as stream:
+        config = json.load(stream)
+    if not isinstance(config, dict):
+        raise RuntimeError("Offline MT config.json must contain an object.")
+    family = infer_model_family(config)
 
     try:
         import torch
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
     except ImportError as exc:
         raise RuntimeDependencyError(
-            "NLLB Python runtime dependencies are not installed."
+            "Offline MT Python runtime dependencies are not installed."
         ) from exc
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        str(model_directory),
-        src_lang=SOURCE_LANGUAGE,
-        local_files_only=True,
-    )
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        str(model_directory),
-        local_files_only=True,
-    )
-    model.to("cpu")
+    gpu = bool(torch.cuda.is_available())
+    device = torch.device("cuda:0" if gpu else "cpu")
+    dtype = torch.float16 if gpu else torch.float32
+
+    tokenizer_kwargs = {"local_files_only": True}
+    if family == "nllb":
+        tokenizer_kwargs["src_lang"] = SOURCE_LANGUAGE
+    tokenizer = AutoTokenizer.from_pretrained(str(model_directory), **tokenizer_kwargs)
+
+    model_kwargs = {"local_files_only": True}
+    if gpu:
+        model_kwargs["torch_dtype"] = dtype
+    model = AutoModelForSeq2SeqLM.from_pretrained(str(model_directory), **model_kwargs)
+    model.to(device)
     model.eval()
 
-    target_language_id = tokenizer.convert_tokens_to_ids(TARGET_LANGUAGE)
-    if target_language_id is None or target_language_id == tokenizer.unk_token_id:
-        raise RuntimeError("NLLB tokenizer does not contain the Polish language token.")
+    target_language_id = None
+    if family == "nllb":
+        target_language_id = tokenizer.convert_tokens_to_ids(TARGET_LANGUAGE)
+        if target_language_id is None or target_language_id == tokenizer.unk_token_id:
+            raise RuntimeError("NLLB tokenizer does not contain the Polish language token.")
+
+    batch_size = default_batch_size(family, model_weight_size(model_directory), gpu)
 
     def translate_texts(texts: Sequence[str]) -> list[str]:
+        nonlocal batch_size
+        global _batch_size
         output: list[str] = []
-        batch_size = 8
-        for start in range(0, len(texts), batch_size):
-            batch = list(texts[start : start + batch_size])
-            encoded = tokenizer(
-                batch,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=512,
-            )
-            with torch.inference_mode():
-                generated = model.generate(
-                    **encoded,
-                    forced_bos_token_id=target_language_id,
-                    max_new_tokens=256,
-                    num_beams=4,
+        start = 0
+        while start < len(texts):
+            current_size = min(batch_size, len(texts) - start)
+            batch = list(texts[start : start + current_size])
+            prepared = prepare_source_texts(family, batch)
+            try:
+                encoded = tokenizer(
+                    prepared,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=512,
                 )
-            output.extend(
-                tokenizer.batch_decode(generated, skip_special_tokens=True)
-            )
+                encoded = {key: value.to(device) for key, value in encoded.items()}
+                generation_kwargs = {
+                    "max_new_tokens": 256,
+                    "num_beams": 4,
+                }
+                if target_language_id is not None:
+                    generation_kwargs["forced_bos_token_id"] = target_language_id
+                with torch.inference_mode():
+                    generated = model.generate(**encoded, **generation_kwargs)
+                output.extend(tokenizer.batch_decode(generated, skip_special_tokens=True))
+                start += current_size
+            except RuntimeError as exc:
+                message = str(exc).lower()
+                if gpu and "out of memory" in message and current_size > 1:
+                    batch_size = max(1, current_size // 2)
+                    _batch_size = batch_size
+                    torch.cuda.empty_cache()
+                    continue
+                raise
         return output
 
     _translate_texts = translate_texts
     _model_name = model_directory.name
+    _batch_size = batch_size
+    if gpu:
+        try:
+            _device_name = torch.cuda.get_device_name(0) or "GPU"
+        except Exception:
+            _device_name = "GPU"
+        _dtype_name = "float16"
+    else:
+        _device_name = "CPU"
+        _dtype_name = "float32"
     try:
         _runtime_version = f"transformers-{importlib.metadata.version('transformers')}"
     except importlib.metadata.PackageNotFoundError:
@@ -96,7 +176,7 @@ def load_model(model_path: str) -> None:
 
 def translate_segments(segments: list[dict]) -> list[tuple[int, str]]:
     if _translate_texts is None:
-        raise RuntimeError("NLLB model is not loaded.")
+        raise RuntimeError("Offline MT model is not loaded.")
     if not isinstance(segments, list) or not segments:
         raise ValueError("translate requires at least one segment")
 
@@ -121,7 +201,7 @@ def translate_segments(segments: list[dict]) -> list[tuple[int, str]]:
 
     translated = _translate_texts(texts)
     if len(translated) != len(texts) or any(not isinstance(text, str) for text in translated):
-        raise RuntimeError("NLLB runtime returned an invalid translation batch.")
+        raise RuntimeError("Offline MT runtime returned an invalid translation batch.")
 
     return list(zip(ids, translated, strict=True))
 
@@ -150,13 +230,13 @@ def translate_job(command: dict) -> None:
 def safe_error(command_type: object, exc: Exception) -> tuple[str, str]:
     if command_type == "load":
         if isinstance(exc, RuntimeDependencyError):
-            return "runtime_missing", "NLLB Python runtime dependencies are not installed."
-        return "model_load_failed", "NLLB model could not be loaded."
+            return "runtime_missing", "Offline MT Python runtime dependencies are not installed."
+        return "model_load_failed", "Offline MT model could not be loaded."
     if command_type == "translate":
         if isinstance(exc, ValueError):
             return "invalid_command", str(exc)
-        return "translation_failed", "NLLB translation failed."
-    return "invalid_command", "Unknown NLLB helper command."
+        return "translation_failed", "Offline MT translation failed."
+    return "invalid_command", "Unknown offline MT helper command."
 
 
 def main() -> int:
@@ -177,7 +257,14 @@ def main() -> int:
 
             if command_type == "load":
                 load_model(command.get("modelPath"))
-                emit({"type": "ready", "model": _model_name, "version": _runtime_version})
+                emit({
+                    "type": "ready",
+                    "model": _model_name,
+                    "version": _runtime_version,
+                    "device": _device_name,
+                    "dtype": _dtype_name,
+                    "batchSize": _batch_size,
+                })
             elif command_type == "translate":
                 translate_job(command)
             elif command_type == "shutdown":

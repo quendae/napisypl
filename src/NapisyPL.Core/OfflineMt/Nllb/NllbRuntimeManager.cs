@@ -10,6 +10,7 @@ public sealed class NllbRuntimeManager : IAsyncDisposable
     private readonly Func<NllbRuntimeOptions, INllbRuntimeChannel> _channelFactory;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private INllbRuntimeChannel? _channel;
+    private ReadyEvent? _ready;
     private bool _loaded;
     private bool _disposed;
 
@@ -26,6 +27,10 @@ public sealed class NllbRuntimeManager : IAsyncDisposable
     public bool IsRunning => _channel?.IsRunning == true;
     public int? ProcessId => _channel?.ProcessId;
     public IProgress<string>? StatusProgress { get; set; }
+    public string DeviceDescription => _ready?.Device ?? "CPU";
+    public string? DType => _ready?.DType;
+    public int? BatchSize => _ready?.BatchSize;
+    public string? RuntimeVersion => _ready?.Version;
 
     public async Task EnsureReadyAsync(
         IProgress<string>? status = null,
@@ -110,6 +115,7 @@ public sealed class NllbRuntimeManager : IAsyncDisposable
         var channel = _channelFactory(_options);
         _channel = channel;
         _loaded = false;
+        _ready = null;
 
         try
         {
@@ -122,9 +128,16 @@ public sealed class NllbRuntimeManager : IAsyncDisposable
                 var @event = await channel.ReadAsync(timeout.Token);
                 switch (@event)
                 {
-                    case ReadyEvent:
+                    case ReadyEvent ready:
+                        _ready = ready;
                         _loaded = true;
-                        status?.Report("NLLB: lokalny translator EN→PL gotowy.");
+                        var details = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(ready.Device)) details.Add(ready.Device);
+                        if (!string.IsNullOrWhiteSpace(ready.DType)) details.Add(ready.DType);
+                        if (ready.BatchSize is not null) details.Add($"batch {ready.BatchSize}");
+                        status?.Report(details.Count == 0
+                            ? "NLLB: lokalny translator EN→PL gotowy."
+                            : $"NLLB: gotowy · {string.Join(" · ", details)}.");
                         return;
                     case LocalErrorEvent error:
                         throw new InvalidOperationException($"NLLB helper: {error.Code}: {error.Message}");
@@ -143,6 +156,7 @@ public sealed class NllbRuntimeManager : IAsyncDisposable
         var channel = _channel;
         _channel = null;
         _loaded = false;
+        _ready = null;
         if (channel is null)
             return;
 

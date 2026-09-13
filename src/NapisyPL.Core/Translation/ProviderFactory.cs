@@ -26,7 +26,10 @@ public static class ProviderFactory
             "Local Argos (offline)" => new ArgosOfflineProvider(ArgosRuntimeRegistry.GetOrCreate(httpClient)),
             "Firefox/Bergamot (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetFirefox(httpClient)),
             "OPUS-MT / Marian (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetOpusMarian(httpClient)),
-            "NLLB-200 600M (offline, benchmark)" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient)),
+            "NLLB 600M — Fast" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Fast600M)),
+            "NLLB 1.3B — Balanced" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Balanced1_3B)),
+            "MADLAD-400 3B — Quality" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.QualityMadlad3B)),
+            "NLLB-200 600M (offline, benchmark)" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Fast600M)),
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Nieznany provider tłumaczenia.")
         };
 

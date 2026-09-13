@@ -11,7 +11,12 @@ public sealed record ShutdownCommand : LocalTranslatorCommand;
 
 public abstract record LocalTranslatorEvent;
 
-public sealed record ReadyEvent(string Model, string Version) : LocalTranslatorEvent;
+public sealed record ReadyEvent(
+    string Model,
+    string Version,
+    string? Device = null,
+    string? DType = null,
+    int? BatchSize = null) : LocalTranslatorEvent;
 public sealed record SegmentEvent(string JobId, int Id, string Text) : LocalTranslatorEvent;
 public sealed record LocalProgressEvent(string JobId, int Completed, int Total) : LocalTranslatorEvent;
 public sealed record CompleteEvent(string JobId) : LocalTranslatorEvent;
@@ -49,7 +54,12 @@ public static class LocalTranslatorProtocol
             var type = RequiredString(root, "type");
             return type switch
             {
-                "ready" => new ReadyEvent(RequiredString(root, "model"), RequiredString(root, "version")),
+                "ready" => new ReadyEvent(
+                    RequiredString(root, "model"),
+                    RequiredString(root, "version"),
+                    OptionalString(root, "device"),
+                    OptionalString(root, "dtype"),
+                    OptionalInt(root, "batchSize", minimum: 1)),
                 "segment" => new SegmentEvent(
                     RequiredString(root, "jobId"),
                     RequiredInt(root, "id", minimum: 1),
@@ -133,6 +143,15 @@ public static class LocalTranslatorProtocol
             throw new InvalidDataException($"Pole {name} musi być tekstem.");
         var value = property.GetString();
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static int? OptionalInt(JsonElement root, string name, int minimum)
+    {
+        if (!root.TryGetProperty(name, out var property) || property.ValueKind == JsonValueKind.Null)
+            return null;
+        if (!property.TryGetInt32(out var value) || value < minimum)
+            throw new InvalidDataException($"Pole {name} musi być liczbą całkowitą >= {minimum}.");
+        return value;
     }
 
     private static int RequiredInt(JsonElement root, string name, int minimum)

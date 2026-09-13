@@ -1,5 +1,12 @@
 namespace NapisyPL.Core.OfflineMt.Nllb;
 
+public enum NllbModelProfile
+{
+    Fast600M,
+    Balanced1_3B,
+    QualityMadlad3B
+}
+
 public sealed record NllbModelFile(
     string RelativePath,
     string DownloadUrl);
@@ -14,30 +21,98 @@ public sealed record NllbModelDescriptor(
     bool BenchmarkOnly,
     IReadOnlyList<NllbModelFile> Files)
 {
-    private const string PinnedRevision = "f8d333a098d19b4fd9a8b18f94170487ad3f821d";
-    private const string RepositoryBase = "https://huggingface.co/facebook/nllb-200-distilled-600M";
+    private const string FastRevision = "f8d333a098d19b4fd9a8b18f94170487ad3f821d";
+    private const string BalancedRevision = "e43ee79ff1768201e83dea963fcb082f47d6eb17";
+    private const string QualityRevision = "fa184c675da0b5c9e1c8694fccd4e12e2d422094";
 
-    public static NllbModelDescriptor Pinned { get; } = new(
-        BackendId: "nllb-200-distilled-600m-eng-pol",
-        ModelId: "facebook/nllb-200-distilled-600M",
-        Revision: PinnedRevision,
-        SourceLanguage: "eng_Latn",
-        TargetLanguage: "pol_Latn",
-        LicenseId: "CC-BY-NC-4.0",
-        BenchmarkOnly: true,
-        Files:
+    public static NllbModelDescriptor Fast600M { get; } = HuggingFace(
+        backendId: "nllb-200-distilled-600m-eng-pol",
+        modelId: "facebook/nllb-200-distilled-600M",
+        revision: FastRevision,
+        sourceLanguage: "eng_Latn",
+        targetLanguage: "pol_Latn",
+        licenseId: "CC-BY-NC-4.0",
+        benchmarkOnly: true,
+        files:
         [
-            File("config.json"),
-            File("generation_config.json"),
-            File("pytorch_model.bin"),
-            File("sentencepiece.bpe.model"),
-            File("special_tokens_map.json"),
-            File("tokenizer.json"),
-            File("tokenizer_config.json")
+            "config.json",
+            "generation_config.json",
+            "pytorch_model.bin",
+            "sentencepiece.bpe.model",
+            "special_tokens_map.json",
+            "tokenizer.json",
+            "tokenizer_config.json"
         ]);
 
-    public string RepositoryTreeUrl => $"{RepositoryBase}/tree/{Revision}";
+    public static NllbModelDescriptor Balanced1_3B { get; } = HuggingFace(
+        backendId: "nllb-200-distilled-1.3b-eng-pol",
+        modelId: "facebook/nllb-200-distilled-1.3B",
+        revision: BalancedRevision,
+        sourceLanguage: "eng_Latn",
+        targetLanguage: "pol_Latn",
+        licenseId: "CC-BY-NC-4.0",
+        benchmarkOnly: true,
+        files:
+        [
+            "config.json",
+            "generation_config.json",
+            "pytorch_model.bin",
+            "sentencepiece.bpe.model",
+            "special_tokens_map.json",
+            "tokenizer.json",
+            "tokenizer_config.json"
+        ]);
 
-    private static NllbModelFile File(string relativePath) =>
-        new(relativePath, $"{RepositoryBase}/resolve/{PinnedRevision}/{relativePath}?download=true");
+    public static NllbModelDescriptor QualityMadlad3B { get; } = HuggingFace(
+        backendId: "madlad-400-3b-eng-pol",
+        modelId: "google/madlad400-3b-mt",
+        revision: QualityRevision,
+        sourceLanguage: "en",
+        targetLanguage: "pl",
+        licenseId: "Apache-2.0",
+        benchmarkOnly: false,
+        files:
+        [
+            "added_tokens.json",
+            "config.json",
+            "generation_config.json",
+            "model.safetensors",
+            "special_tokens_map.json",
+            "spiece.model",
+            "tokenizer.json",
+            "tokenizer_config.json"
+        ]);
+
+    public static NllbModelDescriptor Pinned => Fast600M;
+
+    public static NllbModelDescriptor ForProfile(NllbModelProfile profile) => profile switch
+    {
+        NllbModelProfile.Fast600M => Fast600M,
+        NllbModelProfile.Balanced1_3B => Balanced1_3B,
+        NllbModelProfile.QualityMadlad3B => QualityMadlad3B,
+        _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unknown offline MT model profile.")
+    };
+
+    public string RepositoryTreeUrl => $"https://huggingface.co/{ModelId}/tree/{Revision}";
+
+    private static NllbModelDescriptor HuggingFace(
+        string backendId,
+        string modelId,
+        string revision,
+        string sourceLanguage,
+        string targetLanguage,
+        string licenseId,
+        bool benchmarkOnly,
+        IReadOnlyList<string> files) =>
+        new(
+            backendId,
+            modelId,
+            revision,
+            sourceLanguage,
+            targetLanguage,
+            licenseId,
+            benchmarkOnly,
+            files.Select(path => new NllbModelFile(
+                path,
+                $"https://huggingface.co/{modelId}/resolve/{revision}/{path}?download=true")).ToArray());
 }
