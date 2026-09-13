@@ -46,6 +46,16 @@ jobs:
       - name: Test offline MT helper protocol
         run: python tools/offline-mt/test_nllb_protocol.py
 
+      - name: Validate AMD runtime installer plan
+        shell: pwsh
+        run: |
+          $output = & ./tools/offline-mt/install-amd-runtime.ps1 -PlanOnly | Out-String
+          $output | Write-Host
+          if ($output -notmatch 'nuget-x64') { throw 'AMD runtime plan did not select private NuGet Python.' }
+          if ($output -notmatch 'rocm.nightlies.amd.com/whl-multi-arch') { throw 'AMD runtime plan did not select the validated TheRock index.' }
+          if ($output -notmatch '2.13.0\+rocm10.1.0a20260822') { throw 'AMD runtime plan did not select the hardware-accepted torch build.' }
+          if ($output -notmatch 'gfx1030') { throw 'AMD runtime plan did not select gfx1030.' }
+
       - name: Install NLLB runtime dependencies
         shell: pwsh
         run: |
