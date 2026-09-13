@@ -67,6 +67,20 @@ Invoke-Checked -Description 'Initialize Bergamot inference submodules' -Command 
     git -C $SourceDirectory submodule update --init --depth 1 --recursive -- @requiredSubmodules
 }
 
+# ssplit-cpp  at this Firefox revision downloads PCRE2 10.39 as an ExternalProject.
+# CMake 4.x removed pre-3.5 policy compatibility, so pass the same compatibility floor
+# to the nested PCRE2 configure invocation as we pass to the top-level project.
+$pcreFindPath = Join-Path $SourceDirectory 'inference\3rd_party\ssplit-cpp\cmake\FindPCRE2.cmake'
+$pcreFind = Get-Content $pcreFindPath -Raw
+$pcreNeedle = '    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=true # Added for pybind11'
+if (-not $pcreFind.Contains($pcreNeedle)) {
+    throw 'Unexpected ssplit-cpp FindPCRE2.cmake layout; cannot apply CMake 4 compatibility fix safely.'
+}
+$pcreFind = $pcreFind.Replace(
+    $pcreNeedle,
+    "    -DCMAKE_POLICY_VERSION_MINIMUM=3.5`r`n$pcreNeedle")
+Set-Content -Path $pcreFindPath -Value $pcreFind -Encoding utf8NoBOM
+
 $inferenceSource = Join-Path $SourceDirectory 'inference'
 Copy-Item $helperSource (Join-Path $inferenceSource 'subflow-helper') -Recurse
 Add-Content (Join-Path $inferenceSource 'CMakeLists.txt') "`nadd_subdirectory(subflow-helper)"
