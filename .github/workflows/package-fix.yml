@@ -58,13 +58,18 @@ jobs:
             -BuildDirectory $build `
             -OutputPath "dist/SubFlow.BergamotHelper.exe"
 
-      - name: Smoke test Bergamot helper
+      - name: Smoke test Bergamot helper process
         shell: pwsh
         run: |
           $output = '{"type":"shutdown"}' | & .\dist\SubFlow.BergamotHelper.exe 2>&1
           $exitCode = $LASTEXITCODE
           $output | Write-Host
           if ($exitCode -ne 0) { throw "Bergamot helper smoke test failed with exit code $exitCode" }
+
+      - name: Integration smoke Firefox and OPUS real models
+        shell: pwsh
+        run: |
+          dotnet run --project tools/offline-mt/Smoke/Smoke.csproj -c Release -- .\dist\SubFlow.BergamotHelper.exe
 
       - name: Publish Windows x64
         shell: pwsh
