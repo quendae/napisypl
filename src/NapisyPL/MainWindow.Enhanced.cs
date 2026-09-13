@@ -1,6 +1,7 @@
 using Avalonia.Interactivity;
 using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Services;
+using NapisyPL.Core.Translation;
 
 namespace NapisyPL;
 
