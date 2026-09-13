@@ -95,9 +95,11 @@ class NllbProtocolTests(unittest.TestCase):
 
         self.assertEqual(32, module.default_batch_size("nllb", 2_500_000_000, gpu=True))
         self.assertEqual(16, module.default_batch_size("nllb", 5_500_000_000, gpu=True))
+        self.assertEqual(4, module.default_batch_size("nllb", 17_600_000_000, gpu=True))
         self.assertEqual(8, module.default_batch_size("madlad", 11_800_000_000, gpu=True))
         self.assertEqual(8, module.default_batch_size("nllb", 2_500_000_000, gpu=False))
         self.assertEqual(4, module.default_batch_size("nllb", 5_500_000_000, gpu=False))
+        self.assertEqual(1, module.default_batch_size("nllb", 17_600_000_000, gpu=False))
         self.assertEqual(2, module.default_batch_size("madlad", 11_800_000_000, gpu=False))
 
 
