@@ -24,6 +24,29 @@ jobs:
       - name: Build desktop projects
         run: dotnet build src/NapisyPL/NapisyPL.csproj -c Release --no-restore
 
+      - name: Build Bergamot helper
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "bergamot-translator"
+          $build = Join-Path $env:RUNNER_TEMP "bergamot-build"
+          & ./tools/offline-mt/build-bergamot-helper.ps1 `
+            -SourceDirectory $source `
+            -BuildDirectory $build `
+            -OutputPath "dist/SubFlow.BergamotHelper.exe"
+
+      - name: Smoke test Bergamot helper process
+        shell: pwsh
+        run: |
+          $output = '{"type":"shutdown"}' | & .\dist\SubFlow.BergamotHelper.exe 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Write-Host
+          if ($exitCode -ne 0) { throw "Bergamot helper smoke test failed with exit code $exitCode" }
+
+      - name: Integration smoke Firefox and OPUS real models
+        shell: pwsh
+        run: |
+          dotnet run --project tools/offline-mt/Smoke/Smoke.csproj -c Release -- .\dist\SubFlow.BergamotHelper.exe
+
       - name: Build Argos helper
         shell: pwsh
         run: |
@@ -47,29 +70,6 @@ jobs:
           $exitCode = $LASTEXITCODE
           $output | Write-Host
           if ($exitCode -ne 0) { throw "Argos helper smoke test failed with exit code $exitCode" }
-
-      - name: Build Bergamot helper
-        shell: pwsh
-        run: |
-          $source = Join-Path $env:RUNNER_TEMP "bergamot-translator"
-          $build = Join-Path $env:RUNNER_TEMP "bergamot-build"
-          & ./tools/offline-mt/build-bergamot-helper.ps1 `
-            -SourceDirectory $source `
-            -BuildDirectory $build `
-            -OutputPath "dist/SubFlow.BergamotHelper.exe"
-
-      - name: Smoke test Bergamot helper process
-        shell: pwsh
-        run: |
-          $output = '{"type":"shutdown"}' | & .\dist\SubFlow.BergamotHelper.exe 2>&1
-          $exitCode = $LASTEXITCODE
-          $output | Write-Host
-          if ($exitCode -ne 0) { throw "Bergamot helper smoke test failed with exit code $exitCode" }
-
-      - name: Integration smoke Firefox and OPUS real models
-        shell: pwsh
-        run: |
-          dotnet run --project tools/offline-mt/Smoke/Smoke.csproj -c Release -- .\dist\SubFlow.BergamotHelper.exe
 
       - name: Publish Windows x64
         shell: pwsh
