@@ -1,0 +1,23 @@
+name: Settings race regression
+
+on:
+  push:
+    branches:
+      - fix/offline-mt-first-run
+    paths:
+      - '.github/workflows/settings-race.yml'
+      - 'src/NapisyPL/Settings/SettingsStore.cs'
+      - 'tools/settings-race-smoke/**'
+  workflow_dispatch:
+
+jobs:
+  settings-race:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Reproduce concurrent settings saves
+        run: dotnet run --project tools/settings-race-smoke/SettingsRaceSmoke.csproj -c Release
