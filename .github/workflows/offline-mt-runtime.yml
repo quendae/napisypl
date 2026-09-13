@@ -21,58 +21,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Clone pinned Bergamot runtime
+      - name: Build pinned Bergamot helper
         shell: pwsh
         run: |
           $source = Join-Path $env:RUNNER_TEMP "bergamot-translator"
-          git clone --branch v0.4.5 --depth 1 --recurse-submodules --shallow-submodules https://github.com/browsermt/bergamot-translator.git $source
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          $msvcPatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/sentencepiece-modern-msvc.patch").Path
-          $sentencepiece = Join-Path $source "3rd_party/marian-dev/src/3rd_party/sentencepiece"
-          git -C $sentencepiece apply --check $msvcPatch
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git -C $sentencepiece apply $msvcPatch
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          $pcrePatch = (Resolve-Path "tools/offline-mt/bergamot-helper/patches/ssplit-pcre2-cmake-policy.patch").Path
-          $ssplit = Join-Path $source "3rd_party/ssplit-cpp"
-          git -C $ssplit apply --check $pcrePatch
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git -C $ssplit apply $pcrePatch
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          Copy-Item "tools/offline-mt/bergamot-helper" (Join-Path $source "subflow-helper") -Recurse
-          Add-Content (Join-Path $source "CMakeLists.txt") "`nadd_subdirectory(subflow-helper)"
-          "BERGAMOT_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Configure Bergamot Windows x64
-        shell: pwsh
-        run: |
           $build = Join-Path $env:RUNNER_TEMP "bergamot-build"
-          $cmakeArgs = @(
-            "-S", $env:BERGAMOT_SOURCE,
-            "-B", $build,
-            "-A", "x64",
-            "-DBUILD_ARCH=x86-64-v2",
-            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
-            "-DSSPLIT_USE_INTERNAL_PCRE2=ON",
-            "-DCOMPILE_TESTS=OFF",
-            "-DCOMPILE_UNIT_TESTS=OFF",
-            "-DCOMPILE_PYTHON=OFF"
-          )
-          & cmake @cmakeArgs
+          $helper = Join-Path $env:RUNNER_TEMP "SubFlow.BergamotHelper.exe"
+          & ./tools/offline-mt/build-bergamot-helper.ps1 `
+            -SourceDirectory $source `
+            -BuildDirectory $build `
+            -OutputPath $helper
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "BERGAMOT_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Build SubFlow Bergamot helper
-        shell: pwsh
-        run: |
-          cmake --build $env:BERGAMOT_BUILD --config Release --target SubFlow.BergamotHelper --parallel 2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $helper = Get-ChildItem $env:BERGAMOT_BUILD -Filter "SubFlow.BergamotHelper.exe" -Recurse | Select-Object -First 1
-          if (-not $helper) { throw "SubFlow.BergamotHelper.exe was not produced" }
-          "SUBFLOW_BERGAMOT_HELPER=$($helper.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SUBFLOW_BERGAMOT_HELPER=$helper" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Test Bergamot helper protocol
         run: python -m unittest discover -s tools/offline-mt -p "test_*.py" -v
