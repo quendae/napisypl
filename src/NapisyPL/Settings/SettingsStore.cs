@@ -5,6 +5,7 @@ namespace NapisyPL.Settings;
 public sealed class SettingsStore
 {
     private readonly string _path;
+    private static readonly SemaphoreSlim SaveGate = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     public SettingsStore()
@@ -29,8 +30,31 @@ public sealed class SettingsStore
 
     public async Task SaveAsync(AppSettings settings)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        await using var stream = File.Create(_path);
-        await JsonSerializer.SerializeAsync(stream, settings, JsonOptions);
+        ArgumentNullException.ThrowIfNull(settings);
+        await SaveGate.WaitAsync();
+        try
+        {
+            var directory = Path.GetDirectoryName(_path)!;
+            Directory.CreateDirectory(directory);
+            var tempPath = _path + ".tmp";
+
+            await using (var stream = new FileStream(
+                tempPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(stream, settings, JsonOptions);
+                await stream.FlushAsync();
+            }
+
+            File.Move(tempPath, _path, overwrite: true);
+        }
+        finally
+        {
+            SaveGate.Release();
+        }
     }
 }

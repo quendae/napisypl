@@ -1,6 +1,7 @@
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.OfflineMt.Bergamot;
+using NapisyPL.Core.OfflineMt.Nllb;
 using NapisyPL.Core.Translation.Providers;
 
 namespace NapisyPL.Core.Translation;
@@ -25,6 +26,7 @@ public static class ProviderFactory
             "Local Argos (offline)" => new ArgosOfflineProvider(ArgosRuntimeRegistry.GetOrCreate(httpClient)),
             "Firefox/Bergamot (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetFirefox(httpClient)),
             "OPUS-MT / Marian (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetOpusMarian(httpClient)),
+            "NLLB-200 600M (offline, benchmark)" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient)),
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Nieznany provider tłumaczenia.")
         };
 

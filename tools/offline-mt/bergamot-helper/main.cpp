@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -31,6 +32,10 @@ void emitError(const std::optional<std::string> &jobId, const std::string &code,
   emit(response);
 }
 
+void diagnostic(const std::string &message) {
+  std::cerr << "[SubFlow.BergamotHelper] " << message << '\n' << std::flush;
+}
+
 std::filesystem::path resolveConfigPath(const std::string &modelPath) {
   const std::filesystem::path path(modelPath);
   if (std::filesystem::is_regular_file(path)) {
@@ -44,7 +49,10 @@ std::filesystem::path resolveConfigPath(const std::string &modelPath) {
 int main() {
   std::ios::sync_with_stdio(false);
 
-  std::unique_ptr<bergamot::BlockingService> service;
+  // Follow the native translator-cli path shipped by mozilla/translations v0.6.0:
+  // AsyncService + createCompatibleModel(). This ensures the model backend is created
+  // with the same worker/replica contract as Firefox's Bergamot runtime.
+  std::unique_ptr<bergamot::AsyncService> service;
   std::shared_ptr<bergamot::TranslationModel> model;
   std::string line;
 
@@ -80,20 +88,31 @@ int main() {
           continue;
         }
 
-        bergamot::BlockingService::Config serviceConfig;
+        diagnostic("loading model config: " + configPath.string());
+        bergamot::AsyncService::Config serviceConfig;
+        serviceConfig.numWorkers = 1;
         serviceConfig.cacheSize = 0;
-        serviceConfig.logger.level = "off";
+        serviceConfig.logger.level = "info";
         auto modelConfig = bergamot::parseOptionsFromFilePath(configPath.string());
 
-        auto nextService = std::make_unique<bergamot::BlockingService>(serviceConfig);
-        auto nextModel = std::make_shared<bergamot::TranslationModel>(modelConfig);
+        auto nextService = std::make_unique<bergamot::AsyncService>(serviceConfig);
+        auto nextModel = nextService->createCompatibleModel(modelConfig);
 
+        model.reset();
+        service.reset();
         service = std::move(nextService);
         model = std::move(nextModel);
-        emit({{"type", "ready"}, {"model", configPath.parent_path().filename().string()}, {"version", "0.4.5"}});
-      } catch (...) {
-        service.reset();
+        diagnostic("model loaded using AsyncService");
+        emit({{"type", "ready"}, {"model", configPath.parent_path().filename().string()}, {"version", "0.6.0"}});
+      } catch (const std::exception &ex) {
+        diagnostic(std::string("model load exception: ") + ex.what());
         model.reset();
+        service.reset();
+        emitError(std::nullopt, "model_load_failed", "Bergamot model could not be loaded.");
+      } catch (...) {
+        diagnostic("model load exception: unknown");
+        model.reset();
+        service.reset();
         emitError(std::nullopt, "model_load_failed", "Bergamot model could not be loaded.");
       }
       continue;
@@ -137,19 +156,29 @@ int main() {
           continue;
         }
 
-        std::vector<bergamot::ResponseOptions> responseOptions(ids.size());
-        auto responses = service->translateMultiple(model, std::move(texts), responseOptions);
-        if (responses.size() != ids.size()) {
-          emitError(jobId, "translation_failed", "Bergamot returned an unexpected result count.");
-          continue;
-        }
+        diagnostic("AsyncService translate begin; segments=" + std::to_string(ids.size()));
+        for (std::size_t i = 0; i < texts.size(); ++i) {
+          std::promise<bergamot::Response> promise;
+          auto future = promise.get_future();
+          bergamot::ResponseOptions responseOptions;
 
-        for (std::size_t i = 0; i < responses.size(); ++i) {
-          emit({{"type", "segment"}, {"jobId", *jobId}, {"id", ids[i]}, {"text", responses[i].target.text}});
-          emit({{"type", "progress"}, {"jobId", *jobId}, {"completed", i + 1}, {"total", responses.size()}});
+          service->translate(
+              model,
+              std::move(texts[i]),
+              [&promise](bergamot::Response &&response) { promise.set_value(std::move(response)); },
+              responseOptions);
+
+          auto response = future.get();
+          emit({{"type", "segment"}, {"jobId", *jobId}, {"id", ids[i]}, {"text", response.target.text}});
+          emit({{"type", "progress"}, {"jobId", *jobId}, {"completed", i + 1}, {"total", ids.size()}});
         }
+        diagnostic("AsyncService translate complete");
         emit({{"type", "complete"}, {"jobId", *jobId}});
+      } catch (const std::exception &ex) {
+        diagnostic(std::string("translation exception: ") + ex.what());
+        emitError(jobId, "translation_failed", "Bergamot translation failed.");
       } catch (...) {
+        diagnostic("translation exception: unknown");
         emitError(jobId, "translation_failed", "Bergamot translation failed.");
       }
       continue;

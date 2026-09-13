@@ -21,6 +21,24 @@ public sealed class OfflineMtPackagingContractTests
         Assert.Contains("tools/offline-mt/build-bergamot-helper.ps1", runtimeWorkflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void NllbWindowsPackage_IsSelfContainedAndRealModelSmokeTested()
+    {
+        var root = FindRepositoryRoot();
+        var workflowPath = Path.Combine(root, ".github", "workflows", "package-nllb.yml");
+        var registryPath = Path.Combine(root, "src", "NapisyPL.Core", "OfflineMt", "Nllb", "NllbRuntimeRegistry.cs");
+
+        Assert.True(File.Exists(workflowPath), $"Missing NLLB package workflow: {workflowPath}");
+        var workflow = File.ReadAllText(workflowPath);
+        Assert.Contains("PyInstaller", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SubFlow.NllbHelper.exe", workflow, StringComparison.Ordinal);
+        Assert.Contains("NLLB_SMOKE_OK", workflow, StringComparison.Ordinal);
+        Assert.Contains("SubFlow-win-x64-nllb-test", workflow, StringComparison.Ordinal);
+
+        var registry = File.ReadAllText(registryPath);
+        Assert.Contains("SubFlow.NllbHelper.exe", registry, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var candidates = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };

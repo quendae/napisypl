@@ -17,7 +17,7 @@ public sealed class OpusMarianAssetManagerTests
         Assert.Equal("pol", descriptor.TargetLanguage);
         Assert.Equal("2021-02-19", descriptor.Release);
         Assert.Equal(
-            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip/eng-pol/opus-2021-02-19.zip",
+            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip",
             descriptor.ArchiveUrl);
         Assert.Equal("normalization + SentencePiece spm32k/spm32k", descriptor.Preprocessing);
     }
@@ -52,11 +52,12 @@ public sealed class OpusMarianAssetManagerTests
         var root = TempDirectory();
         try
         {
+            // The real 2021-02-19 archive does not call its model model.npz.
             var archive = Zip(
-                ("eng-pol/model.npz", "MODEL"),
-                ("eng-pol/source.spm", "SOURCE"),
-                ("eng-pol/target.spm", "TARGET"),
-                ("eng-pol/README.md", "ignore me"));
+                ("opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz", "MODEL"),
+                ("source.spm", "SOURCE"),
+                ("target.spm", "TARGET"),
+                ("README.md", "ignore me"));
             var assets = new OfflineMtAssetManager(root);
             var manager = new OpusMarianAssetManager(
                 assets,
@@ -90,7 +91,7 @@ public sealed class OpusMarianAssetManagerTests
         try
         {
             var archive = Zip(
-                ("model.npz", "MODEL"),
+                ("opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz", "MODEL"),
                 ("source.spm", "SOURCE"));
             var assets = new OfflineMtAssetManager(root);
             var manager = new OpusMarianAssetManager(
