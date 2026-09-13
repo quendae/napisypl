@@ -4,6 +4,7 @@ public enum NllbModelProfile
 {
     Fast600M,
     Balanced1_3B,
+    QualityNllb3_3B,
     QualityMadlad3B
 }
 
@@ -23,7 +24,8 @@ public sealed record NllbModelDescriptor(
 {
     private const string FastRevision = "f8d333a098d19b4fd9a8b18f94170487ad3f821d";
     private const string BalancedRevision = "e43ee79ff1768201e83dea963fcb082f47d6eb17";
-    private const string QualityRevision = "fa184c675da0b5c9e1c8694fccd4e12e2d422094";
+    private const string NllbQualityRevision = "1a07f7d195896b2114afcb79b7b57ab512e7b43e";
+    private const string MadladQualityRevision = "fa184c675da0b5c9e1c8694fccd4e12e2d422094";
 
     public static NllbModelDescriptor Fast600M { get; } = HuggingFace(
         backendId: "nllb-200-distilled-600m-eng-pol",
@@ -63,10 +65,32 @@ public sealed record NllbModelDescriptor(
             "tokenizer_config.json"
         ]);
 
+    public static NllbModelDescriptor QualityNllb3_3B { get; } = HuggingFace(
+        backendId: "nllb-200-3.3b-eng-pol",
+        modelId: "facebook/nllb-200-3.3B",
+        revision: NllbQualityRevision,
+        sourceLanguage: "eng_Latn",
+        targetLanguage: "pol_Latn",
+        licenseId: "CC-BY-NC-4.0",
+        benchmarkOnly: true,
+        files:
+        [
+            "config.json",
+            "generation_config.json",
+            "pytorch_model-00001-of-00003.bin",
+            "pytorch_model-00002-of-00003.bin",
+            "pytorch_model-00003-of-00003.bin",
+            "pytorch_model.bin.index.json",
+            "sentencepiece.bpe.model",
+            "special_tokens_map.json",
+            "tokenizer.json",
+            "tokenizer_config.json"
+        ]);
+
     public static NllbModelDescriptor QualityMadlad3B { get; } = HuggingFace(
         backendId: "madlad-400-3b-eng-pol",
         modelId: "google/madlad400-3b-mt",
-        revision: QualityRevision,
+        revision: MadladQualityRevision,
         sourceLanguage: "en",
         targetLanguage: "pl",
         licenseId: "Apache-2.0",
@@ -89,6 +113,7 @@ public sealed record NllbModelDescriptor(
     {
         NllbModelProfile.Fast600M => Fast600M,
         NllbModelProfile.Balanced1_3B => Balanced1_3B,
+        NllbModelProfile.QualityNllb3_3B => QualityNllb3_3B,
         NllbModelProfile.QualityMadlad3B => QualityMadlad3B,
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unknown offline MT model profile.")
     };
