@@ -16,6 +16,7 @@ public partial class MainWindow
     private const string OpusProviderName = "OPUS-MT / Marian (offline)";
     private const string NllbFastProviderName = "NLLB 600M — Fast";
     private const string NllbBalancedProviderName = "NLLB 1.3B — Balanced";
+    private const string NllbQualityTestProviderName = "NLLB 3.3B — Quality Test";
     private const string MadladQualityProviderName = "MADLAD-400 3B — Quality";
     private const string LegacyNllbProviderName = "NLLB-200 600M (offline, benchmark)";
     private static readonly string[] LocalMtProviderNames =
@@ -25,6 +26,7 @@ public partial class MainWindow
         OpusProviderName,
         NllbFastProviderName,
         NllbBalancedProviderName,
+        NllbQualityTestProviderName,
         MadladQualityProviderName
     ];
 
@@ -107,14 +109,17 @@ public partial class MainWindow
             case NllbBalancedProviderName:
                 ProviderHintText.Text = "NLLB distilled 1.3B · Balanced. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
                 break;
+            case NllbQualityTestProviderName:
+                ProviderHintText.Text = "NLLB full 3.3B · Quality Test. Auto GPU/CPU; GPU używa FP16 i startuje od batch 4. CC-BY-NC-4.0 · benchmark/non-commercial. Duży model (~17.6 GB pobrania); GPU zdecydowanie zalecane. Model pozostaje w pamięci podczas całej kolejki folderu.";
+                break;
             case MadladQualityProviderName:
                 ProviderHintText.Text = "MADLAD-400 3B · Quality. Auto GPU/CPU; GPU używa FP16. Apache-2.0. Model pozostaje w pamięci podczas całej kolejki folderu.";
                 break;
             case "Local Qwen (offline)":
-                ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced używa Qwena osobno tylko jako korektora.";
+                ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced nie używa dodatkowego LLM do korekty.";
                 break;
             case "DeepL":
-                ProviderHintText.Text = "Szybki translator chmurowy. Enhanced może później lokalnie poprawić rodzaj/liczbę przez Qwen 1.7B.";
+                ProviderHintText.Text = "Szybki translator chmurowy. Enhanced może lokalnie skorygować pewne formy rodzaju na podstawie audio i kolejności rozmówców.";
                 break;
             case "Gemini":
                 ProviderHintText.Text = "Tłumaczenie LLM przez Gemini; model i klucz API są konfigurowalne.";
