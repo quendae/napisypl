@@ -39,6 +39,7 @@ public sealed class OfflineMtPackagingContractTests
         Assert.Contains("SubFlow.NllbHelper.exe", workflow, StringComparison.Ordinal);
         Assert.Contains("NLLB_SMOKE_OK", workflow, StringComparison.Ordinal);
         Assert.Contains("Test offline MT helper protocol", workflow, StringComparison.Ordinal);
+        Assert.Contains("Validate AMD runtime installer plan", workflow, StringComparison.Ordinal);
         Assert.Contains("Install-AMD-GPU-Runtime.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("Install-AMD-GPU-Runtime.cmd", workflow, StringComparison.Ordinal);
         Assert.Contains("SubFlow-win-x64-offline-mt-gpu-profiles-test", workflow, StringComparison.Ordinal);
@@ -49,7 +50,8 @@ public sealed class OfflineMtPackagingContractTests
         Assert.Contains("python.exe", registry, StringComparison.Ordinal);
 
         var amdInstaller = File.ReadAllText(amdInstallerPath);
-        Assert.Contains("device-gfx1030", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("$GfxTarget = \"gfx1030\"", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("torch[device-$GfxTarget]", amdInstaller, StringComparison.Ordinal);
         Assert.Contains("api.nuget.org/v3-flatcontainer/python", amdInstaller, StringComparison.Ordinal);
         Assert.Contains("rocm.nightlies.amd.com/whl-multi-arch", amdInstaller, StringComparison.Ordinal);
         Assert.Contains("2.13.0+rocm10.1.0a20260822", amdInstaller, StringComparison.Ordinal);
