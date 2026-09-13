@@ -56,6 +56,14 @@ jobs:
           if ($output -notmatch '2.13.0\+rocm10.1.0a20260822') { throw 'AMD runtime plan did not select the hardware-accepted torch build.' }
           if ($output -notmatch 'gfx1030') { throw 'AMD runtime plan did not select gfx1030.' }
 
+      - name: Reproduce installer with Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$PWD\tools\offline-mt\install-amd-runtime.ps1" -PlanOnly
+          if ($LASTEXITCODE -ne 0) {
+            throw "AMD runtime installer failed under Windows PowerShell 5.1 with exit code $LASTEXITCODE"
+          }
+
       - name: Install NLLB runtime dependencies
         shell: pwsh
         run: |
