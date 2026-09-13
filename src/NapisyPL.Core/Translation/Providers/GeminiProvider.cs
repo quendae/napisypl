@@ -8,6 +8,7 @@ public sealed class GeminiProvider(HttpClient httpClient, string apiKey, string 
 {
     private readonly string _baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "https://generativelanguage.googleapis.com/v1beta" : baseUrl.TrimEnd('/');
     public string DisplayName => "Gemini";
+    public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.LlmDefault;
 
     public async Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
     {

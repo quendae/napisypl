@@ -8,6 +8,7 @@ public sealed class AnthropicProvider(HttpClient httpClient, string apiKey, stri
 {
     private readonly string _baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "https://api.anthropic.com" : baseUrl.TrimEnd('/');
     public string DisplayName => "Claude";
+    public TranslationBatchPolicy BatchPolicy => TranslationBatchPolicy.LlmDefault;
 
     public async Task<IReadOnlyDictionary<int, string>> TranslateAsync(IReadOnlyList<TranslationSegment> segments, CancellationToken cancellationToken = default)
     {
