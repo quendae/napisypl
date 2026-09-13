@@ -1,17 +1,23 @@
-name: Package NLLB Test
+name: Package Offline MT GPU Profiles Test
 
 on:
   workflow_dispatch:
   push:
     branches:
       - fix/offline-mt-first-run
+      - feature/offline-mt-gpu-profiles
     paths:
       - '.github/workflows/package-nllb.yml'
       - 'src/NapisyPL.Core/OfflineMt/Nllb/**'
+      - 'src/NapisyPL.Core/OfflineMt/OfflineMtPaths.cs'
+      - 'src/NapisyPL.Core/LocalTranslation/LocalTranslatorProtocol.cs'
       - 'src/NapisyPL.Core/Translation/**'
       - 'src/NapisyPL/**'
       - 'tools/offline-mt/nllb_helper.py'
+      - 'tools/offline-mt/test_nllb_protocol.py'
       - 'tools/offline-mt/requirements-nllb.txt'
+      - 'tools/offline-mt/install-amd-runtime.ps1'
+      - 'tools/offline-mt/install-amd-runtime.cmd'
       - 'tools/offline-mt/NllbSmoke/**'
       - 'tests/NapisyPL.Core.Tests/**'
 
@@ -34,8 +40,11 @@ jobs:
       - name: Restore
         run: dotnet restore NapisyPL.sln
 
-      - name: Test
+      - name: Test .NET
         run: dotnet test NapisyPL.sln -c Release --no-restore
+
+      - name: Test offline MT helper protocol
+        run: python tools/offline-mt/test_nllb_protocol.py
 
       - name: Install NLLB runtime dependencies
         shell: pwsh
@@ -43,7 +52,7 @@ jobs:
           python -m pip install --disable-pip-version-check -r tools/offline-mt/requirements-nllb.txt pyinstaller
           python -m pip check
 
-      - name: Build self-contained NLLB helper with PyInstaller
+      - name: Build self-contained CPU fallback helper with PyInstaller
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --name SubFlow.NllbHelper `
@@ -58,16 +67,16 @@ jobs:
           }
           Get-ChildItem dist/SubFlow.NllbHelper | Measure-Object -Property Length -Sum | Format-List
 
-      - name: Smoke test packaged NLLB helper startup
+      - name: Smoke test packaged helper startup
         shell: pwsh
         run: |
           $output = '{"type":"shutdown"}' | & .\dist\SubFlow.NllbHelper\SubFlow.NllbHelper.exe 2> nllb-helper-startup.err
           $exitCode = $LASTEXITCODE
           $output | Write-Host
           if (Test-Path nllb-helper-startup.err) { Get-Content nllb-helper-startup.err | Write-Host }
-          if ($exitCode -ne 0) { throw "NLLB helper startup smoke failed with exit code $exitCode" }
+          if ($exitCode -ne 0) { throw "Offline MT helper startup smoke failed with exit code $exitCode" }
 
-      - name: Integration smoke NLLB real model EN to PL
+      - name: Integration smoke Fast NLLB real model EN to PL
         shell: pwsh
         run: |
           dotnet run --project tools/offline-mt/NllbSmoke/NllbSmoke.csproj -c Release -- `
@@ -89,8 +98,14 @@ jobs:
             -o artifacts/win-x64
           New-Item -ItemType Directory -Force artifacts/win-x64/nllb-runtime | Out-Null
           Copy-Item dist/SubFlow.NllbHelper/* artifacts/win-x64/nllb-runtime/ -Recurse -Force
+          Copy-Item tools/offline-mt/install-amd-runtime.ps1 artifacts/win-x64/Install-AMD-GPU-Runtime.ps1 -Force
+          Copy-Item tools/offline-mt/install-amd-runtime.cmd artifacts/win-x64/Install-AMD-GPU-Runtime.cmd -Force
+          Copy-Item tools/offline-mt/nllb_helper.py artifacts/win-x64/nllb_helper.py -Force
           if (-not (Test-Path artifacts/win-x64/nllb-runtime/SubFlow.NllbHelper.exe)) {
-            throw 'SubFlow.NllbHelper.exe missing from Windows NLLB package.'
+            throw 'SubFlow.NllbHelper.exe missing from Windows package.'
+          }
+          if (-not (Test-Path artifacts/win-x64/Install-AMD-GPU-Runtime.cmd)) {
+            throw 'AMD GPU runtime installer missing from Windows package.'
           }
 
       - name: Smoke test desktop startup
@@ -104,10 +119,10 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force
 
-      - name: Upload NLLB Windows test build
+      - name: Upload Windows GPU profiles test build
         uses: actions/upload-artifact@v4
         with:
-          name: SubFlow-win-x64-nllb-test
+          name: SubFlow-win-x64-offline-mt-gpu-profiles-test
           path: artifacts/win-x64/
           if-no-files-found: error
           compression-level: 1
