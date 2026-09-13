@@ -20,8 +20,9 @@ public static class FirefoxBergamotCompression
         try
         {
             using var decompressor = new Decompressor();
-            var result = decompressor.Unwrap(compressed, (int)expectedDecompressedSize).ToArray();
-            if (result.LongLength != expectedDecompressedSize)
+            var result = new byte[(int)expectedDecompressedSize];
+            var written = decompressor.Unwrap(compressed.AsSpan(), result.AsSpan());
+            if (written != result.Length)
                 throw new InvalidDataException("Firefox model decompressed size does not match Remote Settings metadata.");
             return result;
         }
