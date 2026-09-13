@@ -50,7 +50,13 @@ public sealed class OfflineMtPackagingContractTests
 
         var amdInstaller = File.ReadAllText(amdInstallerPath);
         Assert.Contains("device-gfx1030", amdInstaller, StringComparison.Ordinal);
-        Assert.Contains("stable.repo.amd.com/rocm/whl-next", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("api.nuget.org/v3-flatcontainer/python", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("rocm.nightlies.amd.com/whl-multi-arch", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("2.13.0+rocm10.1.0a20260822", amdInstaller, StringComparison.Ordinal);
+        Assert.Contains("-m pip --version", amdInstaller, StringComparison.Ordinal);
+        Assert.DoesNotContain("bootstrap.pypa.io/get-pip.py", amdInstaller, StringComparison.Ordinal);
+        Assert.DoesNotContain("python.org/ftp/python", amdInstaller, StringComparison.Ordinal);
+        Assert.DoesNotContain("stable.repo.amd.com/rocm/whl-next", amdInstaller, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
