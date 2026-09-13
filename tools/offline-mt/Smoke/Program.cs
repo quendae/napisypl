@@ -90,7 +90,7 @@ async Task SmokeOpusAsync()
     // (dialogue lines, formatting spans, etc.). Exercise the same order of magnitude as
     // the real-world failure where 40 subtitle cues became 66 native translation requests.
     var batch = Enumerable.Range(0, 66)
-        .Select(index => index % 6 switch
+        .Select(index => (index % 6) switch
         {
             0 => "Good morning. Are you okay?",
             1 => "I don't know what to do.",
