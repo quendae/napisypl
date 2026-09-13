@@ -11,6 +11,7 @@ public sealed record ProviderUiProfile(
         "Local Argos (offline)" => new(false, false, false, false),
         "Firefox/Bergamot (offline)" => new(false, false, false, false),
         "OPUS-MT / Marian (offline)" => new(false, false, false, false),
+        "NLLB-200 600M (offline, benchmark)" => new(false, false, false, false),
         "Local Qwen — pełne tłumaczenie (wolne, eksperymentalne)" => new(false, false, false, false),
         "Local Qwen (offline)" => new(false, false, false, false),
         "DeepL" => new(true, false, true, true),
