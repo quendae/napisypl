@@ -76,6 +76,30 @@ class NllbProtocolTests(unittest.TestCase):
 
         self.assertNotIn(sentinel, str(context.exception))
 
+    def test_infer_model_family_recognizes_nllb_and_madlad(self):
+        module = self.load_helper_module()
+
+        self.assertEqual("nllb", module.infer_model_family({"model_type": "m2m_100"}))
+        self.assertEqual("madlad", module.infer_model_family({"model_type": "t5"}))
+        with self.assertRaisesRegex(RuntimeError, "unsupported"):
+            module.infer_model_family({"model_type": "unknown"})
+
+    def test_prepare_source_texts_adds_polish_prefix_only_for_madlad(self):
+        module = self.load_helper_module()
+
+        self.assertEqual(["Hello", "Goodbye"], module.prepare_source_texts("nllb", ["Hello", "Goodbye"]))
+        self.assertEqual(["<2pl> Hello", "<2pl> Goodbye"], module.prepare_source_texts("madlad", ["Hello", "Goodbye"]))
+
+    def test_default_batch_size_depends_on_family_size_and_device(self):
+        module = self.load_helper_module()
+
+        self.assertEqual(32, module.default_batch_size("nllb", 2_500_000_000, gpu=True))
+        self.assertEqual(16, module.default_batch_size("nllb", 5_500_000_000, gpu=True))
+        self.assertEqual(8, module.default_batch_size("madlad", 11_800_000_000, gpu=True))
+        self.assertEqual(8, module.default_batch_size("nllb", 2_500_000_000, gpu=False))
+        self.assertEqual(4, module.default_batch_size("nllb", 5_500_000_000, gpu=False))
+        self.assertEqual(2, module.default_batch_size("madlad", 11_800_000_000, gpu=False))
+
 
 if __name__ == "__main__":
     unittest.main()
