@@ -13,6 +13,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Firefox currently vendors this exact mozilla/translations revision as bergamot-translator v0.6.0.
+# Generation-3 Firefox models from translations-models-v2 require the newer engine; the old
+# browsermt/bergamot-translator v0.4.5 helper can terminate while loading those models.
+$bergamotRevision = 'eea6e5a80aa4ddd86d9cc35ce9a65b79aa3ab96d'
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)]
@@ -29,8 +34,6 @@ function Invoke-Checked {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $helperSource = Join-Path $repoRoot 'tools\offline-mt\bergamot-helper'
-$msvcPatch = Join-Path $helperSource 'patches\sentencepiece-modern-msvc.patch'
-$pcrePatch = Join-Path $helperSource 'patches\ssplit-pcre2-cmake-policy.patch'
 
 if (Test-Path $SourceDirectory) {
     Remove-Item $SourceDirectory -Recurse -Force
@@ -44,42 +47,41 @@ $buildParent = Split-Path $BuildDirectory -Parent
 New-Item -ItemType Directory -Path $sourceParent -Force | Out-Null
 New-Item -ItemType Directory -Path $buildParent -Force | Out-Null
 
-Invoke-Checked -Description 'Clone pinned Bergamot v0.4.5' -Command {
-    git clone --branch v0.4.5 --depth 1 --recurse-submodules --shallow-submodules `
-        https://github.com/browsermt/bergamot-translator.git $SourceDirectory
+Invoke-Checked -Description 'Clone Mozilla Translations' -Command {
+    git clone --filter=blob:none --no-checkout https://github.com/mozilla/translations.git $SourceDirectory
+}
+Invoke-Checked -Description 'Fetch pinned Firefox Bergamot revision' -Command {
+    git -C $SourceDirectory fetch --depth 1 origin $bergamotRevision
+}
+Invoke-Checked -Description 'Checkout pinned Firefox Bergamot revision' -Command {
+    git -C $SourceDirectory checkout --detach FETCH_HEAD
 }
 
-$sentencepiece = Join-Path $SourceDirectory '3rd_party\marian-dev\src\3rd_party\sentencepiece'
-Invoke-Checked -Description 'Validate SentencePiece MSVC patch' -Command {
-    git -C $sentencepiece apply --check $msvcPatch
-}
-Invoke-Checked -Description 'Apply SentencePiece MSVC patch' -Command {
-    git -C $sentencepiece apply $msvcPatch
-}
-
-$ssplit = Join-Path $SourceDirectory '3rd_party\ssplit-cpp'
-Invoke-Checked -Description 'Validate ssplit PCRE2 patch' -Command {
-    git -C $ssplit apply --check $pcrePatch
-}
-Invoke-Checked -Description 'Apply ssplit PCRE2 patch' -Command {
-    git -C $ssplit apply $pcrePatch
+$requiredSubmodules = @(
+    'inference/3rd_party/ssplit-cpp',
+    'inference/marian-fork/src/3rd_party/intgemm',
+    'inference/marian-fork/src/3rd_party/sentencepiece',
+    'inference/marian-fork/src/3rd_party/simd_utils'
+)
+Invoke-Checked -Description 'Initialize Bergamot inference submodules' -Command {
+    git -C $SourceDirectory submodule update --init --depth 1 --recursive -- @requiredSubmodules
 }
 
-Copy-Item $helperSource (Join-Path $SourceDirectory 'subflow-helper') -Recurse
-Add-Content (Join-Path $SourceDirectory 'CMakeLists.txt') "`nadd_subdirectory(subflow-helper)"
+$inferenceSource = Join-Path $SourceDirectory 'inference'
+Copy-Item $helperSource (Join-Path $inferenceSource 'subflow-helper') -Recurse
+Add-Content (Join-Path $inferenceSource 'CMakeLists.txt') "`nadd_subdirectory(subflow-helper)"
 
 $cmakeArgs = @(
-    '-S', $SourceDirectory,
+    '-S', $inferenceSource,
     '-B', $BuildDirectory,
     '-A', 'x64',
     '-DBUILD_ARCH=x86-64-v2',
     '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
-    '-DSSPLIT_USE_INTERNAL_PCRE2=ON',
     '-DCOMPILE_TESTS=OFF',
     '-DCOMPILE_UNIT_TESTS=OFF',
     '-DCOMPILE_PYTHON=OFF'
 )
-Invoke-Checked -Description 'Configure Bergamot Windows x64' -Command {
+Invoke-Checked -Description 'Configure Firefox-compatible Bergamot Windows x64' -Command {
     cmake @cmakeArgs
 }
 
