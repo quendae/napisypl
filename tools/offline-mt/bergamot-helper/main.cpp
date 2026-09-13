@@ -31,6 +31,10 @@ void emitError(const std::optional<std::string> &jobId, const std::string &code,
   emit(response);
 }
 
+void diagnostic(const std::string &message) {
+  std::cerr << "[SubFlow.BergamotHelper] " << message << '\n' << std::flush;
+}
+
 std::filesystem::path resolveConfigPath(const std::string &modelPath) {
   const std::filesystem::path path(modelPath);
   if (std::filesystem::is_regular_file(path)) {
@@ -80,9 +84,10 @@ int main() {
           continue;
         }
 
+        diagnostic("loading model config: " + configPath.string());
         bergamot::BlockingService::Config serviceConfig;
         serviceConfig.cacheSize = 0;
-        serviceConfig.logger.level = "off";
+        serviceConfig.logger.level = "info";
         auto modelConfig = bergamot::parseOptionsFromFilePath(configPath.string());
 
         auto nextService = std::make_unique<bergamot::BlockingService>(serviceConfig);
@@ -90,8 +95,15 @@ int main() {
 
         service = std::move(nextService);
         model = std::move(nextModel);
-        emit({{"type", "ready"}, {"model", configPath.parent_path().filename().string()}, {"version", "0.4.5"}});
+        diagnostic("model loaded");
+        emit({{"type", "ready"}, {"model", configPath.parent_path().filename().string()}, {"version", "0.6.0"}});
+      } catch (const std::exception &ex) {
+        diagnostic(std::string("model load exception: ") + ex.what());
+        service.reset();
+        model.reset();
+        emitError(std::nullopt, "model_load_failed", "Bergamot model could not be loaded.");
       } catch (...) {
+        diagnostic("model load exception: unknown");
         service.reset();
         model.reset();
         emitError(std::nullopt, "model_load_failed", "Bergamot model could not be loaded.");
@@ -137,8 +149,10 @@ int main() {
           continue;
         }
 
+        diagnostic("translateMultiple begin; segments=" + std::to_string(ids.size()));
         std::vector<bergamot::ResponseOptions> responseOptions(ids.size());
         auto responses = service->translateMultiple(model, std::move(texts), responseOptions);
+        diagnostic("translateMultiple returned; responses=" + std::to_string(responses.size()));
         if (responses.size() != ids.size()) {
           emitError(jobId, "translation_failed", "Bergamot returned an unexpected result count.");
           continue;
@@ -149,7 +163,11 @@ int main() {
           emit({{"type", "progress"}, {"jobId", *jobId}, {"completed", i + 1}, {"total", responses.size()}});
         }
         emit({{"type", "complete"}, {"jobId", *jobId}});
+      } catch (const std::exception &ex) {
+        diagnostic(std::string("translation exception: ") + ex.what());
+        emitError(jobId, "translation_failed", "Bergamot translation failed.");
       } catch (...) {
+        diagnostic("translation exception: unknown");
         emitError(jobId, "translation_failed", "Bergamot translation failed.");
       }
       continue;
