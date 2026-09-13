@@ -67,9 +67,11 @@ Invoke-Checked -Description 'Initialize Bergamot inference submodules' -Command 
     git -C $SourceDirectory submodule update --init --depth 1 --recursive -- @requiredSubmodules
 }
 
-# ssplit-cpp  at this Firefox revision downloads PCRE2 10.39 as an ExternalProject.
+# ssplit-cpp at this Firefox revision downloads PCRE2 10.39 as an ExternalProject.
 # CMake 4.x removed pre-3.5 policy compatibility, so pass the same compatibility floor
 # to the nested PCRE2 configure invocation as we pass to the top-level project.
+# On MSVC, PCRE2 10.39 names the static library pcre2-8-static.lib, while this old
+# FindPCRE2.cmake assumes pcre2-8.lib. Patch that stale assumption before configuring.
 $pcreFindPath = Join-Path $SourceDirectory 'inference\3rd_party\ssplit-cpp\cmake\FindPCRE2.cmake'
 $pcreFind = Get-Content $pcreFindPath -Raw
 $pcreNeedle = '    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=true # Added for pybind11'
@@ -79,6 +81,19 @@ if (-not $pcreFind.Contains($pcreNeedle)) {
 $pcreFind = $pcreFind.Replace(
     $pcreNeedle,
     "    -DCMAKE_POLICY_VERSION_MINIMUM=3.5`r`n$pcreNeedle")
+
+$pcreLibraryNeedle = '  set(PCRE2_LIBRARIES ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}pcre2-8${CMAKE_STATIC_LIBRARY_SUFFIX})'
+if (-not $pcreFind.Contains($pcreLibraryNeedle)) {
+    throw 'Unexpected ssplit-cpp FindPCRE2.cmake library naming; cannot apply MSVC static-library fix safely.'
+}
+$pcreLibraryReplacement = @'
+  if(MSVC)
+    set(PCRE2_LIBRARIES ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}pcre2-8-static${CMAKE_STATIC_LIBRARY_SUFFIX})
+  else()
+    set(PCRE2_LIBRARIES ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}pcre2-8${CMAKE_STATIC_LIBRARY_SUFFIX})
+  endif()
+'@
+$pcreFind = $pcreFind.Replace($pcreLibraryNeedle, $pcreLibraryReplacement.TrimEnd())
 Set-Content -Path $pcreFindPath -Value $pcreFind -Encoding utf8NoBOM
 
 $inferenceSource = Join-Path $SourceDirectory 'inference'
