@@ -54,6 +54,8 @@ def prepare_source_texts(family: str, texts: Sequence[str]) -> list[str]:
 
 
 def default_batch_size(family: str, model_size_bytes: int, gpu: bool) -> int:
+    if family == "nllb" and model_size_bytes >= 15_000_000_000:
+        return 4 if gpu else 1
     if family == "madlad" or model_size_bytes >= 9_000_000_000:
         return 8 if gpu else 2
     if model_size_bytes >= 4_000_000_000:
