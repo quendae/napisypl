@@ -17,7 +17,7 @@ public sealed class OpusMarianAssetManagerTests
         Assert.Equal("pol", descriptor.TargetLanguage);
         Assert.Equal("2021-02-19", descriptor.Release);
         Assert.Equal(
-            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip/eng-pol/opus-2021-02-19.zip",
+            "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-pol/opus-2021-02-19.zip",
             descriptor.ArchiveUrl);
         Assert.Equal("normalization + SentencePiece spm32k/spm32k", descriptor.Preprocessing);
     }
