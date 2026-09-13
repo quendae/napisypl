@@ -17,6 +17,17 @@ public sealed class FirefoxBergamotCompressionTests
     }
 
     [Fact]
+    public void DecompressZstd_WithExpectedSize_DecodesFrameWithoutEmbeddedContentSize()
+    {
+        var compressed = Convert.FromBase64String(
+            "KLUv/QRYYQEAU3ViRmxvdyBGaXJlZm94IEJlcmdhbW90IHN0cmVhbWluZyB6c3RkIHRlc3RB0OwI");
+
+        var decompressed = FirefoxBergamotCompression.DecompressZstd(compressed, expectedDecompressedSize: 44);
+
+        Assert.Equal("SubFlow Firefox Bergamot streaming zstd test", Encoding.UTF8.GetString(decompressed));
+    }
+
+    [Fact]
     public void DecompressZstd_WithExpectedSize_RejectsFrameThatWouldExceedLimit()
     {
         var compressed = Convert.FromBase64String(
