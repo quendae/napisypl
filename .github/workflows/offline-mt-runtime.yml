@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test NLLB helper protocol
-        run: python -m unittest tools.offline-mt.test_nllb_protocol -v
+        run: python -m unittest discover -s tools/offline-mt -p "test_nllb_protocol.py" -v
 
   bergamot-runtime:
     runs-on: windows-latest
@@ -45,7 +45,7 @@ jobs:
           "SUBFLOW_BERGAMOT_HELPER=$helper" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Test Bergamot helper protocol
-        run: python -m unittest tools.offline-mt.test_bergamot_protocol -v
+        run: python -m unittest discover -s tools/offline-mt -p "test_bergamot_protocol.py" -v
 
       - name: Upload Bergamot helper
         uses: actions/upload-artifact@v4
