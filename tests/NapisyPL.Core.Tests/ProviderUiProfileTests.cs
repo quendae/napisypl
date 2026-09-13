@@ -6,6 +6,9 @@ public sealed class ProviderUiProfileTests
 {
     [Theory]
     [InlineData("Local Argos (offline)", false, false, false, false)]
+    [InlineData("NLLB 600M — Fast", false, false, false, false)]
+    [InlineData("NLLB 1.3B — Balanced", false, false, false, false)]
+    [InlineData("MADLAD-400 3B — Quality", false, false, false, false)]
     [InlineData("Local Qwen — pełne tłumaczenie (wolne, eksperymentalne)", false, false, false, false)]
     [InlineData("DeepL", true, false, true, true)]
     [InlineData("Gemini", true, true, true, true)]

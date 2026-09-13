@@ -23,6 +23,10 @@ public sealed class NllbRuntimeManagerTests
         Assert.Equal("C:\\models\\nllb", load.ModelPath);
         Assert.Single(channel.SentCommands.OfType<TranslateCommand>());
         Assert.Equal(4242, runtime.ProcessId);
+        Assert.Equal("AMD Radeon RX 6950 XT", runtime.DeviceDescription);
+        Assert.Equal("float16", runtime.DType);
+        Assert.Equal(16, runtime.BatchSize);
+        Assert.Equal("transformers-4.57.6", runtime.RuntimeVersion);
     }
 
     private sealed class FakeChannel : INllbRuntimeChannel
@@ -38,7 +42,12 @@ public sealed class NllbRuntimeManagerTests
             switch (command)
             {
                 case LoadCommand:
-                    _events.Enqueue(new ReadyEvent("fixture-nllb", "transformers-4.57.6"));
+                    _events.Enqueue(new ReadyEvent(
+                        "fixture-nllb",
+                        "transformers-4.57.6",
+                        "AMD Radeon RX 6950 XT",
+                        "float16",
+                        16));
                     break;
                 case TranslateCommand translate:
                     foreach (var segment in translate.Segments)

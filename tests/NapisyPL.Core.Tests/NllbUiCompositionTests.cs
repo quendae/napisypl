@@ -3,13 +3,18 @@ namespace NapisyPL.Core.Tests;
 public sealed class NllbUiCompositionTests
 {
     [Fact]
-    public void DesktopProviderList_ExposesNllbAsBenchmarkOnlyOfflineBackend()
+    public void DesktopProviderList_ExposesFastBalancedAndQualityOfflineBackends()
     {
         var root = FindRepositoryRoot();
         var source = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.Argos.cs"));
 
-        Assert.Contains("NLLB-200 600M (offline, benchmark)", source, StringComparison.Ordinal);
-        Assert.Contains("Benchmark only · CC-BY-NC-4.0", source, StringComparison.Ordinal);
+        Assert.Contains("NLLB 600M — Fast", source, StringComparison.Ordinal);
+        Assert.Contains("NLLB 1.3B — Balanced", source, StringComparison.Ordinal);
+        Assert.Contains("MADLAD-400 3B — Quality", source, StringComparison.Ordinal);
+        Assert.Contains("CC-BY-NC-4.0", source, StringComparison.Ordinal);
+        Assert.Contains("Apache-2.0", source, StringComparison.Ordinal);
+        Assert.Contains("Auto GPU/CPU", source, StringComparison.Ordinal);
+        Assert.Contains("Model pozostaje w pamięci podczas całej kolejki folderu", source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
