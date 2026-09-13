@@ -3,7 +3,7 @@ using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
 
-public sealed class DeterministicGenderReviewService
+public sealed partial class DeterministicGenderReviewService
 {
     private const double MinimumAddresseeConfidence = 0.94;
 
