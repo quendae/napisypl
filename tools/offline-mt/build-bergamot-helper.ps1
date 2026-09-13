@@ -60,9 +60,9 @@ Invoke-Checked -Description 'Checkout pinned Firefox Bergamot revision' -Command
 $requiredSubmodules = @(
     'inference/3rd_party/ssplit-cpp',
     'inference/marian-fork/src/3rd_party/intgemm',
+    'inference/marian-fork/src/3rd_party/ruy',
     'inference/marian-fork/src/3rd_party/sentencepiece',
-    'inference/marian-fork/src/3rd_party/simd_utils',
-    'inference/marian-fork/src/3rd_party/onnxjs'
+    'inference/marian-fork/src/3rd_party/simd_utils'
 )
 Invoke-Checked -Description 'Initialize Bergamot inference submodules' -Command {
     git -C $SourceDirectory submodule update --init --depth 1 --recursive -- @requiredSubmodules
@@ -114,20 +114,11 @@ endif()
 $ssplitCmake = $ssplitCmake.Replace($ssplitNeedle, $ssplitReplacement.TrimEnd())
 Set-Content -Path $ssplitCmakePath -Value $ssplitCmake -Encoding utf8NoBOM
 
-# Firefox's native Windows helper cannot rely on MKL/OpenBLAS being installed on the user's PC.
-# Marian already contains an embedded ONNX SGEMM implementation used by the wasm-compatible CPU path,
-# but prod.cpp omits USE_ONNX_SGEMM from the guard that enables the generic float GEMM path.
-# Enable that supported source path and patch the stale guard so both Firefox int8 models and OPUS
-# float models can execute without shipping a separate BLAS runtime.
-$prodPath = Join-Path $SourceDirectory 'inference\marian-fork\src\tensors\cpu\prod.cpp'
-$prodSource = Get-Content $prodPath -Raw
-$prodNeedle = '#if BLAS_FOUND || USE_RUY_SGEMM'
-if (-not $prodSource.Contains($prodNeedle)) {
-    throw 'Unexpected Marian prod.cpp layout; cannot enable embedded ONNX SGEMM safely.'
-}
-$prodSource = $prodSource.Replace($prodNeedle, '#if BLAS_FOUND || USE_RUY_SGEMM || USE_ONNX_SGEMM')
-Set-Content -Path $prodPath -Value $prodSource -Encoding utf8NoBOM
-
+# Firefox models use the wasm-compatible/intgemm path, while the OPUS transformer is a normal
+# floating-point Marian model. Do not route native float inference through the ONNX/WASM SGEMM
+# implementation: on Windows it produced corrupt OPUS output and could access-violate on realistic
+# subtitle batches. Marian already has a native Ruy SGEMM implementation; enable that supported
+# path for floating-point matrix multiplication while retaining Firefox's wasm-compatible sources.
 $inferenceSource = Join-Path $SourceDirectory 'inference'
 Copy-Item $helperSource (Join-Path $inferenceSource 'subflow-helper') -Recurse
 Add-Content (Join-Path $inferenceSource 'CMakeLists.txt') "`nadd_subdirectory(subflow-helper)"
@@ -141,7 +132,9 @@ $cmakeArgs = @(
     '-DGIT_SUBMODULE=OFF',
     '-DSSPLIT_USE_INTERNAL_PCRE2=ON',
     '-DUSE_WASM_COMPATIBLE_SOURCE=ON',
-    '-DUSE_ONNX_SGEMM=ON',
+    '-DUSE_ONNX_SGEMM=OFF',
+    '-DUSE_RUY=ON',
+    '-DUSE_RUY_SGEMM=ON',
     '-DUSE_THREADS=ON',
     '-DCOMPILE_WITHOUT_EXCEPTIONS=OFF',
     '-DUSE_DOXYGEN=OFF',
