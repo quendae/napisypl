@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using NapisyPL.Core.LocalTranslation;
 
@@ -5,8 +6,11 @@ namespace NapisyPL.Core.OfflineMt.Bergamot;
 
 public sealed class BergamotProcessRuntimeChannel : IBergamotRuntimeChannel
 {
+    private const int MaxStderrLines = 48;
+
     private readonly Process _process;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private readonly ConcurrentQueue<string> _stderrTail = new();
     private readonly Task _stderrDrain;
     private bool _disposed;
 
@@ -54,7 +58,7 @@ public sealed class BergamotProcessRuntimeChannel : IBergamotRuntimeChannel
     {
         ThrowIfDisposed();
         if (_process.HasExited)
-            throw new InvalidOperationException($"Bergamot helper exited with code {_process.ExitCode}.");
+            throw new InvalidOperationException(BuildExitedMessage("Bergamot helper exited"));
 
         var line = LocalTranslatorProtocol.SerializeCommand(command);
         await _process.StandardInput.WriteLineAsync(line.AsMemory(), cancellationToken);
@@ -67,8 +71,10 @@ public sealed class BergamotProcessRuntimeChannel : IBergamotRuntimeChannel
         var line = await _process.StandardOutput.ReadLineAsync(cancellationToken);
         if (line is null)
         {
-            var suffix = _process.HasExited ? $" (code {_process.ExitCode})" : string.Empty;
-            throw new InvalidOperationException("Bergamot helper closed its response channel" + suffix + ".");
+            if (_process.HasExited)
+                throw new InvalidOperationException(BuildExitedMessage("Bergamot helper closed its response channel"));
+
+            throw new InvalidOperationException("Bergamot helper closed its response channel.");
         }
 
         return LocalTranslatorProtocol.ParseEvent(line);
@@ -99,19 +105,35 @@ public sealed class BergamotProcessRuntimeChannel : IBergamotRuntimeChannel
         }
     }
 
-    private static async Task DrainErrorAsync(StreamReader reader, CancellationToken cancellationToken)
+    private async Task DrainErrorAsync(StreamReader reader, CancellationToken cancellationToken)
     {
         try
         {
-            while (!cancellationToken.IsCancellationRequested &&
-                   await reader.ReadLineAsync(cancellationToken) is not null)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                // Keep stderr drained so the helper cannot block. Never log subtitle/model content here.
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (line is null)
+                    break;
+
+                // Preserve only a bounded diagnostic tail. The native helper diagnostics contain
+                // runtime/config information, never subtitle/model payload content.
+                _stderrTail.Enqueue(line);
+                while (_stderrTail.Count > MaxStderrLines)
+                    _stderrTail.TryDequeue(out _);
             }
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
         catch (IOException) { }
+    }
+
+    private string BuildExitedMessage(string prefix)
+    {
+        var message = $"{prefix} (code {_process.ExitCode}).";
+        var diagnostics = _stderrTail.ToArray();
+        if (diagnostics.Length != 0)
+            message += Environment.NewLine + "Bergamot native diagnostics:" + Environment.NewLine + string.Join(Environment.NewLine, diagnostics);
+        return message;
     }
 
     private void ThrowIfDisposed() =>
