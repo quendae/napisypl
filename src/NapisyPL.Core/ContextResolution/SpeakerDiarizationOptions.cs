@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace NapisyPL.Core.ContextResolution;
 
 public sealed record SpeakerDiarizationOptions(
@@ -8,6 +10,8 @@ public sealed record SpeakerDiarizationOptions(
 {
     public string SegmentationModelPath => Path.Combine(BaseDirectory, "segmentation.onnx");
     public string EmbeddingModelPath => Path.Combine(BaseDirectory, "embedding.onnx");
+    public string CacheSignature =>
+        $"sherpa-pyannote3-campplus-v2-cluster-{ClusterThreshold.ToString("0.00", CultureInfo.InvariantCulture)}";
 
     public static SpeakerDiarizationOptions CreateDefault()
     {
@@ -16,6 +20,6 @@ public sealed record SpeakerDiarizationOptions(
             Path.Combine(localAppData, "SubFlow", "diarization"),
             "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/main/model.onnx?download=true",
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx",
-            0.65);
+            0.90);
     }
 }
