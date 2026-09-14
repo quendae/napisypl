@@ -159,5 +159,5 @@ public sealed class LocalTurnGenderResolverTests
         params (int CueId, SpeakerVoiceGender Gender)[] items) =>
         items.ToDictionary(
             item => item.CueId,
-            item => new CueVoiceGenderEvidence(item.Gender, 0.95, 0.10, 1.5));
+            item => new CueVoiceGenderEvidence(item.Gender, 0.98, 0.10, 1.5));
 }
