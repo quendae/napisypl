@@ -157,6 +157,46 @@ public sealed class LocalTurnGenderResolverTests
         Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[0].Text);
     }
 
+    [Fact]
+    public void Review_WhenCueGenderIsUnknown_UsesEligibleSpeakerGenderForImmediateQuestionTurn()
+    {
+        var source = new[]
+        {
+            Cue(260, 18 * 60 + 47.752, 18 * 60 + 51.547, "Lake Michigan standpipe? What's that?"),
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Hold on. You got married?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "No, no, no. My sister Angie's husband."),
+            Cue(263, 18 * 60 + 56.094, 18 * 60 + 59.555, "What the hell is that?")
+        };
+        var translated = new[]
+        {
+            Cue(260, 18 * 60 + 47.752, 18 * 60 + 51.547, "Stacja na jeziorze Michigan? O co chodzi?"),
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Zatrzymaj się. Wyszłaś za mąż?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "Nie, nie, nie. Mąż mojej siostry Angie."),
+            Cue(263, 18 * 60 + 56.094, 18 * 60 + 59.555, "Co to do cholery jest?")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [260] = "SPEAKER_99",
+            [261] = "SPEAKER_04",
+            [262] = "SPEAKER_07",
+            [263] = "SPEAKER_117"
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>(StringComparer.Ordinal)
+        {
+            ["SPEAKER_04"] = new(SpeakerVoiceGender.Male, 0.99, 3),
+            ["SPEAKER_07"] = new(SpeakerVoiceGender.Male, 0.98, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender,
+            new Dictionary<int, CueVoiceGenderEvidence>());
+
+        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[1].Text);
+    }
+
     [Theory]
     [InlineData(0.14, 0.01, 2.0, SpeakerVoiceGender.Male)]
     [InlineData(0.01, 0.13, 2.0, SpeakerVoiceGender.Female)]
