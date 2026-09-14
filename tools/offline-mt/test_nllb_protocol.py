@@ -102,6 +102,38 @@ class NllbProtocolTests(unittest.TestCase):
         self.assertEqual(1, module.default_batch_size("nllb", 17_600_000_000, gpu=False))
         self.assertEqual(2, module.default_batch_size("madlad", 11_800_000_000, gpu=False))
 
+    def test_detect_degenerate_output_catches_observed_madlad_failures(self):
+        module = self.load_helper_module()
+
+        repeated_no = ", ".join(["Nie"] * 128)
+        repeated_hello = ", ".join(["Hej"] * 85)
+        repeated_symbols = "Kto się poddaje... " + "* " * 128
+        numeric_run = "20, um... " + ", ".join(str(value) for value in range(22, 86))
+
+        self.assertEqual("dominant_token", module.detect_degenerate_output("No.", repeated_no))
+        self.assertEqual("dominant_token", module.detect_degenerate_output("Hey.", repeated_hello))
+        self.assertEqual("symbol_run", module.detect_degenerate_output("Who gives up?", repeated_symbols))
+        self.assertEqual("numeric_run", module.detect_degenerate_output("I was 20, um...", numeric_run))
+
+    def test_detect_degenerate_output_allows_short_intentional_repetition(self):
+        module = self.load_helper_module()
+
+        self.assertIsNone(module.detect_degenerate_output("No, no, no.", "Nie, nie, nie."))
+        self.assertIsNone(module.detect_degenerate_output("Hey, hey! Listen.", "Hej, hej! Słuchaj."))
+        self.assertIsNone(module.detect_degenerate_output("Ten, eleven, twelve.", "Dziesięć, jedenaście, dwanaście."))
+
+    def test_retry_generation_kwargs_are_stricter_and_bounded_by_source_length(self):
+        module = self.load_helper_module()
+
+        first = module.generation_kwargs(None, "A short subtitle.", retry=False)
+        retry = module.generation_kwargs(None, "A short subtitle.", retry=True)
+
+        self.assertEqual(256, first["max_new_tokens"])
+        self.assertEqual(4, first["num_beams"])
+        self.assertLess(retry["max_new_tokens"], first["max_new_tokens"])
+        self.assertEqual(3, retry["no_repeat_ngram_size"])
+        self.assertGreater(retry["repetition_penalty"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
