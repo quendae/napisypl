@@ -19,8 +19,8 @@ jobs:
       - name: Download verified Offline MT GPU Profiles artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '10339750719'
-          EXPECTED_SHA256: '5098ad24a1ba384a21403cfdadf7234258fa55ec05ea72fa80bfd85c7ed2d34c'
+          ARTIFACT_ID: '10341446484'
+          EXPECTED_SHA256: 'a1d09e03fdd3415a2867716387d51b87fc99a75eb1ead15b62ae8e37161d498d'
         run: |
           set -euo pipefail
           curl -fL \
@@ -34,7 +34,7 @@ jobs:
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: subflow-offline-mt-gpu-profiles-008dd36
+          TAG: subflow-enhanced-diarization-ba5e116
         run: |
           set -euo pipefail
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -43,7 +43,7 @@ jobs:
           gh release create "$TAG" \
             SubFlow-win-x64-offline-mt-gpu-profiles-test.zip \
             --repo "$GITHUB_REPOSITORY" \
-            --target 008dd36ef3f904a5b77d5459c93e167d4740d9a9 \
-            --title "SubFlow Offline MT GPU Profiles Windows x64 test — 008dd36" \
-            --notes "Verified Windows x64 test build for MADLAD/NLLB + deterministic Enhanced diagnostics. Packaging CI passed .NET tests, helper protocol, AMD gfx1030 installer validation, PowerShell 5.1, PyInstaller CPU fallback, real NLLB EN→PL smoke, Windows publish and desktop startup. SHA-256: 5098ad24a1ba384a21403cfdadf7234258fa55ec05ea72fa80bfd85c7ed2d34c" \
+            --target ba5e116258de47174e9b4880284682db78d9e60c \
+            --title "SubFlow Enhanced diarization Windows x64 test — ba5e116" \
+            --notes "Verified Windows x64 test build for MADLAD/NLLB + deterministic Enhanced. This build raises unknown-speaker clustering threshold from 0.65 to 0.90, versions diarization cache by clustering configuration so the next Enhanced run performs fresh diarization, logs uniqueSpeakerCount, and expands per-cue diagnostics with next-cue/local/speaker gender evidence. CI and packaging passed .NET tests, helper protocol, AMD gfx1030 installer validation, PowerShell 5.1, PyInstaller CPU fallback, real NLLB EN→PL smoke, Windows publish and desktop startup. SHA-256: a1d09e03fdd3415a2867716387d51b87fc99a75eb1ead15b62ae8e37161d498d" \
             --prerelease
