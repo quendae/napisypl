@@ -8,4 +8,7 @@
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.5" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\phrase_lexicon.en-pl.json" />
+  </ItemGroup>
 </Project>
