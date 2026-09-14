@@ -193,11 +193,26 @@ public sealed partial class DeterministicGenderReviewService
             _ => text
         };
 
-    internal static string FixAddresseeAgreement(string text, SpeakerVoiceGender gender) =>
+    internal static string FixAddresseeAgreement(string text, SpeakerVoiceGender gender)
+    {
+        var idiomatic = FixMarriageIdiom(text, gender);
+        return gender switch
+        {
+            SpeakerVoiceGender.Female => FixWords(idiomatic, AddresseeMaleToFemale, [("łbyś", "łabyś"), ("łeś", "łaś")]),
+            SpeakerVoiceGender.Male => FixWords(idiomatic, AddresseeFemaleToMale, [("łabyś", "łbyś"), ("łaś", "łeś")]),
+            _ => text
+        };
+    }
+
+    private static string FixMarriageIdiom(string text, SpeakerVoiceGender gender) =>
         gender switch
         {
-            SpeakerVoiceGender.Female => FixWords(text, AddresseeMaleToFemale, [("łbyś", "łabyś"), ("łeś", "łaś")]),
-            SpeakerVoiceGender.Male => FixWords(text, AddresseeFemaleToMale, [("łabyś", "łbyś"), ("łaś", "łeś")]),
+            SpeakerVoiceGender.Male => FemaleMarriageRegex().Replace(
+                text,
+                match => MatchCasing(match.Value, "ożeniłeś się")),
+            SpeakerVoiceGender.Female => MaleMarriageRegex().Replace(
+                text,
+                match => MatchCasing(match.Value, "wyszłaś za mąż")),
             _ => text
         };
 
@@ -323,4 +338,10 @@ public sealed partial class DeterministicGenderReviewService
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex WordRegex();
+
+    [GeneratedRegex(@"\bwyszłaś\s+za\s+mąż\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FemaleMarriageRegex();
+
+    [GeneratedRegex(@"\bożeniłeś\s+się\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MaleMarriageRegex();
 }
