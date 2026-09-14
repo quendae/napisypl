@@ -65,7 +65,8 @@ public sealed partial class DeterministicGenderReviewService
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
         IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cueGenderEvidence = null,
-        ICollection<DeterministicGenderCueDiagnostic>? diagnostics = null)
+        ICollection<DeterministicGenderCueDiagnostic>? diagnostics = null,
+        bool hardVoiceTurnOnly = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(translated);
@@ -92,7 +93,8 @@ public sealed partial class DeterministicGenderReviewService
             var candidateWord = FindGenderedCandidate(originalText);
             var text = originalText;
 
-            if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+            if (!hardVoiceTurnOnly &&
+                !string.IsNullOrWhiteSpace(currentSpeaker) &&
                 TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
             {
                 text = FixSpeakerAgreement(text, speakerGender);
@@ -109,7 +111,19 @@ public sealed partial class DeterministicGenderReviewService
                 cueSpeakers,
                 speakerGenderEvidence,
                 cue.Index);
-            if (hardVoiceTurn.IsResolved)
+
+            if (hardVoiceTurnOnly)
+            {
+                resolver = "hard_voice_turn_1000";
+                reasonCode = hardVoiceTurn.ReasonCode;
+                targetGender = hardVoiceTurn.TargetGender;
+                confidence = hardVoiceTurn.Confidence;
+                gatePassed = hardVoiceTurn.IsResolved;
+
+                if (hardVoiceTurn.IsResolved)
+                    text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
+            }
+            else if (hardVoiceTurn.IsResolved)
             {
                 resolver = "hard_voice_turn_1000";
                 reasonCode = hardVoiceTurn.ReasonCode;
