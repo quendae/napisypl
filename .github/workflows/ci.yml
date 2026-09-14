@@ -15,6 +15,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Test launcher bootstrap from .NET 8
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: ./tools/Test-RunSubFlowLauncher.ps1
+
       - name: Validate one-click launcher
         if: github.event_name == 'push'
         shell: cmd
