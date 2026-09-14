@@ -24,6 +24,8 @@ public sealed partial class DeterministicGenderReviewService
     private const double MinimumCueCombinedEvidence = 0.03;
     private const double MinimumCueDurationSeconds = 0.75;
 
+    private readonly PhraseLexicon _phraseLexicon;
+
     private static readonly IReadOnlyDictionary<string, string> SpeakerMaleToFemale =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -52,6 +54,11 @@ public sealed partial class DeterministicGenderReviewService
         "łabym", "łabyś", "łbym", "łbyś", "łam", "łem", "łaś", "łeś"
     ];
 
+    public DeterministicGenderReviewService(PhraseLexicon? phraseLexicon = null)
+    {
+        _phraseLexicon = phraseLexicon ?? PhraseLexicon.LoadDefault();
+    }
+
     public IReadOnlyList<SubtitleCue> Review(
         IReadOnlyList<SubtitleCue> source,
         IReadOnlyList<SubtitleCue> translated,
@@ -68,13 +75,13 @@ public sealed partial class DeterministicGenderReviewService
         if (source.Count == 0 || translated.Count == 0)
             return translated.ToArray();
 
-        var sourceIds = source.Select(cue => cue.Index).ToHashSet();
+        var sourceById = source.ToDictionary(cue => cue.Index);
         var result = new List<SubtitleCue>(translated.Count);
         var localCueGender = cueGenderEvidence ?? new Dictionary<int, CueVoiceGenderEvidence>();
 
         foreach (var cue in translated)
         {
-            if (!sourceIds.Contains(cue.Index))
+            if (!sourceById.TryGetValue(cue.Index, out var sourceCue))
             {
                 result.Add(cue);
                 continue;
@@ -118,7 +125,7 @@ public sealed partial class DeterministicGenderReviewService
 
             if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
             {
-                text = FixAddresseeAgreement(text, localTurn.Gender);
+                text = FixAddresseeAgreement(sourceCue.Text, text, localTurn.Gender);
             }
             else if (!string.IsNullOrWhiteSpace(currentSpeaker))
             {
@@ -152,7 +159,7 @@ public sealed partial class DeterministicGenderReviewService
                     else
                     {
                         targetGender = addresseeGender;
-                        text = FixAddresseeAgreement(text, addresseeGender);
+                        text = FixAddresseeAgreement(sourceCue.Text, text, addresseeGender);
                     }
                 }
             }
@@ -193,28 +200,26 @@ public sealed partial class DeterministicGenderReviewService
             _ => text
         };
 
-    internal static string FixAddresseeAgreement(string text, SpeakerVoiceGender gender)
+    internal static string FixAddresseeAgreement(string text, SpeakerVoiceGender gender) =>
+        FixAddresseeAgreementCore(PhraseLexicon.LoadDefault(), sourceText: null, text, gender);
+
+    private string FixAddresseeAgreement(string sourceText, string text, SpeakerVoiceGender gender) =>
+        FixAddresseeAgreementCore(_phraseLexicon, sourceText, text, gender);
+
+    private static string FixAddresseeAgreementCore(
+        PhraseLexicon phraseLexicon,
+        string? sourceText,
+        string text,
+        SpeakerVoiceGender gender)
     {
-        var idiomatic = FixMarriageIdiom(text, gender);
+        var phraseCorrected = phraseLexicon.ApplyGenderedAddressee(sourceText, text, gender);
         return gender switch
         {
-            SpeakerVoiceGender.Female => FixWords(idiomatic, AddresseeMaleToFemale, [("łbyś", "łabyś"), ("łeś", "łaś")]),
-            SpeakerVoiceGender.Male => FixWords(idiomatic, AddresseeFemaleToMale, [("łabyś", "łbyś"), ("łaś", "łeś")]),
+            SpeakerVoiceGender.Female => FixWords(phraseCorrected, AddresseeMaleToFemale, [("łbyś", "łabyś"), ("łeś", "łaś")]),
+            SpeakerVoiceGender.Male => FixWords(phraseCorrected, AddresseeFemaleToMale, [("łabyś", "łbyś"), ("łaś", "łeś")]),
             _ => text
         };
     }
-
-    private static string FixMarriageIdiom(string text, SpeakerVoiceGender gender) =>
-        gender switch
-        {
-            SpeakerVoiceGender.Male => FemaleMarriageRegex().Replace(
-                text,
-                match => MatchCasing(match.Value, "ożeniłeś się")),
-            SpeakerVoiceGender.Female => MaleMarriageRegex().Replace(
-                text,
-                match => MatchCasing(match.Value, "wyszłaś za mąż")),
-            _ => text
-        };
 
     private static bool TryEligibleGender(
         string speakerId,
@@ -338,10 +343,4 @@ public sealed partial class DeterministicGenderReviewService
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex WordRegex();
-
-    [GeneratedRegex(@"\bwyszłaś\s+za\s+mąż\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex FemaleMarriageRegex();
-
-    [GeneratedRegex(@"\bożeniłeś\s+się\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex MaleMarriageRegex();
 }
