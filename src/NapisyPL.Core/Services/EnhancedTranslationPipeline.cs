@@ -17,6 +17,8 @@ public sealed class EnhancedTranslationPipeline(
     DeterministicGenderReviewService deterministicReview,
     IAppLogger? logger = null) : ITranslationPipeline
 {
+    public bool HardVoiceTurnOnly { get; set; }
+
     public async Task<TranslationResult> TranslateAsync(
         string inputPath,
         SubtitleTrack? selectedTrack,
@@ -90,7 +92,9 @@ public sealed class EnhancedTranslationPipeline(
                 ("result", "success"));
 
             cancellationToken.ThrowIfCancellationRequested();
-            status?.Report("Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
+            status?.Report(HardVoiceTurnOnly
+                ? "Enhanced: test 1000/1000 — poprawiam tylko bezpośrednie zmiany M↔K według następnego rozmówcy…"
+                : "Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
             var reviewTimer = Stopwatch.StartNew();
             var genderDiagnostics = new List<DeterministicGenderCueDiagnostic>();
             var reviewed = deterministicReview.Review(
@@ -99,7 +103,8 @@ public sealed class EnhancedTranslationPipeline(
                 speakers.CueSpeakers,
                 speakers.SpeakerGenderEvidence,
                 speakers.CueGenderEvidence,
-                genderDiagnostics);
+                genderDiagnostics,
+                hardVoiceTurnOnly: HardVoiceTurnOnly);
             var changedCount = reviewed.Zip(translated)
                 .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
 
@@ -111,6 +116,13 @@ public sealed class EnhancedTranslationPipeline(
                 SubtitleCue? nextCue = null;
                 if (sourcePositions.TryGetValue(diagnostic.CueId, out var position) && position + 1 < sourceCues.Count)
                     nextCue = sourceCues[position + 1];
+
+                SpeakerGenderEvidence? currentSpeakerGender = null;
+                if (!string.IsNullOrWhiteSpace(diagnostic.CurrentSpeaker) &&
+                    speakers.SpeakerGenderEvidence.TryGetValue(diagnostic.CurrentSpeaker!, out var currentGender))
+                {
+                    currentSpeakerGender = currentGender;
+                }
 
                 string? nextSpeaker = null;
                 CueVoiceGenderEvidence? nextCueGender = null;
@@ -131,6 +143,9 @@ public sealed class EnhancedTranslationPipeline(
                     "enhanced_gender_cue",
                     ("cue", diagnostic.CueId),
                     ("speaker", diagnostic.CurrentSpeaker ?? "none"),
+                    ("speakerGender", currentSpeakerGender?.Gender.ToString() ?? "none"),
+                    ("speakerConfidencePermille", currentSpeakerGender is null ? 0 : ToPermille(currentSpeakerGender.Confidence)),
+                    ("speakerSampleCount", currentSpeakerGender?.SampleCount ?? 0),
                     ("candidate", diagnostic.CandidateWord ?? "none"),
                     ("resolver", diagnostic.Resolver),
                     ("reasonCode", diagnostic.ReasonCode),
@@ -151,23 +166,34 @@ public sealed class EnhancedTranslationPipeline(
                     ("changed", diagnostic.Changed));
             }
 
-            var localTurnResolvedCount = sourceCues.Count(cue =>
-                LocalTurnGenderResolver.Resolve(
-                    sourceCues,
-                    speakers.CueSpeakers,
-                    speakers.CueGenderEvidence,
-                    cue.Index,
-                    speakers.SpeakerGenderEvidence).IsResolved);
-            var resolvedAddresseeCount = sourceCues.Count(cue =>
-                DialogueAddresseeResolver.ResolveDetailed(sourceCues, speakers.CueSpeakers, cue.Index).IsResolved);
+            var hardVoiceResolvedCount = genderDiagnostics.Count(item =>
+                string.Equals(item.Resolver, "hard_voice_turn_1000", StringComparison.Ordinal) && item.GatePassed);
+            var hardVoiceChangedCount = genderDiagnostics.Count(item =>
+                string.Equals(item.Resolver, "hard_voice_turn_1000", StringComparison.Ordinal) && item.Changed);
+            var localTurnResolvedCount = HardVoiceTurnOnly
+                ? 0
+                : sourceCues.Count(cue =>
+                    LocalTurnGenderResolver.Resolve(
+                        sourceCues,
+                        speakers.CueSpeakers,
+                        speakers.CueGenderEvidence,
+                        cue.Index,
+                        speakers.SpeakerGenderEvidence).IsResolved);
+            var resolvedAddresseeCount = HardVoiceTurnOnly
+                ? 0
+                : sourceCues.Count(cue =>
+                    DialogueAddresseeResolver.ResolveDetailed(sourceCues, speakers.CueSpeakers, cue.Index).IsResolved);
             logger?.Info(
                 "enhanced_phase",
                 ("file", file),
                 ("stage", "deterministic_gender_review"),
+                ("reviewMode", HardVoiceTurnOnly ? "hard_voice_turn_1000_only" : "standard"),
                 ("elapsedMs", reviewTimer.ElapsedMilliseconds),
                 ("segmentCount", translated.Count),
                 ("knownGenderCount", knownGenderCount),
                 ("knownCueGenderCount", knownCueGenderCount),
+                ("hardVoiceResolvedCount", hardVoiceResolvedCount),
+                ("hardVoiceChangedCount", hardVoiceChangedCount),
                 ("localTurnResolvedCount", localTurnResolvedCount),
                 ("resolvedAddresseeCount", resolvedAddresseeCount),
                 ("candidateCount", genderDiagnostics.Count),
@@ -177,7 +203,9 @@ public sealed class EnhancedTranslationPipeline(
             var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
-            status?.Report($"Enhanced: zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
+            status?.Report(HardVoiceTurnOnly
+                ? $"Enhanced 1000/1000: zapisuję wynik — zmieniono {changedCount} kwestii…"
+                : $"Enhanced: zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
             string? txtOutput = null;
