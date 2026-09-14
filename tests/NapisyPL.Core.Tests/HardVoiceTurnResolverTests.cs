@@ -137,7 +137,8 @@ public sealed class HardVoiceTurnResolverTests
             translated,
             speakers,
             evidence,
-            diagnostics: diagnostics);
+            diagnostics: diagnostics,
+            hardVoiceTurnOnly: true);
 
         Assert.Equal("Co zrobiłaś?", result[0].Text);
         var diagnostic = Assert.Single(diagnostics, item => item.CueId == 1);
@@ -177,12 +178,53 @@ public sealed class HardVoiceTurnResolverTests
             translated,
             speakers,
             evidence,
-            diagnostics: diagnostics);
+            diagnostics: diagnostics,
+            hardVoiceTurnOnly: true);
 
         Assert.Equal("Co zrobiłeś?", result[0].Text);
         var diagnostic = Assert.Single(diagnostics, item => item.CueId == 1);
         Assert.Equal("hard_voice_turn_1000", diagnostic.Resolver);
         Assert.Equal(SpeakerVoiceGender.Male, diagnostic.TargetGender);
+    }
+
+    [Fact]
+    public void Review_HardVoiceOnlyBelow1000_DoesNotFallBackToRegularResolvers()
+    {
+        var source = new[]
+        {
+            Cue(1, 0, 1, "What did you do?"),
+            Cue(2, 1, 2, "Nothing.")
+        };
+        var translated = new[]
+        {
+            Cue(1, 0, 1, "Co zrobiłeś?"),
+            Cue(2, 1, 2, "Nic.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_00",
+            [2] = "SPEAKER_01"
+        };
+        var evidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3),
+            ["SPEAKER_01"] = new(SpeakerVoiceGender.Female, 0.99, 3)
+        };
+        var diagnostics = new List<DeterministicGenderCueDiagnostic>();
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            evidence,
+            diagnostics: diagnostics,
+            hardVoiceTurnOnly: true);
+
+        Assert.Equal("Co zrobiłeś?", result[0].Text);
+        var diagnostic = Assert.Single(diagnostics, item => item.CueId == 1);
+        Assert.NotEqual("local_turn", diagnostic.Resolver);
+        Assert.NotEqual("dialogue_addressee", diagnostic.Resolver);
+        Assert.False(diagnostic.Changed);
     }
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
