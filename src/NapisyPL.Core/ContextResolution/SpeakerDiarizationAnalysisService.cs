@@ -7,14 +7,16 @@ namespace NapisyPL.Core.ContextResolution;
 public sealed record SpeakerDiarizationAnalysisResult(
     IReadOnlyDictionary<int, string?> CueSpeakers,
     int SpeakerSegmentCount,
-    IReadOnlyDictionary<string, SpeakerGenderEvidence> SpeakerGenderEvidence);
+    IReadOnlyDictionary<string, SpeakerGenderEvidence> SpeakerGenderEvidence,
+    IReadOnlyDictionary<int, CueVoiceGenderEvidence> CueGenderEvidence);
 
 public sealed class SpeakerDiarizationAnalysisService(
     AudioContextExtractionService audioExtraction,
     SpeakerDiarizationService diarization,
     IAppLogger? logger = null,
     SpeakerDiarizationCache? cache = null,
-    SpeakerVoiceGenderService? voiceGender = null)
+    SpeakerVoiceGenderService? voiceGender = null,
+    CueVoiceGenderService? cueVoiceGender = null)
 {
     public async Task<SpeakerDiarizationAnalysisResult> AnalyzeAsync(
         string mediaPath,
@@ -40,20 +42,30 @@ public sealed class SpeakerDiarizationAnalysisService(
                     diarizationProgress?.Report(1);
 
                     var cachedGender = new Dictionary<string, SpeakerGenderEvidence>();
-                    if (voiceGender is not null)
+                    IReadOnlyDictionary<int, CueVoiceGenderEvidence> cachedCueGender =
+                        new Dictionary<int, CueVoiceGenderEvidence>();
+                    if (voiceGender is not null || cueVoiceGender is not null)
                     {
                         var timer = Stopwatch.StartNew();
                         temporaryWave = await audioExtraction.ExtractTemporaryMono16KhzWaveAsync(mediaPath, status, cancellationToken);
                         logger?.Info("enhanced_phase", ("file", file), ("stage", "audio_extract_gender"), ("elapsedMs", timer.ElapsedMilliseconds), ("result", "success"));
-                        cachedGender = new Dictionary<string, SpeakerGenderEvidence>(
-                            await voiceGender.AnalyzeAsync(temporaryWave, cached, status, cancellationToken),
-                            StringComparer.Ordinal);
+
+                        if (voiceGender is not null)
+                        {
+                            cachedGender = new Dictionary<string, SpeakerGenderEvidence>(
+                                await voiceGender.AnalyzeAsync(temporaryWave, cached, status, cancellationToken),
+                                StringComparer.Ordinal);
+                        }
+
+                        if (cueVoiceGender is not null)
+                            cachedCueGender = await cueVoiceGender.AnalyzeAsync(temporaryWave, cues, status, cancellationToken);
                     }
 
                     return new SpeakerDiarizationAnalysisResult(
                         SpeakerCueMapper.Map(cues, cached),
                         cached.Count,
-                        cachedGender);
+                        cachedGender,
+                        cachedCueGender);
                 }
 
                 logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("result", "miss"));
@@ -82,10 +94,16 @@ public sealed class SpeakerDiarizationAnalysisService(
             if (voiceGender is not null)
                 genderEvidence = await voiceGender.AnalyzeAsync(temporaryWave, segments, status, cancellationToken);
 
+            IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence =
+                new Dictionary<int, CueVoiceGenderEvidence>();
+            if (cueVoiceGender is not null)
+                cueGenderEvidence = await cueVoiceGender.AnalyzeAsync(temporaryWave, cues, status, cancellationToken);
+
             return new SpeakerDiarizationAnalysisResult(
                 SpeakerCueMapper.Map(cues, segments),
                 segments.Count,
-                genderEvidence);
+                genderEvidence,
+                cueGenderEvidence);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
