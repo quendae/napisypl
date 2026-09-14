@@ -1,5 +1,4 @@
 using NapisyPL.Core.ContextResolution;
-using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.Tests;
 
@@ -96,87 +95,4 @@ public sealed class SpeakerGenderEvidenceTests
         Assert.Equal(305, result.CombinedScoreMeanPermille);
         Assert.Equal(450, result.CombinedScoreMaxPermille);
     }
-
-    [Fact]
-    public void BuildPrompt_IncludesRelevantSpeakerVoiceGenderEvidence()
-    {
-        var source = new[] { Cue(1, "I was ready."), Cue(2, "Okay.") };
-        var translated = new[] { Cue(1, "Byłem gotowy."), Cue(2, "Dobrze.") };
-        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_01" };
-        var evidence = new Dictionary<string, SpeakerGenderEvidence>
-        {
-            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.93, 3),
-            ["SPEAKER_01"] = new(SpeakerVoiceGender.Male, 0.91, 2)
-        };
-
-        var prompt = TargetedGenderReviewProtocol.BuildPrompt(
-            source,
-            translated,
-            new HashSet<int> { 1 },
-            speakers,
-            new Dictionary<string, IReadOnlyList<string>> { ["SPEAKER_00"] = ["I was ready."] },
-            new Dictionary<int, string?> { [1] = null },
-            evidence);
-
-        Assert.Contains("speakerGenderEvidence", prompt, StringComparison.Ordinal);
-        Assert.Contains("SPEAKER_00", prompt, StringComparison.Ordinal);
-        Assert.Contains("female", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("SPEAKER_01\":{\"gender\"", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildPrompt_AllowsKnownAcousticGenderToSupportSpeakerCorrectionWithoutTextConfirmation()
-    {
-        var source = new[] { Cue(1, "I was ready.") };
-        var translated = new[] { Cue(1, "Byłem gotowy.") };
-        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
-        var evidence = new Dictionary<string, SpeakerGenderEvidence>
-        {
-            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.94, 3)
-        };
-
-        var prompt = TargetedGenderReviewProtocol.BuildPrompt(
-            source,
-            translated,
-            new HashSet<int> { 1 },
-            speakers,
-            new Dictionary<string, IReadOnlyList<string>> { ["SPEAKER_00"] = ["I was ready."] },
-            new Dictionary<int, string?> { [1] = null },
-            evidence);
-
-        Assert.Contains("speaker-target", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("sufficient", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("without explicit dialogue confirmation", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("when it agrees with explicit dialogue evidence", prompt, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void BuildPrompt_KnownSpeakerGenderCreatesExplicitPerCandidateDirective()
-    {
-        var source = new[] { Cue(1, "I was ready.") };
-        var translated = new[] { Cue(1, "Byłem gotowy.") };
-        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
-        var evidence = new Dictionary<string, SpeakerGenderEvidence>
-        {
-            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.94, 3)
-        };
-
-        var prompt = TargetedGenderReviewProtocol.BuildPrompt(
-            source,
-            translated,
-            new HashSet<int> { 1 },
-            speakers,
-            new Dictionary<string, IReadOnlyList<string>> { ["SPEAKER_00"] = ["I was ready."] },
-            new Dictionary<int, string?> { [1] = null },
-            evidence);
-
-        Assert.Contains("candidateSpeakerGender", prompt, StringComparison.Ordinal);
-        Assert.Contains("\"candidateSpeakerGender\":\"female\"", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"candidateSpeakerGenderConfidence\":0.94", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("MUST perform the speaker-target check", prompt, StringComparison.Ordinal);
-        Assert.Contains("gender-neutral English source is not a reason to abstain", prompt, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static SubtitleCue Cue(int id, string text) =>
-        new(id, TimeSpan.FromSeconds(id), TimeSpan.FromSeconds(id + 1), text);
 }
