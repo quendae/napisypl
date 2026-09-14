@@ -69,17 +69,12 @@ public sealed class ImmediateQuestionDirectionalFallbackTests
     }
 
     [Fact]
-    public void Review_WhenWeakDirectionalNextCueDoesNotAnswerQuestion_DoesNotRewrite()
+    public void Resolve_WhenWeakDirectionalNextCueFollowsStatement_DoesNotUseFallback()
     {
-        var source = new[]
+        var cues = new[]
         {
-            Cue(625, 42 * 60 + 4.082, 42 * 60 + 8.627, "Kim, I can't imagine what you did to make that happen. Thank you."),
+            Cue(625, 42 * 60 + 4.082, 42 * 60 + 8.627, "Kim, I can't imagine what you did to make that happen."),
             Cue(626, 42 * 60 + 8.836, 42 * 60 + 11.172, "I didn't do anything big.")
-        };
-        var translated = new[]
-        {
-            Cue(625, 42 * 60 + 4.082, 42 * 60 + 8.627, "Kim, nie wyobrażam sobie, co zrobiłaś, żeby to się stało. - Dziękuję."),
-            Cue(626, 42 * 60 + 8.836, 42 * 60 + 11.172, "Nie zrobiłem nic wielkiego.")
         };
         var speakers = new Dictionary<int, string?>
         {
@@ -90,19 +85,11 @@ public sealed class ImmediateQuestionDirectionalFallbackTests
         {
             [626] = CueGenderEvidenceEvaluator.Evaluate(0.003, 0.001, 2.336)
         };
-        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
-        {
-            ["SPEAKER_04"] = new(SpeakerVoiceGender.Male, 0.996, 3)
-        };
 
-        var result = new DeterministicGenderReviewService().Review(
-            source,
-            translated,
-            speakers,
-            speakerGender,
-            cueGender);
+        var result = LocalTurnGenderResolver.Resolve(cues, speakers, cueGender, 625);
 
-        Assert.Equal(translated[0].Text, result[0].Text);
+        Assert.False(result.IsResolved);
+        Assert.Equal("missing_next_gender", result.ReasonCode);
     }
 
     private static SubtitleCue Cue(int id, double start, double end, string text) =>
