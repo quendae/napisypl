@@ -15,7 +15,7 @@ namespace NapisyPL;
 
 public partial class MainWindow : Window
 {
-    private static readonly string[] ProviderNames = ["Gemini", "DeepL", "OpenAI / Ollama", "Claude", "Local Qwen (offline)"];
+    private static readonly string[] ProviderNames = ["Gemini", "DeepL", "OpenAI / Ollama", "Claude"];
 
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(15) };
     private readonly AppLogger _appLogger = new();
@@ -308,11 +308,10 @@ public partial class MainWindow : Window
     private void ApplyProviderUi(bool useDefaults)
     {
         var provider = ProviderComboBox.SelectedItem as string ?? "Gemini";
-        var localQwen = provider == "Local Qwen (offline)";
-        ModelTextBox.IsEnabled = provider != "DeepL" && !localQwen;
-        ApiKeyTextBox.IsEnabled = !localQwen;
-        BaseUrlTextBox.IsEnabled = !localQwen;
-        RevealKeyCheckBox.IsEnabled = !localQwen;
+        ModelTextBox.IsEnabled = provider != "DeepL";
+        ApiKeyTextBox.IsEnabled = true;
+        BaseUrlTextBox.IsEnabled = true;
+        RevealKeyCheckBox.IsEnabled = true;
 
         switch (provider)
         {
@@ -333,12 +332,6 @@ public partial class MainWindow : Window
                 if (useDefaults || string.IsNullOrWhiteSpace(BaseUrlTextBox.Text)) BaseUrlTextBox.Text = "https://api.anthropic.com";
                 ApiKeyHintText.Text = "Wymagany klucz Claude API. Klucz nie jest zapisywany na dysku.";
                 BaseUrlHintText.Text = "Anthropic Messages API.";
-                break;
-            case "Local Qwen (offline)":
-                ModelTextBox.Text = "qwen3-1.7b";
-                BaseUrlTextBox.Text = "http://127.0.0.1:17843/v1";
-                ApiKeyHintText.Text = "Klucz API nie jest wymagany. Napisy są tłumaczone lokalnie na tym komputerze.";
-                BaseUrlHintText.Text = "Zarządzane automatycznie przez SubFlow · llama.cpp na 127.0.0.1:17843";
                 break;
             default:
                 if (useDefaults || string.IsNullOrWhiteSpace(ModelTextBox.Text)) ModelTextBox.Text = "gpt-5.6-luna";
@@ -380,9 +373,6 @@ public partial class MainWindow : Window
 
         try
         {
-            if (providerName == "Local Qwen (offline)")
-                await EnsureLocalQwenRunningAsync(_operationCancellation!.Token);
-
             if (_inputFolder is not null)
                 await TranslateFolderAsync(provider);
             else
