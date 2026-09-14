@@ -9,14 +9,14 @@ public sealed class SpeakerDiarizationOptionsTests
     {
         var options = SpeakerDiarizationOptions.CreateDefault();
 
-        Assert.Equal(0.90, options.ClusterThreshold, precision: 2);
+        Assert.Equal(0.65, options.ClusterThreshold, precision: 2);
     }
 
     [Fact]
     public void CacheSignature_ChangesWhenClusteringThresholdChanges()
     {
         var defaults = SpeakerDiarizationOptions.CreateDefault();
-        var tuned = defaults with { ClusterThreshold = defaults.ClusterThreshold - 0.05 };
+        var tuned = defaults with { ClusterThreshold = defaults.ClusterThreshold + 0.05 };
 
         Assert.NotEqual(defaults.CacheSignature, tuned.CacheSignature);
         Assert.Contains("cluster", defaults.CacheSignature, StringComparison.OrdinalIgnoreCase);
