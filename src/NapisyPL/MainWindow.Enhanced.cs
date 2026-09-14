@@ -84,13 +84,15 @@ public partial class MainWindow
         var genderOptions = SpeakerVoiceGenderOptions.CreateDefault();
         var genderAssets = new SpeakerVoiceGenderAssetManager(_enhancedAudioHttpClient, genderOptions);
         var voiceGender = new SpeakerVoiceGenderService(genderAssets, genderOptions, _appLogger);
+        var cueVoiceGender = new CueVoiceGenderService(genderAssets, genderOptions, _appLogger);
 
         var speakerAnalysis = new SpeakerDiarizationAnalysisService(
             audioExtraction,
             diarization,
             _appLogger,
             diarizationCache,
-            voiceGender);
+            voiceGender,
+            cueVoiceGender);
 
         var enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
