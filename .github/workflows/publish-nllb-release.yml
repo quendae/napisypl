@@ -16,12 +16,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified Enhanced diarization artifact
+      - name: Download verified Enhanced gender safety artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '10341446484'
-          EXPECTED_SHA256: 'a1d09e03fdd3415a2867716387d51b87fc99a75eb1ead15b62ae8e37161d498d'
-          ASSET_NAME: 'SubFlow-win-x64-enhanced-diarization-ba5e116.zip'
+          ARTIFACT_ID: '10342333921'
+          EXPECTED_SHA256: '39ebc30bc0d6c63a131a0cd932569e2da833d401de761d01198976c296b61fd3'
+          ASSET_NAME: 'SubFlow-win-x64-enhanced-gender-safety-349074f.zip'
         run: |
           set -euo pipefail
           curl -fL \
@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: subflow-offline-mt-gpu-profiles-008dd36
-          ASSET_NAME: 'SubFlow-win-x64-enhanced-diarization-ba5e116.zip'
+          ASSET_NAME: 'SubFlow-win-x64-enhanced-gender-safety-349074f.zip'
         run: |
           set -euo pipefail
           gh release upload "$TAG" "$ASSET_NAME" \
