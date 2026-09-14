@@ -7,7 +7,7 @@ public sealed class OriginalSubtitleExportUiTests
     {
         var root = FindRepositoryRoot();
         var axaml = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml"));
-        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml.cs"));
+        var codeBehind = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.OriginalSubtitles.cs"));
 
         Assert.Contains("x:Name=\"ExtractOriginalSubtitleButton\"", axaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"Wyciągnij oryginalne napisy z pliku\"", axaml, StringComparison.Ordinal);
