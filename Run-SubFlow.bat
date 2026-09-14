@@ -5,8 +5,12 @@ cd /d "%~dp0"
 set "EXPECTED_BRANCH=feature/offline-mt-gpu-profiles"
 set "RUN_DIR=%CD%\.run"
 set "AMD_RUNTIME_DIR=%RUN_DIR%\nllb-amd-runtime"
+set "LOCAL_DOTNET_DIR=%RUN_DIR%\dotnet"
+set "LOCAL_DOTNET=%LOCAL_DOTNET_DIR%\dotnet.exe"
+set "DOTNET_INSTALL_URL=https://dot.net/v1/dotnet-install.ps1"
 set "CURRENT_BRANCH="
 set "CURRENT_COMMIT="
+set "DOTNET_EXE="
 set "DOTNET_MAJOR="
 set "DIRTY="
 
@@ -20,13 +24,6 @@ where git >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Git was not found in PATH.
     echo Install Git for Windows and try again.
-    goto :fail
-)
-
-where dotnet >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] .NET SDK was not found in PATH.
-    echo Install .NET 10 SDK and try again.
     goto :fail
 )
 
@@ -69,16 +66,30 @@ if defined DIRTY (
     goto :fail
 )
 
-for /f "tokens=1 delims=." %%V in ('dotnet --version 2^>nul') do set "DOTNET_MAJOR=%%V"
-if not defined DOTNET_MAJOR (
-    echo [ERROR] Could not determine the .NET SDK version.
+call :try_dotnet "%LOCAL_DOTNET%"
+if not defined DOTNET_EXE (
+    where dotnet >nul 2>nul
+    if not errorlevel 1 call :try_dotnet dotnet
+)
+
+if not defined DOTNET_EXE (
+    echo [SETUP] .NET 10 SDK was not found. Installing a private copy for SubFlow...
+    call :install_dotnet
+    if errorlevel 1 goto :fail
+    call :try_dotnet "%LOCAL_DOTNET%"
+)
+
+if not defined DOTNET_EXE (
+    echo [ERROR] .NET 10 SDK bootstrap completed, but a usable SDK was not found.
     goto :fail
 )
 
-if %DOTNET_MAJOR% LSS 10 (
-    echo [ERROR] .NET 10 SDK or newer is required. Installed major version: %DOTNET_MAJOR%
-    goto :fail
+if /i "%DOTNET_EXE%"=="%LOCAL_DOTNET%" (
+    set "DOTNET_ROOT=%LOCAL_DOTNET_DIR%"
+    set "DOTNET_ROOT_X64=%LOCAL_DOTNET_DIR%"
 )
+
+echo [SDK] Using .NET %DOTNET_MAJOR% via %DOTNET_EXE%
 
 if /i "%~1"=="--check" (
     echo [CHECK] Git, branch, clean working tree, PowerShell and .NET SDK are OK.
@@ -96,14 +107,14 @@ for /f "delims=" %%C in ('git rev-parse --short HEAD 2^>nul') do set "CURRENT_CO
 echo [2/6] Current commit: %CURRENT_COMMIT%
 
 echo [3/6] Restoring dependencies...
-dotnet restore NapisyPL.sln
+"%DOTNET_EXE%" restore NapisyPL.sln
 if errorlevel 1 (
     echo [ERROR] dotnet restore failed.
     goto :fail
 )
 
 echo [4/6] Publishing SubFlow to .run...
-dotnet publish src\NapisyPL\NapisyPL.csproj -c Release -o "%RUN_DIR%"
+"%DOTNET_EXE%" publish src\NapisyPL\NapisyPL.csproj -c Release -o "%RUN_DIR%"
 if errorlevel 1 (
     echo [ERROR] dotnet publish failed.
     goto :fail
@@ -134,6 +145,54 @@ if errorlevel 1 (
     echo.
     echo [ERROR] SubFlow exited with an error.
     goto :fail
+)
+
+exit /b 0
+
+:try_dotnet
+set "DOTNET_CANDIDATE=%~1"
+set "DOTNET_CANDIDATE_MAJOR="
+for /f "tokens=1 delims=." %%V in ('"%DOTNET_CANDIDATE%" --version 2^>nul') do set "DOTNET_CANDIDATE_MAJOR=%%V"
+if not defined DOTNET_CANDIDATE_MAJOR exit /b 0
+if %DOTNET_CANDIDATE_MAJOR% LSS 10 exit /b 0
+set "DOTNET_EXE=%DOTNET_CANDIDATE%"
+set "DOTNET_MAJOR=%DOTNET_CANDIDATE_MAJOR%"
+exit /b 0
+
+:install_dotnet
+if exist "%LOCAL_DOTNET_DIR%" rmdir /s /q "%LOCAL_DOTNET_DIR%"
+mkdir "%LOCAL_DOTNET_DIR%" >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] Could not create %LOCAL_DOTNET_DIR%.
+    exit /b 1
+)
+
+set "DOTNET_INSTALL_SCRIPT=%SUBFLOW_DOTNET_INSTALL_SCRIPT%"
+if not defined DOTNET_INSTALL_SCRIPT (
+    set "DOTNET_INSTALL_SCRIPT=%RUN_DIR%\dotnet-install.ps1"
+    set "SUBFLOW_DOTNET_INSTALL_DOWNLOAD=%RUN_DIR%\dotnet-install.ps1"
+    echo [SETUP] Downloading Microsoft's .NET installer...
+    powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing '%DOTNET_INSTALL_URL%' -OutFile $env:SUBFLOW_DOTNET_INSTALL_DOWNLOAD"
+    if errorlevel 1 (
+        echo [ERROR] Could not download the .NET installer.
+        exit /b 1
+    )
+)
+
+if not exist "%DOTNET_INSTALL_SCRIPT%" (
+    echo [ERROR] .NET installer script was not found: %DOTNET_INSTALL_SCRIPT%
+    exit /b 1
+)
+
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%DOTNET_INSTALL_SCRIPT%" -Channel 10.0 -InstallDir "%LOCAL_DOTNET_DIR%" -NoPath
+if errorlevel 1 (
+    echo [ERROR] Local .NET 10 SDK installation failed.
+    exit /b 1
+)
+
+if not exist "%LOCAL_DOTNET%" (
+    echo [ERROR] Local .NET installer did not create %LOCAL_DOTNET%.
+    exit /b 1
 )
 
 exit /b 0
