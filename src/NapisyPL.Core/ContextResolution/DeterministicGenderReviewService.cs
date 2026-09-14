@@ -66,7 +66,12 @@ public sealed partial class DeterministicGenderReviewService
                 text = FixSpeakerAgreement(text, speakerGender);
             }
 
-            var localTurn = LocalTurnGenderResolver.Resolve(source, cueSpeakers, localCueGender, cue.Index);
+            var localTurn = LocalTurnGenderResolver.Resolve(
+                source,
+                cueSpeakers,
+                localCueGender,
+                cue.Index,
+                speakerGenderEvidence);
             if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
             {
                 text = FixAddresseeAgreement(text, localTurn.Gender);
