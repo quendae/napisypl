@@ -20,6 +20,6 @@ public sealed record SpeakerDiarizationOptions(
             Path.Combine(localAppData, "SubFlow", "diarization"),
             "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/main/model.onnx?download=true",
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx",
-            0.90);
+            0.65);
     }
 }
