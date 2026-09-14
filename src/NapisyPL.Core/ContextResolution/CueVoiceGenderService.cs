@@ -13,6 +13,8 @@ public sealed class CueVoiceGenderService(
     private const int MaleSpeechLabelIndex = 1;
     private const int FemaleSpeechLabelIndex = 2;
     private const double MaximumSampleSeconds = 8;
+    private const double DiagnosticMinimumCombinedEvidence = 0.03;
+    private const double DiagnosticMinimumNormalizedConfidence = 0.82;
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
 
     public async Task<IReadOnlyDictionary<int, CueVoiceGenderEvidence>> AnalyzeAsync(
@@ -68,7 +70,9 @@ public sealed class CueVoiceGenderService(
                             female = audioEvent.Prob;
                     }
 
-                    evidence[cue.Index] = CueGenderEvidenceEvaluator.Evaluate(male, female, durationSeconds);
+                    var evaluated = CueGenderEvidenceEvaluator.Evaluate(male, female, durationSeconds);
+                    evidence[cue.Index] = evaluated;
+                    LogRejectedCueDirection(cue.Index, evaluated, male, female, durationSeconds);
                 }
 
                 return evidence;
@@ -98,6 +102,43 @@ public sealed class CueVoiceGenderService(
             status?.Report("Enhanced: lokalna klasyfikacja kolejnych wypowiedzi niedostępna — używam starszego resolvera rozmówców.");
             return new Dictionary<int, CueVoiceGenderEvidence>();
         }
+    }
+
+    private void LogRejectedCueDirection(
+        int cueId,
+        CueVoiceGenderEvidence evaluated,
+        double male,
+        double female,
+        double durationSeconds)
+    {
+        if (evaluated.Gender != SpeakerVoiceGender.Unknown || durationSeconds < 0.75)
+            return;
+
+        var combined = male + female;
+        if (!double.IsFinite(combined) || combined <= 0)
+            return;
+
+        var normalizedWinner = Math.Max(male, female) / combined;
+        var directionalGender = male >= female
+            ? SpeakerVoiceGender.Male
+            : SpeakerVoiceGender.Female;
+        var reasonCode = combined < DiagnosticMinimumCombinedEvidence
+            ? "LowCombinedEvidence"
+            : normalizedWinner < DiagnosticMinimumNormalizedConfidence
+                ? "LowNormalizedConfidence"
+                : "RejectedByCueGate";
+
+        _logger.Info(
+            "cue_gender_detail",
+            ("cue", cueId),
+            ("voiceGender", evaluated.Gender),
+            ("targetGender", directionalGender),
+            ("reasonCode", reasonCode),
+            ("maleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(male)),
+            ("femaleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(female)),
+            ("combinedMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(combined)),
+            ("normalizedWinnerPermille", SpeakerGenderObservationDiagnostics.ToPermille(normalizedWinner)),
+            ("nextCueDurationMs", (int)Math.Round(durationSeconds * 1000)));
     }
 
     private static float[] SliceSamples(PcmWaveData wave, SubtitleCue cue, out double durationSeconds)
