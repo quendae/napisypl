@@ -31,11 +31,35 @@ public sealed class LocalTurnGenderResolverTests
     }
 
     [Fact]
+    public void Resolve_WhenSameGenderQuestionGetsImmediateAnswer_UsesNextDifferentLocalSpeaker()
+    {
+        var cues = new[]
+        {
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Hold on. You got married?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "No, no, no. My sister Angie's husband.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [261] = "SPEAKER_04",
+            [262] = "SPEAKER_07"
+        };
+        var cueGender = Evidence(
+            (261, SpeakerVoiceGender.Male),
+            (262, SpeakerVoiceGender.Male));
+
+        var result = LocalTurnGenderResolver.Resolve(cues, speakers, cueGender, 261);
+
+        Assert.True(result.IsResolved);
+        Assert.Equal(SpeakerVoiceGender.Male, result.Gender);
+        Assert.Equal("next_cue_same_gender_question", result.ReasonCode);
+    }
+
+    [Fact]
     public void Resolve_WhenTwoMaleTurnsHaveDifferentLocalSpeakerIds_UsesNextMaleAsAddressee()
     {
         var cues = new[]
         {
-            Cue(1, 0.0, 1.0, "You got married?"),
+            Cue(1, 0.0, 1.0, "You were there."),
             Cue(2, 1.2, 2.0, "Yeah."),
             Cue(3, 2.1, 3.0, "Last year.")
         };
@@ -62,7 +86,7 @@ public sealed class LocalTurnGenderResolverTests
     {
         var cues = new[]
         {
-            Cue(1, 0.0, 1.0, "You got married?"),
+            Cue(1, 0.0, 1.0, "You were there."),
             Cue(2, 1.2, 2.0, "Yeah."),
             Cue(3, 2.1, 3.0, "Last year.")
         };
@@ -106,26 +130,22 @@ public sealed class LocalTurnGenderResolverTests
     {
         var source = new[]
         {
-            Cue(1, 0.0, 1.0, "You got married?"),
-            Cue(2, 1.2, 2.0, "Yeah."),
-            Cue(3, 2.1, 3.0, "Last year.")
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Hold on. You got married?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "No, no, no. My sister Angie's husband.")
         };
         var translated = new[]
         {
-            Cue(1, 0.0, 1.0, "Wyszłaś za mąż?"),
-            Cue(2, 1.2, 2.0, "Tak."),
-            Cue(3, 2.1, 3.0, "W zeszłym roku.")
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Zatrzymaj się. Wyszłaś za mąż?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "Nie, nie, nie. Mąż mojej siostry Angie.")
         };
         var speakers = new Dictionary<int, string?>
         {
-            [1] = "SPEAKER_04",
-            [2] = "SPEAKER_07",
-            [3] = "SPEAKER_07"
+            [261] = "SPEAKER_04",
+            [262] = "SPEAKER_07"
         };
         var cueGender = Evidence(
-            (1, SpeakerVoiceGender.Male),
-            (2, SpeakerVoiceGender.Male),
-            (3, SpeakerVoiceGender.Male));
+            (261, SpeakerVoiceGender.Male),
+            (262, SpeakerVoiceGender.Male));
 
         var result = new DeterministicGenderReviewService().Review(
             source,
@@ -134,7 +154,7 @@ public sealed class LocalTurnGenderResolverTests
             new Dictionary<string, SpeakerGenderEvidence>(),
             cueGender);
 
-        Assert.Equal("Wyszedłeś za mąż?", result[0].Text);
+        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[0].Text);
     }
 
     [Theory]
