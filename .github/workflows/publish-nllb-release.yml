@@ -1,10 +1,10 @@
-name: Publish NLLB Test Release
+name: Publish Offline MT GPU Profiles Test Release
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - fix/offline-mt-first-run
+      - feature/offline-mt-gpu-profiles
     paths:
       - '.github/workflows/publish-nllb-release.yml'
 
@@ -16,11 +16,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified NLLB artifact
+      - name: Download verified Offline MT GPU Profiles artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '10320299727'
-          EXPECTED_SHA256: 'fc6600895b21d8dca13857fa1883ba6d14cc5f8ee9511fa2a772504b39129df8'
+          ARTIFACT_ID: '10339750719'
+          EXPECTED_SHA256: '5098ad24a1ba384a21403cfdadf7234258fa55ec05ea72fa80bfd85c7ed2d34c'
         run: |
           set -euo pipefail
           curl -fL \
@@ -28,22 +28,22 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
-            -o SubFlow-win-x64-nllb-test.zip
-          echo "${EXPECTED_SHA256}  SubFlow-win-x64-nllb-test.zip" | sha256sum -c -
+            -o SubFlow-win-x64-offline-mt-gpu-profiles-test.zip
+          echo "${EXPECTED_SHA256}  SubFlow-win-x64-offline-mt-gpu-profiles-test.zip" | sha256sum -c -
 
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: subflow-nllb-test-ad2c2df
+          TAG: subflow-offline-mt-gpu-profiles-008dd36
         run: |
           set -euo pipefail
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           fi
           gh release create "$TAG" \
-            SubFlow-win-x64-nllb-test.zip \
+            SubFlow-win-x64-offline-mt-gpu-profiles-test.zip \
             --repo "$GITHUB_REPOSITORY" \
-            --target ad2c2df52373d2ed434a699ac3dc89c014deae1b \
-            --title "SubFlow NLLB Windows x64 test" \
-            --notes "Verified Windows x64 NLLB test build. CI real-model smoke: EN→PL translation passed, including a 66-segment batch. SHA-256: fc6600895b21d8dca13857fa1883ba6d14cc5f8ee9511fa2a772504b39129df8" \
+            --target 008dd36ef3f904a5b77d5459c93e167d4740d9a9 \
+            --title "SubFlow Offline MT GPU Profiles Windows x64 test — 008dd36" \
+            --notes "Verified Windows x64 test build for MADLAD/NLLB + deterministic Enhanced diagnostics. Packaging CI passed .NET tests, helper protocol, AMD gfx1030 installer validation, PowerShell 5.1, PyInstaller CPU fallback, real NLLB EN→PL smoke, Windows publish and desktop startup. SHA-256: 5098ad24a1ba384a21403cfdadf7234258fa55ec05ea72fa80bfd85c7ed2d34c" \
             --prerelease
