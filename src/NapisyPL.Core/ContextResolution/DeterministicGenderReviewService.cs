@@ -104,62 +104,79 @@ public sealed partial class DeterministicGenderReviewService
             var confidence = 0d;
             var gatePassed = false;
 
-            var localTurn = LocalTurnGenderResolver.Resolve(
+            var hardVoiceTurn = HardVoiceTurnResolver.Resolve(
                 source,
                 cueSpeakers,
-                localCueGender,
-                cue.Index,
-                speakerGenderEvidence);
-            if (localTurn.IsResolved)
+                speakerGenderEvidence,
+                cue.Index);
+            if (hardVoiceTurn.IsResolved)
             {
-                resolver = "local_turn";
-                reasonCode = localTurn.ReasonCode;
-                targetGender = localTurn.Gender;
-                confidence = localTurn.Confidence;
-                gatePassed = localTurn.Confidence >= MinimumAddresseeConfidence;
+                resolver = "hard_voice_turn_1000";
+                reasonCode = hardVoiceTurn.ReasonCode;
+                targetGender = hardVoiceTurn.TargetGender;
+                confidence = hardVoiceTurn.Confidence;
+                gatePassed = true;
+                text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
             }
             else
             {
-                reasonCode = localTurn.ReasonCode;
-            }
-
-            if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
-            {
-                text = FixAddresseeAgreement(sourceCue.Text, text, localTurn.Gender);
-            }
-            else if (!string.IsNullOrWhiteSpace(currentSpeaker))
-            {
-                var addressee = DialogueAddresseeResolver.ResolveDetailed(source, cueSpeakers, cue.Index);
-                if (addressee.IsResolved)
+                var localTurn = LocalTurnGenderResolver.Resolve(
+                    source,
+                    cueSpeakers,
+                    localCueGender,
+                    cue.Index,
+                    speakerGenderEvidence);
+                if (localTurn.IsResolved)
                 {
-                    resolver = "dialogue_addressee";
-                    reasonCode = addressee.ReasonCode;
-                    confidence = addressee.Confidence;
-                    gatePassed = addressee.Confidence >= MinimumAddresseeConfidence;
+                    resolver = "local_turn";
+                    reasonCode = localTurn.ReasonCode;
+                    targetGender = localTurn.Gender;
+                    confidence = localTurn.Confidence;
+                    gatePassed = localTurn.Confidence >= MinimumAddresseeConfidence;
+                }
+                else
+                {
+                    reasonCode = localTurn.ReasonCode;
                 }
 
-                if (addressee.IsResolved &&
-                    addressee.Confidence >= MinimumAddresseeConfidence &&
-                    !string.Equals(addressee.SpeakerId, currentSpeaker, StringComparison.Ordinal) &&
-                    TryEligibleGender(addressee.SpeakerId!, speakerGenderEvidence, out var addresseeGender))
+                if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
                 {
-                    if (TryGetImmediateAddresseeCueGender(
-                            source,
-                            cueSpeakers,
-                            localCueGender,
-                            cue.Index,
-                            addressee.SpeakerId!,
-                            out var localAddresseeGender) &&
-                        localAddresseeGender != addresseeGender)
+                    text = FixAddresseeAgreement(sourceCue.Text, text, localTurn.Gender);
+                }
+                else if (!string.IsNullOrWhiteSpace(currentSpeaker))
+                {
+                    var addressee = DialogueAddresseeResolver.ResolveDetailed(source, cueSpeakers, cue.Index);
+                    if (addressee.IsResolved)
                     {
-                        reasonCode = "addressee_gender_conflict";
-                        targetGender = SpeakerVoiceGender.Unknown;
-                        gatePassed = false;
+                        resolver = "dialogue_addressee";
+                        reasonCode = addressee.ReasonCode;
+                        confidence = addressee.Confidence;
+                        gatePassed = addressee.Confidence >= MinimumAddresseeConfidence;
                     }
-                    else
+
+                    if (addressee.IsResolved &&
+                        addressee.Confidence >= MinimumAddresseeConfidence &&
+                        !string.Equals(addressee.SpeakerId, currentSpeaker, StringComparison.Ordinal) &&
+                        TryEligibleGender(addressee.SpeakerId!, speakerGenderEvidence, out var addresseeGender))
                     {
-                        targetGender = addresseeGender;
-                        text = FixAddresseeAgreement(sourceCue.Text, text, addresseeGender);
+                        if (TryGetImmediateAddresseeCueGender(
+                                source,
+                                cueSpeakers,
+                                localCueGender,
+                                cue.Index,
+                                addressee.SpeakerId!,
+                                out var localAddresseeGender) &&
+                            localAddresseeGender != addresseeGender)
+                        {
+                            reasonCode = "addressee_gender_conflict";
+                            targetGender = SpeakerVoiceGender.Unknown;
+                            gatePassed = false;
+                        }
+                        else
+                        {
+                            targetGender = addresseeGender;
+                            text = FixAddresseeAgreement(sourceCue.Text, text, addresseeGender);
+                        }
                     }
                 }
             }
