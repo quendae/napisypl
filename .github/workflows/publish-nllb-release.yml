@@ -16,12 +16,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified immediate question gender artifact
+      - name: Download verified phrase lexicon artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '10344559811'
-          EXPECTED_SHA256: '1e03730a8c9cf71332aa8f3b6faa7894dce4730b6b6e79ec783ddad3afdf81d5'
-          ASSET_NAME: 'SubFlow-win-x64-immediate-question-gender-3687ccd.zip'
+          ARTIFACT_ID: '10346810496'
+          EXPECTED_SHA256: 'efbb3a676e3930317d291e19a213a5b6c7d467720054cf295483e024c372375e'
+          ASSET_NAME: 'SubFlow-win-x64-phrase-lexicon-ae8cfa5.zip'
         run: |
           set -euo pipefail
           curl -fL \
@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: subflow-offline-mt-gpu-profiles-008dd36
-          ASSET_NAME: 'SubFlow-win-x64-immediate-question-gender-3687ccd.zip'
+          ASSET_NAME: 'SubFlow-win-x64-phrase-lexicon-ae8cfa5.zip'
         run: |
           set -euo pipefail
           gh release upload "$TAG" "$ASSET_NAME" \
