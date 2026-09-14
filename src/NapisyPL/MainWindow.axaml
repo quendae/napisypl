@@ -52,6 +52,11 @@
             <StackPanel Spacing="8">
               <TextBlock Text="Ścieżka napisów" FontWeight="SemiBold" />
               <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" />
+              <Button x:Name="ExtractOriginalSubtitleButton"
+                      Content="Wyciągnij oryginalne napisy z pliku"
+                      Click="OnExtractOriginalSubtitleClick"
+                      IsEnabled="False"
+                      HorizontalAlignment="Left" />
               <TextBlock x:Name="TrackHintText"
                          Text="Automatycznie wybieramy angielską ścieżkę tekstową, jeśli jest oznaczona w pliku."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
