@@ -12,6 +12,7 @@ public sealed class AppLogger : IAppLogger
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
         "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",
+        "knownCueGenderCount", "localTurnResolvedCount", "resolvedAddresseeCount",
         "knownSpeakerCandidateCount", "knownAddresseeCandidateCount", "knownSpeakerCandidateIds", "knownAddresseeCandidateIds",
         "eligibleSpeakerCandidateCount", "eligibleSpeakerCandidateIds", "speakerCandidateEvidence",
         "genderSampleCount", "maleTagSampleCount", "femaleTagSampleCount", "anyGenderTagSampleCount",
