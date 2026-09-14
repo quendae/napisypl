@@ -4,32 +4,13 @@ using System.Text;
 using System.Text.Json;
 using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Diagnostics;
-using NapisyPL.Core.LocalTranslation;
 using NapisyPL.Core.Models;
 using NapisyPL.Core.Services;
-using NapisyPL.Core.Translation.Providers;
 
 namespace NapisyPL.Core.Tests;
 
 public sealed class SubFlow325RegressionTests
 {
-    [Fact]
-    public async Task Argos_TaggedDialogueTurns_AreTranslatedAsSeparateParts()
-    {
-        var client = new RecordingArgosClient(texts => texts.ToArray());
-        var provider = new ArgosOfflineProvider(client);
-
-        await provider.TranslateAsync([
-            new TranslationSegment(
-                30,
-                "<i>- Yeah, sí, problema.</i>\n<i>- And now dos problemas.</i>")
-        ]);
-
-        Assert.Equal(
-            ["<i>- Yeah, sí, problema.</i>", "<i>- And now dos problemas.</i>"],
-            client.LastTexts);
-    }
-
     [Fact]
     public async Task TranslationCache_PreviousSchemaV2Entry_ReturnsMiss()
     {
@@ -37,7 +18,7 @@ public sealed class SubFlow325RegressionTests
         try
         {
             Directory.CreateDirectory(root);
-            const string providerIdentity = "Argos EN→PL|translate-en_pl-1_9.argosmodel|enhanced-cache-v2";
+            const string providerIdentity = "MADLAD-400 3B — Quality|enhanced-cache-v2";
             var source = new[] { Cue(253, "Do you think they're ever gonna\nforget today? Never.") };
             var legacyHash = ComputeLegacyHash(source, providerIdentity, 2);
             var legacyEntry = new
@@ -134,19 +115,6 @@ public sealed class SubFlow325RegressionTests
     private static void DeleteDirectory(string path)
     {
         try { Directory.Delete(path, recursive: true); } catch { }
-    }
-
-    private sealed class RecordingArgosClient(Func<IReadOnlyList<string>, IReadOnlyList<string>> translate) : IArgosTranslatorClient
-    {
-        public IReadOnlyList<string> LastTexts { get; private set; } = [];
-
-        public Task<IReadOnlyList<string>> TranslateAsync(
-            IReadOnlyList<string> texts,
-            CancellationToken cancellationToken = default)
-        {
-            LastTexts = texts.ToArray();
-            return Task.FromResult(translate(texts));
-        }
     }
 
     private sealed class StubHandler(string response) : HttpMessageHandler
