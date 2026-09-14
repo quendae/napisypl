@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -173,8 +172,12 @@ public sealed class PhraseLexicon
 
     private static Regex BuildPhraseRegex(string pattern)
     {
-        var escaped = Regex.Escape(pattern.Trim());
-        escaped = Regex.Replace(escaped, @"\\\s+", @"\s+");
+        var escaped = string.Join(
+            @"\s+",
+            Regex.Split(pattern.Trim(), @"\s+")
+                .Where(part => part.Length > 0)
+                .Select(Regex.Escape));
+
         return new Regex(
             $@"(?<!\p{{L}}){escaped}(?!\p{{L}})",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
