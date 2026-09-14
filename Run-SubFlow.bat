@@ -3,6 +3,8 @@ setlocal EnableExtensions
 
 cd /d "%~dp0"
 set "EXPECTED_BRANCH=feature/offline-mt-gpu-profiles"
+set "RUN_DIR=%CD%\.run"
+set "AMD_RUNTIME_DIR=%RUN_DIR%\nllb-amd-runtime"
 set "CURRENT_BRANCH="
 set "CURRENT_COMMIT="
 set "DOTNET_MAJOR="
@@ -25,6 +27,12 @@ where dotnet >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] .NET SDK was not found in PATH.
     echo Install .NET 10 SDK and try again.
+    goto :fail
+)
+
+where powershell.exe >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] Windows PowerShell was not found.
     goto :fail
 )
 
@@ -73,11 +81,11 @@ if %DOTNET_MAJOR% LSS 10 (
 )
 
 if /i "%~1"=="--check" (
-    echo [CHECK] Git, branch, clean working tree and .NET SDK are OK.
+    echo [CHECK] Git, branch, clean working tree, PowerShell and .NET SDK are OK.
     exit /b 0
 )
 
-echo [1/4] Updating %EXPECTED_BRANCH%...
+echo [1/6] Updating %EXPECTED_BRANCH%...
 git pull --ff-only
 if errorlevel 1 (
     echo [ERROR] git pull --ff-only failed.
@@ -85,18 +93,43 @@ if errorlevel 1 (
 )
 
 for /f "delims=" %%C in ('git rev-parse --short HEAD 2^>nul') do set "CURRENT_COMMIT=%%C"
-echo [2/4] Current commit: %CURRENT_COMMIT%
+echo [2/6] Current commit: %CURRENT_COMMIT%
 
-echo [3/4] Restoring dependencies...
+echo [3/6] Restoring dependencies...
 dotnet restore NapisyPL.sln
 if errorlevel 1 (
     echo [ERROR] dotnet restore failed.
     goto :fail
 )
 
-echo [4/4] Starting SubFlow (Release)...
+echo [4/6] Publishing SubFlow to .run...
+dotnet publish src\NapisyPL\NapisyPL.csproj -c Release -o "%RUN_DIR%"
+if errorlevel 1 (
+    echo [ERROR] dotnet publish failed.
+    goto :fail
+)
+
+if not exist "%RUN_DIR%\NapisyPL.exe" (
+    echo [ERROR] Published SubFlow executable was not found.
+    goto :fail
+)
+
+echo [5/6] Checking AMD offline-MT runtime...
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CD%\tools\offline-mt\install-amd-runtime.ps1" -Destination "%AMD_RUNTIME_DIR%"
+if errorlevel 1 (
+    echo [ERROR] AMD offline-MT runtime setup failed.
+    goto :fail
+)
+
+copy /Y "%CD%\tools\offline-mt\nllb_helper.py" "%AMD_RUNTIME_DIR%\nllb_helper.py" >nul
+if errorlevel 1 (
+    echo [ERROR] Could not update the offline-MT helper.
+    goto :fail
+)
+
+echo [6/6] Starting SubFlow...
 echo.
-dotnet run --project src\NapisyPL\NapisyPL.csproj -c Release
+"%RUN_DIR%\NapisyPL.exe"
 if errorlevel 1 (
     echo.
     echo [ERROR] SubFlow exited with an error.
