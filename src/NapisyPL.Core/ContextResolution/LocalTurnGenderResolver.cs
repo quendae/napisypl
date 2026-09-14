@@ -103,7 +103,7 @@ public static class LocalTurnGenderResolver
         // strong turn-taking evidence even when global diarization fragmented that
         // character into many SPEAKER_x IDs. This is the primary path for cases
         // such as "You got married?" -> immediate reply from the other man.
-        if (gap <= ImmediateQuestionGap && current.Text.Contains('?', StringComparison.Ordinal))
+        if (gap <= ImmediateQuestionGap && current.Text.Contains('?'))
         {
             return new LocalTurnGenderResolution(
                 nextGender.Gender,
