@@ -22,7 +22,8 @@ public sealed class AppLogger : IAppLogger
         "dropped", "finishReason", "proposed", "backend", "device",
         "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
-        "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous"
+        "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous",
+        "cue", "resolver", "targetGender", "confidencePermille", "gate", "candidate", "matchedWord", "replacement", "changed"
     };
 
     private readonly object _writeGate = new();
