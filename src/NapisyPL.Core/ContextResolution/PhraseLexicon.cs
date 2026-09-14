@@ -194,10 +194,10 @@ public sealed class PhraseLexicon
         return replacement;
     }
 
-    private static IReadOnlyList<string> SplitPatterns(string value) =>
+    private static List<string> SplitPatterns(string value) =>
         string.IsNullOrWhiteSpace(value)
             ? []
-            : value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            : value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     private static IEnumerable<IReadOnlyList<string>> ParseCsv(string text)
     {
