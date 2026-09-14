@@ -1,8 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using NapisyPL.Core.LocalTranslation;
-using NapisyPL.Core.OfflineMt.Bergamot;
 using NapisyPL.Core.OfflineMt.Nllb;
 using NapisyPL.Core.Security;
 using NapisyPL.Core.Translation;
@@ -11,19 +9,21 @@ namespace NapisyPL;
 
 public partial class MainWindow
 {
-    private const string ArgosProviderName = "Local Argos (offline)";
-    private const string FirefoxProviderName = "Firefox/Bergamot (offline)";
-    private const string OpusProviderName = "OPUS-MT / Marian (offline)";
     private const string NllbFastProviderName = "NLLB 600M — Fast";
     private const string NllbBalancedProviderName = "NLLB 1.3B — Balanced";
     private const string NllbQualityTestProviderName = "NLLB 3.3B — Quality Test";
     private const string MadladQualityProviderName = "MADLAD-400 3B — Quality";
     private const string LegacyNllbProviderName = "NLLB-200 600M (offline, benchmark)";
+    private static readonly string[] RetiredLocalProviderNames =
+    [
+        "Local Argos (offline)",
+        "Firefox/Bergamot (offline)",
+        "OPUS-MT / Marian (offline)",
+        "Local Qwen (offline)",
+        "Local Qwen — pełne tłumaczenie (wolne, eksperymentalne)"
+    ];
     private static readonly string[] LocalMtProviderNames =
     [
-        ArgosProviderName,
-        FirefoxProviderName,
-        OpusProviderName,
         NllbFastProviderName,
         NllbBalancedProviderName,
         NllbQualityTestProviderName,
@@ -52,7 +52,8 @@ public partial class MainWindow
         Dispatcher.UIThread.Post(async () =>
         {
             var settings = await _settingsStore.LoadAsync();
-            var restoredProvider = settings.Provider == LegacyNllbProviderName
+            var restoredProvider = settings.Provider == LegacyNllbProviderName ||
+                                   RetiredLocalProviderNames.Contains(settings.Provider, StringComparer.Ordinal)
                 ? NllbFastProviderName
                 : settings.Provider;
             if (items.Contains(restoredProvider, StringComparer.Ordinal))
@@ -89,20 +90,6 @@ public partial class MainWindow
 
         switch (provider)
         {
-            case ArgosProviderName:
-            {
-                var runtime = ArgosRuntimeRegistry.GetOrCreate(_httpClient);
-                runtime.StatusProgress = new Progress<string>(message => SetStatus(message, StatusKind.Normal));
-                ApplyArgosProviderUi();
-                ProviderHintText.Text = "Szybkie tłumaczenie lokalne przez Argos/CTranslate2. Bez API i bez wysyłania napisów do chmury.";
-                break;
-            }
-            case FirefoxProviderName:
-                ProviderHintText.Text = "Firefox/Bergamot EN→PL — lokalny silnik Mozilli. Przy pierwszym użyciu pobiera model, później działa offline.";
-                break;
-            case OpusProviderName:
-                ProviderHintText.Text = "OPUS-MT / Marian EN→PL — przypięty model 2021-02-19 do benchmarku. Przy pierwszym użyciu pobiera model, później działa offline.";
-                break;
             case NllbFastProviderName:
                 ProviderHintText.Text = "NLLB distilled 600M · Fast. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
                 break;
@@ -114,9 +101,6 @@ public partial class MainWindow
                 break;
             case MadladQualityProviderName:
                 ProviderHintText.Text = "MADLAD-400 3B · Quality. Auto GPU/CPU; GPU używa FP16. Apache-2.0. Model pozostaje w pamięci podczas całej kolejki folderu.";
-                break;
-            case "Local Qwen (offline)":
-                ProviderHintText.Text = "Pełne tłumaczenie przez Qwen 1.7B — wolne i eksperymentalne. Enhanced nie używa dodatkowego LLM do korekty.";
                 break;
             case "DeepL":
                 ProviderHintText.Text = "Szybki translator chmurowy. Enhanced może lokalnie skorygować pewne formy rodzaju na podstawie audio i kolejności rozmówców.";
@@ -131,19 +115,6 @@ public partial class MainWindow
                 ProviderHintText.Text = "OpenAI-compatible: OpenAI, Ollama lub LM Studio. Klucz może być pusty dla lokalnego serwera.";
                 break;
         }
-    }
-
-    private void ApplyArgosProviderUi()
-    {
-        ModelTextBox.Text = "Argos Translate EN→PL 1.9";
-        BaseUrlTextBox.Text = "lokalnie · CTranslate2";
-        ApiKeyTextBox.Text = string.Empty;
-        ModelTextBox.IsEnabled = false;
-        ApiKeyTextBox.IsEnabled = false;
-        BaseUrlTextBox.IsEnabled = false;
-        RevealKeyCheckBox.IsEnabled = false;
-        ApiKeyHintText.Text = "Bez klucza API. Tłumaczenie działa lokalnie na tym komputerze.";
-        BaseUrlHintText.Text = "Pierwsze użycie pobierze model EN→PL ok. 67 MB. Model jest zachowywany w LocalAppData\\SubFlow\\argos.";
     }
 
     private async Task LoadRememberedApiKeyAsync()
@@ -214,7 +185,5 @@ public partial class MainWindow
     private async void OnArgosWindowClosed(object? sender, EventArgs e)
     {
         await NllbRuntimeRegistry.DisposeAsync();
-        await OfflineMtRuntimeRegistry.DisposeAsync();
-        await ArgosRuntimeRegistry.DisposeAsync();
     }
 }
