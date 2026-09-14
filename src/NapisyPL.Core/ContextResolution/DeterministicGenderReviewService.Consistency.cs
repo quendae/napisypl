@@ -32,8 +32,6 @@ public sealed partial class DeterministicGenderReviewService
         gender = SpeakerVoiceGender.Unknown;
         confidence = 0;
 
-        // A stable diarized speaker classification is stronger than morphology
-        // already present in a machine translation, so it may normalize the cue.
         if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
             speakerGenderEvidence.TryGetValue(currentSpeaker!, out var speakerEvidence) &&
             SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
@@ -49,9 +47,6 @@ public sealed partial class DeterministicGenderReviewService
             return false;
         }
 
-        // A single cue classifier can be wrong. If the translated sentence itself
-        // contains two independent, consistent first-person markers, do not flip it
-        // solely because one local audio sample disagrees.
         var strongTextGender = InferStrongSelfGender(translatedText);
         if (strongTextGender != SpeakerVoiceGender.Unknown && strongTextGender != cueEvidence.Gender)
             return false;
@@ -167,15 +162,16 @@ public sealed partial class DeterministicGenderReviewService
 
         return FirstPersonPredicateRegex().Replace(text, match =>
         {
-            var original = match.Groups["predicate"].Value;
-            var lower = original.ToLowerInvariant();
-            if (!map.TryGetValue(lower, out var replacement))
+            var predicate = match.Groups["predicate"];
+            var original = predicate.Value;
+            if (!map.TryGetValue(original.ToLowerInvariant(), out var replacement))
                 return match.Value;
 
             var adjusted = MatchCasing(original, replacement);
-            return match.Value[..match.Groups["predicate"].Index + adjusted.Length - match.Index - adjusted.Length]
+            var relativeIndex = predicate.Index - match.Index;
+            return match.Value[..relativeIndex]
                    + adjusted
-                   + match.Value[(match.Groups["predicate"].Index - match.Index + original.Length)..];
+                   + match.Value[(relativeIndex + original.Length)..];
         });
     }
 
