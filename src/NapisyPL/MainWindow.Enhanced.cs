@@ -8,6 +8,7 @@ namespace NapisyPL;
 public partial class MainWindow
 {
     private HttpClient? _enhancedAudioHttpClient;
+    private EnhancedTranslationPipeline? _enhancedPipeline;
     private bool _enhancedConfigured;
     private bool _enhancedCloseHooked;
 
@@ -20,14 +21,43 @@ public partial class MainWindow
         {
             EnsureEnhancedConfigured();
             _pipeline.UseEnhanced = true;
+            if (_enhancedPipeline is not null)
+                _enhancedPipeline.HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true;
+
             SetStatus(
-                "Enhanced włączony — audio i kolejność rozmówców będą użyte tylko do deterministycznej korekty rodzaju.",
+                HardVoiceCheckBox.IsChecked == true
+                    ? "Enhanced 1000/1000 włączony — działa wyłącznie bezpośredni test M↔K według następnego rozmówcy."
+                    : "Enhanced włączony — audio i kolejność rozmówców będą użyte tylko do deterministycznej korekty rodzaju.",
                 StatusKind.Normal);
         }
         else
         {
             _pipeline.UseEnhanced = false;
             SetStatus("Enhanced wyłączony — używany jest wynik tłumacza bazowego bez korekty audio.", StatusKind.Normal);
+        }
+
+        RefreshReadyState();
+    }
+
+    private void OnHardVoiceCheckChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_pipeline is null)
+            return;
+
+        if (HardVoiceCheckBox.IsChecked == true && EnhancedCheckBox.IsChecked != true)
+            EnhancedCheckBox.IsChecked = true;
+
+        EnsureEnhancedConfigured();
+        if (_enhancedPipeline is not null)
+            _enhancedPipeline.HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true;
+
+        if (EnhancedCheckBox.IsChecked == true)
+        {
+            SetStatus(
+                HardVoiceCheckBox.IsChecked == true
+                    ? "Test 1000/1000 aktywny — tylko kolejni różnopłciowi speakerzy z confidence 1000/1000 mogą zmienić formę."
+                    : "Test 1000/1000 wyłączony — Enhanced używa standardowych bezpiecznych resolverów.",
+                StatusKind.Normal);
         }
 
         RefreshReadyState();
@@ -69,7 +99,7 @@ public partial class MainWindow
             voiceGender,
             cueVoiceGender);
 
-        var enhancedPipeline = new EnhancedTranslationPipeline(
+        _enhancedPipeline = new EnhancedTranslationPipeline(
             _pipeline,
             subtitleExtraction,
             new SrtParser(),
@@ -77,9 +107,12 @@ public partial class MainWindow
             new TranslationCoordinator(),
             speakerAnalysis,
             new DeterministicGenderReviewService(),
-            _appLogger);
+            _appLogger)
+        {
+            HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true
+        };
 
-        _pipeline.EnhancedPipeline = enhancedPipeline;
+        _pipeline.EnhancedPipeline = _enhancedPipeline;
         _enhancedConfigured = true;
 
         if (!_enhancedCloseHooked)
