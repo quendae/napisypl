@@ -59,7 +59,8 @@ public static class LocalTurnGenderResolver
         IReadOnlyList<SubtitleCue> cues,
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
-        int cueId)
+        int cueId,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence = null)
     {
         var position = FindPosition(cues, cueId);
         if (position < 0)
@@ -76,38 +77,57 @@ public static class LocalTurnGenderResolver
         if (overlap > MaximumOverlap)
             return LocalTurnGenderResolution.Unresolved("next_cue_overlap");
 
-        if (!TryEligible(cueGenderEvidence, current.Index, out var currentGender) ||
-            !TryEligible(cueGenderEvidence, next.Index, out var nextGender))
+        cueSpeakers.TryGetValue(current.Index, out var currentSpeaker);
+        cueSpeakers.TryGetValue(next.Index, out var nextSpeaker);
+        var differentLocalSpeakers =
+            !string.IsNullOrWhiteSpace(currentSpeaker) &&
+            !string.IsNullOrWhiteSpace(nextSpeaker) &&
+            !string.Equals(currentSpeaker, nextSpeaker, StringComparison.Ordinal);
+
+        if (!TryResolveGender(
+                next.Index,
+                cueSpeakers,
+                cueGenderEvidence,
+                speakerGenderEvidence,
+                out var nextGender,
+                out var nextConfidence))
         {
-            return LocalTurnGenderResolution.Unresolved("missing_local_gender");
+            return LocalTurnGenderResolution.Unresolved("missing_next_gender");
         }
 
-        if (currentGender.Gender != nextGender.Gender)
+        var hasCurrentGender = TryResolveGender(
+            current.Index,
+            cueSpeakers,
+            cueGenderEvidence,
+            speakerGenderEvidence,
+            out var currentGender,
+            out var currentConfidence);
+
+        if (hasCurrentGender && currentGender != nextGender)
         {
             return new LocalTurnGenderResolution(
-                nextGender.Gender,
-                Math.Min(currentGender.Confidence, nextGender.Confidence),
+                nextGender,
+                Math.Min(currentConfidence, nextConfidence),
                 "next_cue_gender_change");
         }
 
-        if (!cueSpeakers.TryGetValue(current.Index, out var currentSpeaker) ||
-            string.IsNullOrWhiteSpace(currentSpeaker) ||
-            !cueSpeakers.TryGetValue(next.Index, out var nextSpeaker) ||
-            string.IsNullOrWhiteSpace(nextSpeaker) ||
-            string.Equals(currentSpeaker, nextSpeaker, StringComparison.Ordinal))
+        if (!differentLocalSpeakers)
         {
-            return LocalTurnGenderResolution.Unresolved("same_gender_same_or_missing_speaker");
+            return LocalTurnGenderResolution.Unresolved(
+                hasCurrentGender ? "same_gender_same_or_missing_speaker" : "missing_current_gender_and_speaker_change");
         }
 
         // A short question immediately answered by a different local speaker is
-        // strong turn-taking evidence even when global diarization fragmented that
-        // character into many SPEAKER_x IDs. This is the primary path for cases
-        // such as "You got married?" -> immediate reply from the other man.
+        // strong turn-taking evidence. Per-cue audio tagging stays primary, but
+        // trusted speaker-level gender can fill gaps when one short cue is noisy.
         if (gap <= ImmediateQuestionGap && current.Text.Contains('?'))
         {
+            var confidence = hasCurrentGender
+                ? Math.Min(currentConfidence, nextConfidence)
+                : nextConfidence;
             return new LocalTurnGenderResolution(
-                nextGender.Gender,
-                Math.Min(0.96, Math.Min(currentGender.Confidence, nextGender.Confidence)),
+                nextGender,
+                Math.Min(0.96, confidence),
                 "next_cue_same_gender_question");
         }
 
@@ -115,9 +135,12 @@ public static class LocalTurnGenderResolver
         if (!stableTurn)
             return LocalTurnGenderResolution.Unresolved("unstable_same_gender_turn");
 
+        var stableConfidence = hasCurrentGender
+            ? Math.Min(currentConfidence, nextConfidence)
+            : nextConfidence;
         return new LocalTurnGenderResolution(
-            nextGender.Gender,
-            Math.Min(0.95, Math.Min(currentGender.Confidence, nextGender.Confidence)),
+            nextGender,
+            Math.Min(0.95, stableConfidence),
             "next_cue_same_gender_stable_turn");
     }
 
@@ -138,6 +161,37 @@ public static class LocalTurnGenderResolver
 
         return cueSpeakers.TryGetValue(after.Index, out var afterSpeaker) &&
                string.Equals(afterSpeaker, nextSpeaker, StringComparison.Ordinal);
+    }
+
+    private static bool TryResolveGender(
+        int cueId,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence,
+        out SpeakerVoiceGender gender,
+        out double confidence)
+    {
+        if (TryEligible(cueGenderEvidence, cueId, out var local))
+        {
+            gender = local.Gender;
+            confidence = local.Confidence;
+            return true;
+        }
+
+        if (speakerGenderEvidence is not null &&
+            cueSpeakers.TryGetValue(cueId, out var speakerId) &&
+            !string.IsNullOrWhiteSpace(speakerId) &&
+            speakerGenderEvidence.TryGetValue(speakerId!, out var speakerEvidence) &&
+            SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
+        {
+            gender = speakerEvidence.Gender;
+            confidence = speakerEvidence.Confidence;
+            return true;
+        }
+
+        gender = SpeakerVoiceGender.Unknown;
+        confidence = 0;
+        return false;
     }
 
     private static bool TryEligible(
