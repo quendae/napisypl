@@ -27,6 +27,26 @@ public sealed class EnhancedDeterministicCompositionTests
         Assert.DoesNotContain("ArgosDisplayName", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void EnhancedPipeline_TranslatesBeforeAudioAnalysis_AndQualityChecksAfterReview()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "NapisyPL.Core", "Services", "EnhancedTranslationPipeline.cs"));
+
+        var translate = source.IndexOf("var translated = await TranslateNormallyAsync(", StringComparison.Ordinal);
+        var analyzeAudio = source.IndexOf("var speakers = await speakerAnalysis.AnalyzeAsync(", StringComparison.Ordinal);
+        var review = source.IndexOf("var reviewed = deterministicReview.Review(", StringComparison.Ordinal);
+        var quality = source.IndexOf("FinalTranslationQualityGate", StringComparison.Ordinal);
+
+        Assert.True(translate >= 0, "Enhanced pipeline must translate subtitles.");
+        Assert.True(analyzeAudio >= 0, "Enhanced pipeline must analyze audio after translation.");
+        Assert.True(review >= 0, "Enhanced pipeline must run deterministic gender review.");
+        Assert.True(quality >= 0, "Enhanced pipeline must run the final EN↔PL quality gate.");
+        Assert.True(translate < analyzeAudio, "MADLAD/provider translation must happen before audio gender analysis.");
+        Assert.True(analyzeAudio < review, "Audio gender analysis must happen before gender review.");
+        Assert.True(review < quality, "Final quality pass must happen after gender review.");
+    }
+
     private static string FindRepositoryRoot()
     {
         var candidates = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };
