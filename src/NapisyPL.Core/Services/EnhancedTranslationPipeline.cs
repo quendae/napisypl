@@ -60,7 +60,24 @@ public sealed class EnhancedTranslationPipeline(
             if (sourceCues.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się odczytać żadnych kwestii z napisów.");
 
-            status?.Report("Enhanced: analizuję rozmówców i lokalne zmiany głosu w audio…");
+            status?.Report($"Enhanced: najpierw tłumaczę przez {provider.DisplayName}…");
+            var translationTimer = Stopwatch.StartNew();
+            var translated = await TranslateNormallyAsync(
+                sourceCues,
+                provider,
+                translationProgress,
+                cancellationToken);
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "translation"),
+                ("provider", provider.DisplayName),
+                ("elapsedMs", translationTimer.ElapsedMilliseconds),
+                ("segmentCount", translated.Count),
+                ("result", "success"));
+
+            cancellationToken.ThrowIfCancellationRequested();
+            status?.Report("Enhanced: tłumaczenie gotowe — teraz analizuję głosy M/K w audio…");
             var audioTimer = Stopwatch.StartNew();
             var speakers = await speakerAnalysis.AnalyzeAsync(
                 inputPath,
@@ -90,27 +107,8 @@ public sealed class EnhancedTranslationPipeline(
                 ("result", "success"));
 
             status?.Report(HardVoiceTurnOnly
-                ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi ma kierunek głosu M albo K. Tłumaczę przez {provider.DisplayName}…"
-                : $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu. Tłumaczę przez {provider.DisplayName}…");
-            var translationTimer = Stopwatch.StartNew();
-            var translated = await TranslateNormallyAsync(
-                sourceCues,
-                provider,
-                translationProgress,
-                cancellationToken);
-            logger?.Info(
-                "enhanced_phase",
-                ("file", file),
-                ("stage", "translation"),
-                ("provider", provider.DisplayName),
-                ("elapsedMs", translationTimer.ElapsedMilliseconds),
-                ("segmentCount", translated.Count),
-                ("result", "success"));
-
-            cancellationToken.ThrowIfCancellationRequested();
-            status?.Report(HardVoiceTurnOnly
-                ? "Enhanced test M/K: wymuszam płeć z kierunku audio; przy zmianie M↔K poprawiam formy adresata…"
-                : "Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
+                ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi brzmi bardziej jak M albo K — poprawiam formy…"
+                : $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu — poprawiam bezpieczne formy…");
             var reviewTimer = Stopwatch.StartNew();
             var genderDiagnostics = new List<DeterministicGenderCueDiagnostic>();
             var reviewed = deterministicReview.Review(
@@ -121,6 +119,91 @@ public sealed class EnhancedTranslationPipeline(
                 speakers.CueGenderEvidence,
                 genderDiagnostics,
                 hardVoiceTurnOnly: HardVoiceTurnOnly);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            status?.Report("Enhanced: końcowy Quality Pass EN↔PL — sprawdzam powtórki i artefakty…");
+            var qualityTimer = Stopwatch.StartNew();
+            var initialQualityIssues = FinalTranslationQualityGate.Evaluate(sourceCues, reviewed);
+            var qualityRetryCount = 0;
+
+            if (initialQualityIssues.Count > 0)
+            {
+                foreach (var issue in initialQualityIssues)
+                {
+                    logger?.Info(
+                        "translation_quality_issue",
+                        ("file", file),
+                        ("cue", issue.CueId),
+                        ("reason", issue.Reason),
+                        ("sourceWordCount", issue.SourceWordCount),
+                        ("outputWordCount", issue.OutputWordCount),
+                        ("action", "retry_single_cue"));
+                }
+
+                status?.Report($"Quality Pass: wykryto {initialQualityIssues.Count} podejrzanych cue — ponawiam je pojedynczo przez {provider.DisplayName}…");
+                var translatedById = translated.ToDictionary(cue => cue.Index);
+                var sourceById = sourceCues.ToDictionary(cue => cue.Index);
+
+                foreach (var issue in initialQualityIssues)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!sourceById.TryGetValue(issue.CueId, out var sourceCue))
+                        continue;
+
+                    var retry = await translationCoordinator.TranslateCuesAsync(
+                        [sourceCue],
+                        provider,
+                        progress: (IProgress<double>?)null,
+                        cancellationToken);
+                    if (retry.Count != 1)
+                        throw new InvalidDataException($"Quality Pass: retry cue {issue.CueId} returned {retry.Count} results.");
+
+                    translatedById[issue.CueId] = retry[0];
+                    qualityRetryCount++;
+                }
+
+                translated = sourceCues.Select(cue => translatedById[cue.Index]).ToArray();
+                genderDiagnostics.Clear();
+                reviewed = deterministicReview.Review(
+                    sourceCues,
+                    translated,
+                    speakers.CueSpeakers,
+                    speakers.SpeakerGenderEvidence,
+                    speakers.CueGenderEvidence,
+                    genderDiagnostics,
+                    hardVoiceTurnOnly: HardVoiceTurnOnly);
+            }
+
+            var finalQualityIssues = FinalTranslationQualityGate.Evaluate(sourceCues, reviewed);
+            foreach (var issue in finalQualityIssues)
+            {
+                logger?.Error(
+                    "translation_quality_issue",
+                    ("file", file),
+                    ("cue", issue.CueId),
+                    ("reason", issue.Reason),
+                    ("sourceWordCount", issue.SourceWordCount),
+                    ("outputWordCount", issue.OutputWordCount),
+                    ("action", "blocked_after_retry"));
+            }
+
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "quality_pass"),
+                ("elapsedMs", qualityTimer.ElapsedMilliseconds),
+                ("initialIssueCount", initialQualityIssues.Count),
+                ("retryCount", qualityRetryCount),
+                ("remainingIssueCount", finalQualityIssues.Count),
+                ("result", finalQualityIssues.Count == 0 ? "success" : "blocked"));
+
+            if (finalQualityIssues.Count > 0)
+            {
+                var cueList = string.Join(", ", finalQualityIssues.Take(8).Select(issue => issue.CueId));
+                throw new InvalidOperationException(
+                    $"Quality Pass zatrzymał zapis: {finalQualityIssues.Count} cue nadal wygląda na zdegenerowane po retry (cue: {cueList}).");
+            }
+
             var changedCount = reviewed.Zip(translated)
                 .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
 
@@ -245,8 +328,8 @@ public sealed class EnhancedTranslationPipeline(
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
             status?.Report(HardVoiceTurnOnly
-                ? $"Enhanced test M/K: zapisuję wynik — zmieniono {changedCount} kwestii…"
-                : $"Enhanced: zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
+                ? $"Enhanced test M/K: Quality Pass OK, zapisuję wynik — zmieniono {changedCount} kwestii…"
+                : $"Enhanced: Quality Pass OK, zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
             string? txtOutput = null;
