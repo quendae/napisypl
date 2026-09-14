@@ -74,7 +74,7 @@ public sealed class QualityAndDeterministicEnhancedTests
 
         var result = new DeterministicGenderReviewService().Review(source, translated, speakers, evidence);
 
-        Assert.Equal("Wyszedłeś za mąż?", result[0].Text);
+        Assert.Equal("Ożeniłeś się?", result[0].Text);
     }
 
     [Fact]
