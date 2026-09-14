@@ -52,6 +52,7 @@ public sealed record LocalTurnGenderResolution(
 public static class LocalTurnGenderResolver
 {
     private static readonly TimeSpan MaximumTurnGap = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan ImmediateQuestionGap = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan MaximumOverlap = TimeSpan.FromMilliseconds(350);
 
     public static LocalTurnGenderResolution Resolve(
@@ -96,6 +97,18 @@ public static class LocalTurnGenderResolver
             string.Equals(currentSpeaker, nextSpeaker, StringComparison.Ordinal))
         {
             return LocalTurnGenderResolution.Unresolved("same_gender_same_or_missing_speaker");
+        }
+
+        // A short question immediately answered by a different local speaker is
+        // strong turn-taking evidence even when global diarization fragmented that
+        // character into many SPEAKER_x IDs. This is the primary path for cases
+        // such as "You got married?" -> immediate reply from the other man.
+        if (gap <= ImmediateQuestionGap && current.Text.Contains('?', StringComparison.Ordinal))
+        {
+            return new LocalTurnGenderResolution(
+                nextGender.Gender,
+                Math.Min(0.96, Math.Min(currentGender.Confidence, nextGender.Confidence)),
+                "next_cue_same_gender_question");
         }
 
         var stableTurn = IsStableSameGenderNextTurn(cues, cueSpeakers, position, nextSpeaker!);
