@@ -154,7 +154,7 @@ public sealed class LocalTurnGenderResolverTests
             new Dictionary<string, SpeakerGenderEvidence>(),
             cueGender);
 
-        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[0].Text);
+        Assert.Equal("Zatrzymaj się. Ożeniłeś się?", result[0].Text);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public sealed class LocalTurnGenderResolverTests
             speakerGender,
             new Dictionary<int, CueVoiceGenderEvidence>());
 
-        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[1].Text);
+        Assert.Equal("Zatrzymaj się. Ożeniłeś się?", result[1].Text);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public sealed class LocalTurnGenderResolverTests
             speakerGender,
             cueGender);
 
-        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[0].Text);
+        Assert.Equal("Zatrzymaj się. Ożeniłeś się?", result[0].Text);
     }
 
     [Theory]
