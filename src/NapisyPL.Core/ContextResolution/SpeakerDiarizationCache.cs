@@ -11,12 +11,16 @@ public sealed class SpeakerDiarizationCache(string cacheDirectory, string modelS
         ? throw new ArgumentException("Model signature is required.", nameof(modelSignature))
         : modelSignature;
 
-    public static SpeakerDiarizationCache CreateDefault()
+    public static SpeakerDiarizationCache CreateDefault() =>
+        CreateDefault(SpeakerDiarizationOptions.CreateDefault());
+
+    public static SpeakerDiarizationCache CreateDefault(SpeakerDiarizationOptions options)
     {
+        ArgumentNullException.ThrowIfNull(options);
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return new SpeakerDiarizationCache(
             Path.Combine(localAppData, "SubFlow", "diarization-cache"),
-            "sherpa-pyannote3-campplus-v1");
+            options.CacheSignature);
     }
 
     public async Task<IReadOnlyList<SpeakerSegment>?> TryLoadAsync(
