@@ -1,6 +1,4 @@
 using NapisyPL.Core.Diagnostics;
-using NapisyPL.Core.LocalTranslation;
-using NapisyPL.Core.OfflineMt.Bergamot;
 using NapisyPL.Core.OfflineMt.Nllb;
 using NapisyPL.Core.Translation.Providers;
 
@@ -22,15 +20,10 @@ public static class ProviderFactory
             "Gemini" => new GeminiProvider(httpClient, RequireKey(provider, apiKey), RequireModel(provider, model), baseUrl),
             "Claude" => new AnthropicProvider(httpClient, RequireKey(provider, apiKey), RequireModel(provider, model), baseUrl),
             "OpenAI / Ollama" => new OpenAiCompatibleProvider(httpClient, apiKey, RequireModel(provider, model), RequireBaseUrl(provider, baseUrl)),
-            "Local Qwen (offline)" => new LocalQwenProvider(httpClient, RequireBaseUrl(provider, baseUrl), RequireModel(provider, model)),
-            "Local Argos (offline)" => new ArgosOfflineProvider(ArgosRuntimeRegistry.GetOrCreate(httpClient)),
-            "Firefox/Bergamot (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetFirefox(httpClient)),
-            "OPUS-MT / Marian (offline)" => new OfflineMachineTranslationProvider(OfflineMtRuntimeRegistry.GetOpusMarian(httpClient)),
             "NLLB 600M — Fast" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Fast600M)),
             "NLLB 1.3B — Balanced" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Balanced1_3B)),
             "NLLB 3.3B — Quality Test" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.QualityNllb3_3B)),
             "MADLAD-400 3B — Quality" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.QualityMadlad3B)),
-            "NLLB-200 600M (offline, benchmark)" => new OfflineMachineTranslationProvider(NllbRuntimeRegistry.GetOrCreate(httpClient, NllbModelProfile.Fast600M)),
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Nieznany provider tłumaczenia.")
         };
 
