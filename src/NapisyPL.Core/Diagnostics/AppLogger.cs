@@ -11,7 +11,7 @@ public sealed class AppLogger : IAppLogger
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
-        "responseChars", "speakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",
+        "responseChars", "speakerCount", "uniqueSpeakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",
         "knownCueGenderCount", "localTurnResolvedCount", "resolvedAddresseeCount",
         "knownSpeakerCandidateCount", "knownAddresseeCandidateCount", "knownSpeakerCandidateIds", "knownAddresseeCandidateIds",
         "eligibleSpeakerCandidateCount", "eligibleSpeakerCandidateIds", "speakerCandidateEvidence",
@@ -23,7 +23,9 @@ public sealed class AppLogger : IAppLogger
         "dropOutsideBatch", "dropMissingSpeaker", "dropContextGuard", "dropApplyGuard",
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
         "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous",
-        "cue", "resolver", "targetGender", "confidencePermille", "gate", "candidate", "matchedWord", "replacement", "changed"
+        "cue", "resolver", "targetGender", "confidencePermille", "gate", "candidate", "matchedWord", "replacement", "changed",
+        "nextCue", "nextSpeaker", "nextCueGender", "nextCueConfidencePermille", "nextCueCombinedPermille", "nextCueDurationMs",
+        "nextSpeakerGender", "nextSpeakerConfidencePermille", "nextSpeakerSampleCount"
     };
 
     private readonly object _writeGate = new();
