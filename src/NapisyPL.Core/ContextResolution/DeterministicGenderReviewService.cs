@@ -34,7 +34,8 @@ public sealed partial class DeterministicGenderReviewService
         IReadOnlyList<SubtitleCue> source,
         IReadOnlyList<SubtitleCue> translated,
         IReadOnlyDictionary<int, string?> cueSpeakers,
-        IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence)
+        IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cueGenderEvidence = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(translated);
@@ -46,28 +47,40 @@ public sealed partial class DeterministicGenderReviewService
 
         var sourceIds = source.Select(cue => cue.Index).ToHashSet();
         var result = new List<SubtitleCue>(translated.Count);
+        var localCueGender = cueGenderEvidence ?? new Dictionary<int, CueVoiceGenderEvidence>();
 
         foreach (var cue in translated)
         {
-            if (!sourceIds.Contains(cue.Index) ||
-                !cueSpeakers.TryGetValue(cue.Index, out var currentSpeaker) ||
-                string.IsNullOrWhiteSpace(currentSpeaker))
+            if (!sourceIds.Contains(cue.Index))
             {
                 result.Add(cue);
                 continue;
             }
 
+            cueSpeakers.TryGetValue(cue.Index, out var currentSpeaker);
             var text = cue.Text;
-            if (TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
-                text = FixSpeakerAgreement(text, speakerGender);
 
-            var addressee = DialogueAddresseeResolver.ResolveDetailed(source, cueSpeakers, cue.Index);
-            if (addressee.IsResolved &&
-                addressee.Confidence >= MinimumAddresseeConfidence &&
-                !string.Equals(addressee.SpeakerId, currentSpeaker, StringComparison.Ordinal) &&
-                TryEligibleGender(addressee.SpeakerId!, speakerGenderEvidence, out var addresseeGender))
+            if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+                TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
             {
-                text = FixAddresseeAgreement(text, addresseeGender);
+                text = FixSpeakerAgreement(text, speakerGender);
+            }
+
+            var localTurn = LocalTurnGenderResolver.Resolve(source, cueSpeakers, localCueGender, cue.Index);
+            if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
+            {
+                text = FixAddresseeAgreement(text, localTurn.Gender);
+            }
+            else if (!string.IsNullOrWhiteSpace(currentSpeaker))
+            {
+                var addressee = DialogueAddresseeResolver.ResolveDetailed(source, cueSpeakers, cue.Index);
+                if (addressee.IsResolved &&
+                    addressee.Confidence >= MinimumAddresseeConfidence &&
+                    !string.Equals(addressee.SpeakerId, currentSpeaker, StringComparison.Ordinal) &&
+                    TryEligibleGender(addressee.SpeakerId!, speakerGenderEvidence, out var addresseeGender))
+                {
+                    text = FixAddresseeAgreement(text, addresseeGender);
+                }
             }
 
             result.Add(string.Equals(text, cue.Text, StringComparison.Ordinal)
