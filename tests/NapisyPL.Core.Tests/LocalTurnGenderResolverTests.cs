@@ -197,6 +197,45 @@ public sealed class LocalTurnGenderResolverTests
         Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[1].Text);
     }
 
+    [Fact]
+    public void Review_WhenCueEvidenceIsWeakButAgreesWithStrongerSpeakerEvidence_UsesStrongerConfidence()
+    {
+        var source = new[]
+        {
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Hold on. You got married?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "No, no, no. My sister Angie's husband.")
+        };
+        var translated = new[]
+        {
+            Cue(261, 18 * 60 + 51.756, 18 * 60 + 53.132, "Zatrzymaj się. Wyszłaś za mąż?"),
+            Cue(262, 18 * 60 + 53.340, 18 * 60 + 55.885, "Nie. Mąż mojej siostry Angie.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [261] = "SPEAKER_04",
+            [262] = "SPEAKER_07"
+        };
+        var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [261] = new(SpeakerVoiceGender.Male, 0.86, 0.10, 1.376),
+            [262] = new(SpeakerVoiceGender.Male, 0.91, 0.10, 2.545)
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>(StringComparer.Ordinal)
+        {
+            ["SPEAKER_04"] = new(SpeakerVoiceGender.Male, 0.996, 3),
+            ["SPEAKER_07"] = new(SpeakerVoiceGender.Male, 0.982, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender,
+            cueGender);
+
+        Assert.Equal("Zatrzymaj się. Wyszedłeś za mąż?", result[0].Text);
+    }
+
     [Theory]
     [InlineData(0.14, 0.01, 2.0, SpeakerVoiceGender.Male)]
     [InlineData(0.01, 0.13, 2.0, SpeakerVoiceGender.Female)]
