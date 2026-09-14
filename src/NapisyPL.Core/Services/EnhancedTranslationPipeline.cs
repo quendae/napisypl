@@ -40,6 +40,14 @@ public sealed class EnhancedTranslationPipeline(
             throw new InvalidOperationException("Enhanced wymaga tekstowej ścieżki napisów.");
 
         var file = Path.GetFileName(inputPath);
+        logger?.Info(
+            "translation_options",
+            ("file", file),
+            ("provider", provider.DisplayName),
+            ("exportTxt", exportTxt),
+            ("enhanced", true),
+            ("hardVoiceMode", HardVoiceTurnOnly ? "forced_binary" : "off"));
+
         string? temporarySrt = null;
         try
         {
@@ -64,6 +72,12 @@ public sealed class EnhancedTranslationPipeline(
                 SpeakerGenderReviewEligibility.IsEligible(pair.Value));
             var knownCueGenderCount = speakers.CueGenderEvidence.Count(pair =>
                 pair.Value.Gender != SpeakerVoiceGender.Unknown);
+            var directionalCueGenderCount = speakers.CueGenderEvidence.Count(pair =>
+                HardVoiceTurnResolver.TryGetForcedGender(
+                    speakers.CueGenderEvidence,
+                    pair.Key,
+                    out _,
+                    out _));
             logger?.Info(
                 "enhanced_phase",
                 ("file", file),
@@ -72,10 +86,12 @@ public sealed class EnhancedTranslationPipeline(
                 ("segmentCount", speakers.SpeakerSegmentCount),
                 ("knownGenderCount", knownGenderCount),
                 ("knownCueGenderCount", knownCueGenderCount),
+                ("directionalCueGenderCount", directionalCueGenderCount),
                 ("result", "success"));
 
-            status?.Report(
-                $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu. Tłumaczę przez {provider.DisplayName}…");
+            status?.Report(HardVoiceTurnOnly
+                ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi ma kierunek głosu M albo K. Tłumaczę przez {provider.DisplayName}…"
+                : $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu. Tłumaczę przez {provider.DisplayName}…");
             var translationTimer = Stopwatch.StartNew();
             var translated = await TranslateNormallyAsync(
                 sourceCues,
@@ -93,7 +109,7 @@ public sealed class EnhancedTranslationPipeline(
 
             cancellationToken.ThrowIfCancellationRequested();
             status?.Report(HardVoiceTurnOnly
-                ? "Enhanced: test 1000/1000 — poprawiam tylko bezpośrednie zmiany M↔K według następnego rozmówcy…"
+                ? "Enhanced test M/K: wymuszam płeć z kierunku audio; przy zmianie M↔K poprawiam formy adresata…"
                 : "Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
             var reviewTimer = Stopwatch.StartNew();
             var genderDiagnostics = new List<DeterministicGenderCueDiagnostic>();
@@ -124,14 +140,30 @@ public sealed class EnhancedTranslationPipeline(
                     currentSpeakerGender = currentGender;
                 }
 
+                speakers.CueGenderEvidence.TryGetValue(diagnostic.CueId, out var currentCueGender);
+                var currentForcedGender = SpeakerVoiceGender.Unknown;
+                var currentForcedConfidence = 0d;
+                HardVoiceTurnResolver.TryGetForcedGender(
+                    speakers.CueGenderEvidence,
+                    diagnostic.CueId,
+                    out currentForcedGender,
+                    out currentForcedConfidence);
+
                 string? nextSpeaker = null;
                 CueVoiceGenderEvidence? nextCueGender = null;
                 SpeakerGenderEvidence? nextSpeakerGender = null;
+                var nextForcedGender = SpeakerVoiceGender.Unknown;
+                var nextForcedConfidence = 0d;
                 if (nextCue is not null)
                 {
                     speakers.CueSpeakers.TryGetValue(nextCue.Index, out nextSpeaker);
                     if (speakers.CueGenderEvidence.TryGetValue(nextCue.Index, out var cueGender))
                         nextCueGender = cueGender;
+                    HardVoiceTurnResolver.TryGetForcedGender(
+                        speakers.CueGenderEvidence,
+                        nextCue.Index,
+                        out nextForcedGender,
+                        out nextForcedConfidence);
                     if (!string.IsNullOrWhiteSpace(nextSpeaker) &&
                         speakers.SpeakerGenderEvidence.TryGetValue(nextSpeaker!, out var speakerGender))
                     {
@@ -146,6 +178,11 @@ public sealed class EnhancedTranslationPipeline(
                     ("speakerGender", currentSpeakerGender?.Gender.ToString() ?? "none"),
                     ("speakerConfidencePermille", currentSpeakerGender is null ? 0 : ToPermille(currentSpeakerGender.Confidence)),
                     ("speakerSampleCount", currentSpeakerGender?.SampleCount ?? 0),
+                    ("cueGender", currentCueGender?.Gender.ToString() ?? "none"),
+                    ("cueDirectionalGender", currentCueGender?.DirectionalGender.ToString() ?? "none"),
+                    ("cueDirectionalConfidencePermille", currentCueGender is null ? 0 : ToPermille(currentCueGender.DirectionalConfidence)),
+                    ("forcedCueGender", currentForcedGender),
+                    ("forcedCueConfidencePermille", ToPermille(currentForcedConfidence)),
                     ("candidate", diagnostic.CandidateWord ?? "none"),
                     ("resolver", diagnostic.Resolver),
                     ("reasonCode", diagnostic.ReasonCode),
@@ -155,7 +192,10 @@ public sealed class EnhancedTranslationPipeline(
                     ("nextCue", nextCue?.Index ?? -1),
                     ("nextSpeaker", nextSpeaker ?? "none"),
                     ("nextCueGender", nextCueGender?.Gender.ToString() ?? "none"),
-                    ("nextCueConfidencePermille", nextCueGender is null ? 0 : ToPermille(nextCueGender.Confidence)),
+                    ("nextCueDirectionalGender", nextCueGender?.DirectionalGender.ToString() ?? "none"),
+                    ("nextCueDirectionalConfidencePermille", nextCueGender is null ? 0 : ToPermille(nextCueGender.DirectionalConfidence)),
+                    ("nextForcedCueGender", nextForcedGender),
+                    ("nextForcedCueConfidencePermille", ToPermille(nextForcedConfidence)),
                     ("nextCueCombinedPermille", nextCueGender is null ? 0 : ToPermille(nextCueGender.CombinedEvidence)),
                     ("nextCueDurationMs", nextCueGender is null ? 0 : (int)Math.Round(nextCueGender.DurationSeconds * 1000)),
                     ("nextSpeakerGender", nextSpeakerGender?.Gender.ToString() ?? "none"),
@@ -167,9 +207,9 @@ public sealed class EnhancedTranslationPipeline(
             }
 
             var hardVoiceResolvedCount = genderDiagnostics.Count(item =>
-                string.Equals(item.Resolver, "hard_voice_turn_1000", StringComparison.Ordinal) && item.GatePassed);
+                string.Equals(item.Resolver, "hard_voice_sequence", StringComparison.Ordinal) && item.GatePassed);
             var hardVoiceChangedCount = genderDiagnostics.Count(item =>
-                string.Equals(item.Resolver, "hard_voice_turn_1000", StringComparison.Ordinal) && item.Changed);
+                string.Equals(item.Resolver, "hard_voice_sequence", StringComparison.Ordinal) && item.Changed);
             var localTurnResolvedCount = HardVoiceTurnOnly
                 ? 0
                 : sourceCues.Count(cue =>
@@ -187,11 +227,12 @@ public sealed class EnhancedTranslationPipeline(
                 "enhanced_phase",
                 ("file", file),
                 ("stage", "deterministic_gender_review"),
-                ("reviewMode", HardVoiceTurnOnly ? "hard_voice_turn_1000_only" : "standard"),
+                ("reviewMode", HardVoiceTurnOnly ? "hard_voice_forced_binary" : "standard"),
                 ("elapsedMs", reviewTimer.ElapsedMilliseconds),
                 ("segmentCount", translated.Count),
                 ("knownGenderCount", knownGenderCount),
                 ("knownCueGenderCount", knownCueGenderCount),
+                ("directionalCueGenderCount", directionalCueGenderCount),
                 ("hardVoiceResolvedCount", hardVoiceResolvedCount),
                 ("hardVoiceChangedCount", hardVoiceChangedCount),
                 ("localTurnResolvedCount", localTurnResolvedCount),
@@ -204,7 +245,7 @@ public sealed class EnhancedTranslationPipeline(
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var srtOutput = Path.Combine(directory, stem + ".pl.srt");
             status?.Report(HardVoiceTurnOnly
-                ? $"Enhanced 1000/1000: zapisuję wynik — zmieniono {changedCount} kwestii…"
+                ? $"Enhanced test M/K: zapisuję wynik — zmieniono {changedCount} kwestii…"
                 : $"Enhanced: zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
