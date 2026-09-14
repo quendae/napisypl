@@ -37,8 +37,15 @@ public sealed class SpeakerDiarizationAnalysisService(
                 var cached = await cache.TryLoadAsync(mediaPath, cancellationToken);
                 if (cached is { Count: > 0 })
                 {
-                    logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("segmentCount", cached.Count), ("result", "hit"));
-                    status?.Report($"Enhanced: używam zapisanej analizy rozmówców ({cached.Count} fragmentów)…");
+                    var uniqueSpeakerCount = CountUniqueSpeakers(cached);
+                    logger?.Info(
+                        "enhanced_phase",
+                        ("file", file),
+                        ("stage", "diarization_cache"),
+                        ("segmentCount", cached.Count),
+                        ("uniqueSpeakerCount", uniqueSpeakerCount),
+                        ("result", "hit"));
+                    status?.Report($"Enhanced: używam zapisanej analizy rozmówców ({cached.Count} fragmentów, {uniqueSpeakerCount} rozmówców)…");
                     diarizationProgress?.Report(1);
 
                     var cachedGender = new Dictionary<string, SpeakerGenderEvidence>();
@@ -78,7 +85,15 @@ public sealed class SpeakerDiarizationAnalysisService(
             status?.Report("Enhanced: rozpoznaję rozmówców lokalnie…");
             timerFresh.Restart();
             var segments = await diarization.AnalyzeAsync(temporaryWave, diarizationProgress, status, cancellationToken);
-            logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization"), ("elapsedMs", timerFresh.ElapsedMilliseconds), ("segmentCount", segments.Count), ("result", "success"));
+            var uniqueFreshSpeakerCount = CountUniqueSpeakers(segments);
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "diarization"),
+                ("elapsedMs", timerFresh.ElapsedMilliseconds),
+                ("segmentCount", segments.Count),
+                ("uniqueSpeakerCount", uniqueFreshSpeakerCount),
+                ("result", "success"));
 
             if (segments.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się wykryć żadnego mówcy w ścieżce audio.");
@@ -86,7 +101,13 @@ public sealed class SpeakerDiarizationAnalysisService(
             if (cache is not null)
             {
                 await cache.SaveAsync(mediaPath, segments, cancellationToken);
-                logger?.Info("enhanced_phase", ("file", file), ("stage", "diarization_cache"), ("segmentCount", segments.Count), ("result", "stored"));
+                logger?.Info(
+                    "enhanced_phase",
+                    ("file", file),
+                    ("stage", "diarization_cache"),
+                    ("segmentCount", segments.Count),
+                    ("uniqueSpeakerCount", uniqueFreshSpeakerCount),
+                    ("result", "stored"));
             }
 
             IReadOnlyDictionary<string, SpeakerGenderEvidence> genderEvidence =
@@ -118,4 +139,7 @@ public sealed class SpeakerDiarizationAnalysisService(
             }
         }
     }
+
+    private static int CountUniqueSpeakers(IReadOnlyList<SpeakerSegment> segments) =>
+        segments.Select(segment => segment.Speaker).Distinct().Count();
 }
