@@ -105,7 +105,8 @@ public sealed class EnhancedTranslationPipeline(
                     sourceCues,
                     speakers.CueSpeakers,
                     speakers.CueGenderEvidence,
-                    cue.Index).IsResolved);
+                    cue.Index,
+                    speakers.SpeakerGenderEvidence).IsResolved);
             var resolvedAddresseeCount = sourceCues.Count(cue =>
                 DialogueAddresseeResolver.ResolveDetailed(sourceCues, speakers.CueSpeakers, cue.Index).IsResolved);
             logger?.Info(
