@@ -12,6 +12,8 @@ on:
       - 'src/NapisyPL.Core/OfflineMt/OfflineMtPaths.cs'
       - 'src/NapisyPL.Core/LocalTranslation/LocalTranslatorProtocol.cs'
       - 'src/NapisyPL.Core/Translation/**'
+      - 'src/NapisyPL.Core/ContextResolution/**'
+      - 'src/NapisyPL.Core/Services/**'
       - 'src/NapisyPL/**'
       - 'tools/offline-mt/nllb_helper.py'
       - 'tools/offline-mt/test_nllb_protocol.py'
