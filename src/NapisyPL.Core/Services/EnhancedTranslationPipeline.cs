@@ -92,14 +92,34 @@ public sealed class EnhancedTranslationPipeline(
             cancellationToken.ThrowIfCancellationRequested();
             status?.Report("Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
             var reviewTimer = Stopwatch.StartNew();
+            var genderDiagnostics = new List<DeterministicGenderCueDiagnostic>();
             var reviewed = deterministicReview.Review(
                 sourceCues,
                 translated,
                 speakers.CueSpeakers,
                 speakers.SpeakerGenderEvidence,
-                speakers.CueGenderEvidence);
+                speakers.CueGenderEvidence,
+                genderDiagnostics);
             var changedCount = reviewed.Zip(translated)
                 .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
+
+            foreach (var diagnostic in genderDiagnostics)
+            {
+                logger?.Info(
+                    "enhanced_gender_cue",
+                    ("cue", diagnostic.CueId),
+                    ("speaker", diagnostic.CurrentSpeaker ?? "none"),
+                    ("candidate", diagnostic.CandidateWord ?? "none"),
+                    ("resolver", diagnostic.Resolver),
+                    ("reasonCode", diagnostic.ReasonCode),
+                    ("targetGender", diagnostic.TargetGender),
+                    ("confidencePermille", ToPermille(diagnostic.Confidence)),
+                    ("gate", diagnostic.GatePassed ? "pass" : "fail"),
+                    ("matchedWord", diagnostic.MatchedWord ?? "none"),
+                    ("replacement", diagnostic.Replacement ?? "none"),
+                    ("changed", diagnostic.Changed));
+            }
+
             var localTurnResolvedCount = sourceCues.Count(cue =>
                 LocalTurnGenderResolver.Resolve(
                     sourceCues,
@@ -119,6 +139,7 @@ public sealed class EnhancedTranslationPipeline(
                 ("knownCueGenderCount", knownCueGenderCount),
                 ("localTurnResolvedCount", localTurnResolvedCount),
                 ("resolvedAddresseeCount", resolvedAddresseeCount),
+                ("candidateCount", genderDiagnostics.Count),
                 ("completed", changedCount),
                 ("result", "success"));
 
@@ -155,6 +176,9 @@ public sealed class EnhancedTranslationPipeline(
             }
         }
     }
+
+    private static int ToPermille(double value) =>
+        (int)Math.Round(Math.Clamp(value, 0, 1) * 1000, MidpointRounding.AwayFromZero);
 
     private Task<IReadOnlyList<SubtitleCue>> TranslateNormallyAsync(
         IReadOnlyList<SubtitleCue> sourceCues,
