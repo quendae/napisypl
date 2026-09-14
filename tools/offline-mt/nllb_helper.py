@@ -16,7 +16,7 @@ DEFAULT_RUNTIME_VERSION = "transformers-4.57.6"
 
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 _NUMBER_RE = re.compile(r"(?<!\w)\d+(?!\w)")
-_DEGENERATE_SYMBOLS = "*#~|=_"
+_DEGENERATE_SYMBOLS = "*#~|=_♪"
 
 _translate_texts: Callable[[Sequence[str]], list[str]] | None = None
 _model_name = "unknown"
@@ -82,6 +82,25 @@ def _longest_consecutive_numeric_run(values: Sequence[int]) -> int:
     return best
 
 
+def _has_repeated_ngram_loop(words: Sequence[str], source_word_count: int) -> bool:
+    if len(words) < 12 or len(words) <= (source_word_count * 3) + 12:
+        return False
+
+    for ngram_size in range(2, 6):
+        required_words = ngram_size * 6
+        for start in range(0, len(words) - required_words + 1):
+            first = list(words[start : start + ngram_size])
+            repeats = 1
+            while start + ((repeats + 1) * ngram_size) <= len(words):
+                offset = start + (repeats * ngram_size)
+                if list(words[offset : offset + ngram_size]) != first:
+                    break
+                repeats += 1
+            if repeats >= 6:
+                return True
+    return False
+
+
 def detect_degenerate_output(source_text: str, translated_text: str) -> str | None:
     source_text = source_text or ""
     translated_text = translated_text or ""
@@ -112,6 +131,9 @@ def detect_degenerate_output(source_text: str, translated_text: str) -> str | No
             and len(output_words) > (len(source_words) * 3) + 12
         ):
             return "dominant_token"
+
+    if _has_repeated_ngram_loop(output_words, len(source_words)):
+        return "repeated_ngram"
 
     if len(output_words) > max(96, (len(source_words) * 8) + 32):
         return "length_explosion"
