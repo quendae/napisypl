@@ -50,7 +50,7 @@ public sealed class EnhancedTranslationPipeline(
             if (sourceCues.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się odczytać żadnych kwestii z napisów.");
 
-            status?.Report("Enhanced: analizuję rozmówców i głosy w audio…");
+            status?.Report("Enhanced: analizuję rozmówców i lokalne zmiany głosu w audio…");
             var audioTimer = Stopwatch.StartNew();
             var speakers = await speakerAnalysis.AnalyzeAsync(
                 inputPath,
@@ -60,6 +60,8 @@ public sealed class EnhancedTranslationPipeline(
                 cancellationToken);
             var knownGenderCount = speakers.SpeakerGenderEvidence.Count(pair =>
                 SpeakerGenderReviewEligibility.IsEligible(pair.Value));
+            var knownCueGenderCount = speakers.CueGenderEvidence.Count(pair =>
+                pair.Value.Gender != SpeakerVoiceGender.Unknown);
             logger?.Info(
                 "enhanced_phase",
                 ("file", file),
@@ -67,10 +69,11 @@ public sealed class EnhancedTranslationPipeline(
                 ("elapsedMs", audioTimer.ElapsedMilliseconds),
                 ("segmentCount", speakers.SpeakerSegmentCount),
                 ("knownGenderCount", knownGenderCount),
+                ("knownCueGenderCount", knownCueGenderCount),
                 ("result", "success"));
 
             status?.Report(
-                $"Enhanced: wykryto {speakers.SpeakerSegmentCount} fragmentów mowy, pewna klasyfikacja głosu dla {knownGenderCount} rozmówców. Tłumaczę przez {provider.DisplayName}…");
+                $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu. Tłumaczę przez {provider.DisplayName}…");
             var translationTimer = Stopwatch.StartNew();
             var translated = await TranslateNormallyAsync(
                 sourceCues,
@@ -87,15 +90,22 @@ public sealed class EnhancedTranslationPipeline(
                 ("result", "success"));
 
             cancellationToken.ThrowIfCancellationRequested();
-            status?.Report("Enhanced: sprawdzam bezpieczne formy rodzaju na podstawie rozmówców…");
+            status?.Report("Enhanced: poprawiam tylko bezpieczne formy rodzaju na podstawie kolejności wypowiedzi…");
             var reviewTimer = Stopwatch.StartNew();
             var reviewed = deterministicReview.Review(
                 sourceCues,
                 translated,
                 speakers.CueSpeakers,
-                speakers.SpeakerGenderEvidence);
+                speakers.SpeakerGenderEvidence,
+                speakers.CueGenderEvidence);
             var changedCount = reviewed.Zip(translated)
                 .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
+            var localTurnResolvedCount = sourceCues.Count(cue =>
+                LocalTurnGenderResolver.Resolve(
+                    sourceCues,
+                    speakers.CueSpeakers,
+                    speakers.CueGenderEvidence,
+                    cue.Index).IsResolved);
             var resolvedAddresseeCount = sourceCues.Count(cue =>
                 DialogueAddresseeResolver.ResolveDetailed(sourceCues, speakers.CueSpeakers, cue.Index).IsResolved);
             logger?.Info(
@@ -105,6 +115,8 @@ public sealed class EnhancedTranslationPipeline(
                 ("elapsedMs", reviewTimer.ElapsedMilliseconds),
                 ("segmentCount", translated.Count),
                 ("knownGenderCount", knownGenderCount),
+                ("knownCueGenderCount", knownCueGenderCount),
+                ("localTurnResolvedCount", localTurnResolvedCount),
                 ("resolvedAddresseeCount", resolvedAddresseeCount),
                 ("completed", changedCount),
                 ("result", "success"));
