@@ -118,8 +118,9 @@ public static class LocalTurnGenderResolver
         }
 
         // A short question immediately answered by a different local speaker is
-        // strong turn-taking evidence. Per-cue audio tagging stays primary, but
-        // trusted speaker-level gender can fill gaps when one short cue is noisy.
+        // strong turn-taking evidence. Per-cue audio remains useful, but when it
+        // agrees with stronger speaker-level evidence we keep the stronger
+        // confidence instead of letting a noisy short cue downgrade the turn.
         if (gap <= ImmediateQuestionGap && current.Text.Contains('?'))
         {
             var confidence = hasCurrentGender
@@ -171,27 +172,67 @@ public static class LocalTurnGenderResolver
         out SpeakerVoiceGender gender,
         out double confidence)
     {
-        if (TryEligible(cueGenderEvidence, cueId, out var local))
+        var hasLocal = TryEligible(cueGenderEvidence, cueId, out var local);
+        var hasSpeaker = TryEligibleSpeaker(
+            cueId,
+            cueSpeakers,
+            speakerGenderEvidence,
+            out var speaker);
+
+        if (hasLocal && hasSpeaker)
+        {
+            // Conflicting classifiers are a safety stop. If they agree, use the
+            // stronger confidence rather than allowing a noisy short cue to veto
+            // a stable multi-sample speaker classification.
+            if (local.Gender != speaker.Gender)
+            {
+                gender = SpeakerVoiceGender.Unknown;
+                confidence = 0;
+                return false;
+            }
+
+            gender = local.Gender;
+            confidence = Math.Max(local.Confidence, speaker.Confidence);
+            return true;
+        }
+
+        if (hasLocal)
         {
             gender = local.Gender;
             confidence = local.Confidence;
             return true;
         }
 
-        if (speakerGenderEvidence is not null &&
-            cueSpeakers.TryGetValue(cueId, out var speakerId) &&
-            !string.IsNullOrWhiteSpace(speakerId) &&
-            speakerGenderEvidence.TryGetValue(speakerId!, out var speakerEvidence) &&
-            SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
+        if (hasSpeaker)
         {
-            gender = speakerEvidence.Gender;
-            confidence = speakerEvidence.Confidence;
+            gender = speaker.Gender;
+            confidence = speaker.Confidence;
             return true;
         }
 
         gender = SpeakerVoiceGender.Unknown;
         confidence = 0;
         return false;
+    }
+
+    private static bool TryEligibleSpeaker(
+        int cueId,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence,
+        out SpeakerGenderEvidence value)
+    {
+        value = default!;
+        if (speakerGenderEvidence is null ||
+            !cueSpeakers.TryGetValue(cueId, out var speakerId) ||
+            string.IsNullOrWhiteSpace(speakerId) ||
+            !speakerGenderEvidence.TryGetValue(speakerId!, out var candidate) ||
+            !SpeakerGenderReviewEligibility.IsEligible(candidate))
+        {
+            return false;
+        }
+
+        value = candidate;
+        return true;
     }
 
     private static bool TryEligible(
