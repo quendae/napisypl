@@ -16,11 +16,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified Offline MT GPU Profiles artifact
+      - name: Download verified Enhanced diarization artifact
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: '10341446484'
           EXPECTED_SHA256: 'a1d09e03fdd3415a2867716387d51b87fc99a75eb1ead15b62ae8e37161d498d'
+          ASSET_NAME: 'SubFlow-win-x64-enhanced-diarization-ba5e116.zip'
         run: |
           set -euo pipefail
           curl -fL \
@@ -28,22 +29,16 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
-            -o SubFlow-win-x64-offline-mt-gpu-profiles-test.zip
-          echo "${EXPECTED_SHA256}  SubFlow-win-x64-offline-mt-gpu-profiles-test.zip" | sha256sum -c -
+            -o "$ASSET_NAME"
+          echo "${EXPECTED_SHA256}  ${ASSET_NAME}" | sha256sum -c -
 
-      - name: Publish GitHub prerelease
+      - name: Upload asset to existing GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: subflow-enhanced-diarization-ba5e116
+          TAG: subflow-offline-mt-gpu-profiles-008dd36
+          ASSET_NAME: 'SubFlow-win-x64-enhanced-diarization-ba5e116.zip'
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          fi
-          gh release create "$TAG" \
-            SubFlow-win-x64-offline-mt-gpu-profiles-test.zip \
+          gh release upload "$TAG" "$ASSET_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --target ba5e116258de47174e9b4880284682db78d9e60c \
-            --title "SubFlow Enhanced diarization Windows x64 test — ba5e116" \
-            --notes "Verified Windows x64 test build for MADLAD/NLLB + deterministic Enhanced. This build raises unknown-speaker clustering threshold from 0.65 to 0.90, versions diarization cache by clustering configuration so the next Enhanced run performs fresh diarization, logs uniqueSpeakerCount, and expands per-cue diagnostics with next-cue/local/speaker gender evidence. CI and packaging passed .NET tests, helper protocol, AMD gfx1030 installer validation, PowerShell 5.1, PyInstaller CPU fallback, real NLLB EN→PL smoke, Windows publish and desktop startup. SHA-256: a1d09e03fdd3415a2867716387d51b87fc99a75eb1ead15b62ae8e37161d498d" \
-            --prerelease
+            --clobber
