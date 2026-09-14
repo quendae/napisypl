@@ -8,8 +8,6 @@ namespace NapisyPL;
 public partial class MainWindow
 {
     private HttpClient? _enhancedAudioHttpClient;
-    private HttpClient? _localQwenHttpClient;
-    private LocalContextRuntimeManager? _localQwenRuntimeManager;
     private bool _enhancedConfigured;
     private bool _enhancedCloseHooked;
 
@@ -38,30 +36,7 @@ public partial class MainWindow
     private void CompleteEnhancedControlInitialization()
     {
         // Kept as the constructor hook so older window initialization remains stable.
-        // Enhanced now has no reviewer model/backend controls to initialize.
-    }
-
-    private async Task EnsureLocalQwenRunningAsync(CancellationToken cancellationToken)
-    {
-        _localQwenHttpClient ??= new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        if (_localQwenRuntimeManager is null)
-        {
-            var options = LocalContextRuntimeOptions.Create(
-                LocalContextBackend.Auto,
-                LocalContextModelKind.Qwen3_1_7B);
-            var assets = new LocalContextAssetManager(_localQwenHttpClient, options);
-            _localQwenRuntimeManager = new LocalContextRuntimeManager(
-                _localQwenHttpClient,
-                assets,
-                options,
-                _appLogger);
-            ModelTextBox.Text = options.ModelAlias;
-            BaseUrlTextBox.Text = options.BaseUrl;
-        }
-
-        await _localQwenRuntimeManager.EnsureRunningAsync(
-            new Progress<string>(message => SetStatus(message, StatusKind.Normal)),
-            cancellationToken);
+        // Enhanced has no reviewer model/backend controls to initialize.
     }
 
     private void EnsureEnhancedConfigured()
@@ -110,13 +85,8 @@ public partial class MainWindow
         if (!_enhancedCloseHooked)
         {
             _enhancedCloseHooked = true;
-            Closed += async (_, _) =>
+            Closed += (_, _) =>
             {
-                if (_localQwenRuntimeManager is not null)
-                    await _localQwenRuntimeManager.DisposeAsync();
-                _localQwenRuntimeManager = null;
-                _localQwenHttpClient?.Dispose();
-                _localQwenHttpClient = null;
                 _enhancedAudioHttpClient?.Dispose();
                 _enhancedAudioHttpClient = null;
             };
