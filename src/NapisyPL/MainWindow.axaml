@@ -104,6 +104,11 @@
                         IsCheckedChanged="OnEnhancedChanged" />
               <TextBlock Text="Po tłumaczeniu SubFlow lokalnie rozpoznaje rozmówców i ich głosy, a następnie deterministycznie poprawia tylko bezpieczne formy rodzaju (np. zrobiłeś → zrobiłaś), gdy resolver ma mocny dowód kto jest adresatem."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+              <CheckBox x:Name="HardVoiceCheckBox"
+                        Content="Eksperyment: tylko 1000/1000 M↔K według następnego rozmówcy"
+                        IsCheckedChanged="OnHardVoiceCheckChanged" />
+              <TextBlock Text="Test kontrolny: korekta zachodzi tylko wtedy, gdy bieżący i następny mówca mają klasyfikację głosu 1000/1000, są różnymi speakerami i mają przeciwną płeć. W tym trybie pozostałe resolvery rodzaju są wyłączone."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
               <TextBlock Text="Bez dodatkowego LLM i bez swobodnego przepisywania zdań. Niepewne, grupowe albo nierozpoznane przypadki pozostają bez zmian. Enhanced wymaga filmu z audio; dla samych plików napisów używany jest tryb Standard."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
