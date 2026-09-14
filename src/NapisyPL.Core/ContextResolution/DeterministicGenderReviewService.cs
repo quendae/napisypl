@@ -103,17 +103,23 @@ public sealed partial class DeterministicGenderReviewService
             {
                 resolver = "hard_voice_sequence";
 
-                var hasCurrentDirection = HardVoiceTurnResolver.TryGetForcedGender(
+                // A weak directional cue is useful for the addressee experiment below,
+                // but it is too noisy to rewrite the current speaker's own morphology.
+                // Prefer a stable speaker classification; otherwise require the cue to
+                // have passed the normal M/K evidence gate (evidence.Gender != Unknown).
+                var hasCurrentSelfGender = TryGetHardVoiceSpeakerSelfGender(
+                    currentSpeaker,
+                    speakerGenderEvidence,
                     localCueGender,
                     cue.Index,
-                    out var currentCueGender,
-                    out var currentCueConfidence);
+                    out var currentSelfGender,
+                    out var currentSelfConfidence);
 
-                if (hasCurrentDirection)
+                if (hasCurrentSelfGender)
                 {
-                    text = FixSpeakerAgreement(text, currentCueGender);
-                    targetGender = currentCueGender;
-                    confidence = currentCueConfidence;
+                    text = FixSpeakerAgreement(sourceCue.Text, text, currentSelfGender);
+                    targetGender = currentSelfGender;
+                    confidence = currentSelfConfidence;
                     gatePassed = true;
                 }
 
@@ -134,10 +140,10 @@ public sealed partial class DeterministicGenderReviewService
                 else
                 {
                     var speakerSelfChanged = !string.Equals(text, originalText, StringComparison.Ordinal);
-                    reasonCode = speakerSelfChanged && hasCurrentDirection
+                    reasonCode = speakerSelfChanged && hasCurrentSelfGender
                         ? "current_cue_gender"
                         : hardVoiceTurn.ReasonCode;
-                    gatePassed = hasCurrentDirection;
+                    gatePassed = hasCurrentSelfGender || gatePassed;
                 }
             }
             else
@@ -145,7 +151,7 @@ public sealed partial class DeterministicGenderReviewService
                 if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
                     TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
                 {
-                    text = FixSpeakerAgreement(text, speakerGender);
+                    text = FixSpeakerAgreement(sourceCue.Text, text, speakerGender);
                 }
 
                 var localTurn = LocalTurnGenderResolver.Resolve(
@@ -238,12 +244,36 @@ public sealed partial class DeterministicGenderReviewService
     }
 
     internal static string FixSpeakerAgreement(string text, SpeakerVoiceGender gender) =>
-        gender switch
+        FixSpeakerAgreement(sourceText: null, text, gender);
+
+    private static string FixSpeakerAgreement(
+        string? sourceText,
+        string text,
+        SpeakerVoiceGender gender)
+    {
+        // Polish present-tense forms such as "wysyłam" can look exactly like a
+        // feminine past-tense suffix to a purely string-based rewriter. When the
+        // English source is explicitly present progressive, do not apply the
+        // generic -łam/-łem past-gender suffix rewrite. Irregular/conditional
+        // mappings remain available.
+        var protectGenericPastSuffix = sourceText is not null &&
+            EnglishFirstPersonPresentProgressiveRegex().IsMatch(sourceText);
+
+        return gender switch
         {
-            SpeakerVoiceGender.Female => FixWords(text, SpeakerMaleToFemale, [("łbym", "łabym"), ("łem", "łam")]),
-            SpeakerVoiceGender.Male => FixWords(text, SpeakerFemaleToMale, [("łabym", "łbym"), ("łam", "łem")]),
+            SpeakerVoiceGender.Female => FixWords(
+                text,
+                SpeakerMaleToFemale,
+                [("łbym", "łabym"), ("łem", "łam")],
+                protectGenericPastSuffix),
+            SpeakerVoiceGender.Male => FixWords(
+                text,
+                SpeakerFemaleToMale,
+                [("łabym", "łbym"), ("łam", "łem")],
+                protectGenericPastSuffix),
             _ => text
         };
+    }
 
     internal static string FixAddresseeAgreement(string text, SpeakerVoiceGender gender) =>
         FixAddresseeAgreementCore(PhraseLexicon.LoadDefault(), sourceText: null, text, gender);
@@ -264,6 +294,37 @@ public sealed partial class DeterministicGenderReviewService
             SpeakerVoiceGender.Male => FixWords(phraseCorrected, AddresseeFemaleToMale, [("łabyś", "łbyś"), ("łaś", "łeś")]),
             _ => text
         };
+    }
+
+    private static bool TryGetHardVoiceSpeakerSelfGender(
+        string? currentSpeaker,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        int cueId,
+        out SpeakerVoiceGender gender,
+        out double confidence)
+    {
+        gender = SpeakerVoiceGender.Unknown;
+        confidence = 0;
+
+        if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+            speakerGenderEvidence.TryGetValue(currentSpeaker!, out var speakerEvidence) &&
+            SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
+        {
+            gender = speakerEvidence.Gender;
+            confidence = speakerEvidence.Confidence;
+            return true;
+        }
+
+        if (cueGenderEvidence.TryGetValue(cueId, out var cueEvidence) &&
+            cueEvidence.Gender != SpeakerVoiceGender.Unknown)
+        {
+            gender = cueEvidence.Gender;
+            confidence = cueEvidence.Confidence;
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryEligibleGender(
@@ -319,7 +380,8 @@ public sealed partial class DeterministicGenderReviewService
     private static string FixWords(
         string text,
         IReadOnlyDictionary<string, string> irregular,
-        IReadOnlyList<(string From, string To)> suffixes) =>
+        IReadOnlyList<(string From, string To)> suffixes,
+        bool protectGenericPastSuffix = false) =>
         WordRegex().Replace(text, match =>
         {
             var original = match.Value;
@@ -330,6 +392,9 @@ public sealed partial class DeterministicGenderReviewService
 
             foreach (var (from, to) in suffixes)
             {
+                if (protectGenericPastSuffix && (from == "łam" || from == "łem"))
+                    continue;
+
                 if (!lower.EndsWith(from, StringComparison.Ordinal) || lower.Length <= from.Length)
                     continue;
                 var replacement = lower[..^from.Length] + to;
@@ -388,4 +453,7 @@ public sealed partial class DeterministicGenderReviewService
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex WordRegex();
+
+    [GeneratedRegex(@"\bI\s*(?:['’]m|am)\b[^.!?]{0,100}\b\p{L}+ing\b", RegexOptions.IgnoreCase)]
+    private static partial Regex EnglishFirstPersonPresentProgressiveRegex();
 }
