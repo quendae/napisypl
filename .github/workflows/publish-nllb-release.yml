@@ -16,12 +16,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified Enhanced gender safety artifact
+      - name: Download verified immediate question gender artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: '10342333921'
-          EXPECTED_SHA256: '39ebc30bc0d6c63a131a0cd932569e2da833d401de761d01198976c296b61fd3'
-          ASSET_NAME: 'SubFlow-win-x64-enhanced-gender-safety-349074f.zip'
+          ARTIFACT_ID: '10344559811'
+          EXPECTED_SHA256: '1e03730a8c9cf71332aa8f3b6faa7894dce4730b6b6e79ec783ddad3afdf81d5'
+          ASSET_NAME: 'SubFlow-win-x64-immediate-question-gender-3687ccd.zip'
         run: |
           set -euo pipefail
           curl -fL \
@@ -36,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: subflow-offline-mt-gpu-profiles-008dd36
-          ASSET_NAME: 'SubFlow-win-x64-enhanced-gender-safety-349074f.zip'
+          ASSET_NAME: 'SubFlow-win-x64-immediate-question-gender-3687ccd.zip'
         run: |
           set -euo pipefail
           gh release upload "$TAG" "$ASSET_NAME" \
