@@ -103,8 +103,30 @@ public sealed class EnhancedTranslationPipeline(
             var changedCount = reviewed.Zip(translated)
                 .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
 
+            var sourcePositions = sourceCues
+                .Select((cue, position) => (cue.Index, position))
+                .ToDictionary(pair => pair.Index, pair => pair.position);
             foreach (var diagnostic in genderDiagnostics)
             {
+                SubtitleCue? nextCue = null;
+                if (sourcePositions.TryGetValue(diagnostic.CueId, out var position) && position + 1 < sourceCues.Count)
+                    nextCue = sourceCues[position + 1];
+
+                string? nextSpeaker = null;
+                CueVoiceGenderEvidence? nextCueGender = null;
+                SpeakerGenderEvidence? nextSpeakerGender = null;
+                if (nextCue is not null)
+                {
+                    speakers.CueSpeakers.TryGetValue(nextCue.Index, out nextSpeaker);
+                    if (speakers.CueGenderEvidence.TryGetValue(nextCue.Index, out var cueGender))
+                        nextCueGender = cueGender;
+                    if (!string.IsNullOrWhiteSpace(nextSpeaker) &&
+                        speakers.SpeakerGenderEvidence.TryGetValue(nextSpeaker!, out var speakerGender))
+                    {
+                        nextSpeakerGender = speakerGender;
+                    }
+                }
+
                 logger?.Info(
                     "enhanced_gender_cue",
                     ("cue", diagnostic.CueId),
@@ -115,6 +137,15 @@ public sealed class EnhancedTranslationPipeline(
                     ("targetGender", diagnostic.TargetGender),
                     ("confidencePermille", ToPermille(diagnostic.Confidence)),
                     ("gate", diagnostic.GatePassed ? "pass" : "fail"),
+                    ("nextCue", nextCue?.Index ?? -1),
+                    ("nextSpeaker", nextSpeaker ?? "none"),
+                    ("nextCueGender", nextCueGender?.Gender.ToString() ?? "none"),
+                    ("nextCueConfidencePermille", nextCueGender is null ? 0 : ToPermille(nextCueGender.Confidence)),
+                    ("nextCueCombinedPermille", nextCueGender is null ? 0 : ToPermille(nextCueGender.CombinedEvidence)),
+                    ("nextCueDurationMs", nextCueGender is null ? 0 : (int)Math.Round(nextCueGender.DurationSeconds * 1000)),
+                    ("nextSpeakerGender", nextSpeakerGender?.Gender.ToString() ?? "none"),
+                    ("nextSpeakerConfidencePermille", nextSpeakerGender is null ? 0 : ToPermille(nextSpeakerGender.Confidence)),
+                    ("nextSpeakerSampleCount", nextSpeakerGender?.SampleCount ?? 0),
                     ("matchedWord", diagnostic.MatchedWord ?? "none"),
                     ("replacement", diagnostic.Replacement ?? "none"),
                     ("changed", diagnostic.Changed));
