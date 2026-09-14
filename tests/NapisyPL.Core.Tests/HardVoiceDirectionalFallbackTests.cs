@@ -32,7 +32,7 @@ public sealed class HardVoiceDirectionalFallbackTests
     }
 
     [Fact]
-    public void Review_LowCombinedDirectionalMale_FixesChuckStyleSelfForms()
+    public void Review_LowCombinedDirectionalMale_WithStableSpeaker_FixesChuckStyleSelfForms()
     {
         var source = new[]
         {
@@ -44,6 +44,15 @@ public sealed class HardVoiceDirectionalFallbackTests
             Cue(451, 0, 2, "Nie zachorowałam, bo czytałam o tobie w gazecie."),
             Cue(452, 2, 4, "Zachorowałam, bo wyszłam z domu po gazetę.")
         };
+        var speakers = new Dictionary<int, string?>
+        {
+            [451] = "SPEAKER_96",
+            [452] = "SPEAKER_96"
+        };
+        var speakerEvidence = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_96"] = new(SpeakerVoiceGender.Male, 0.985, 3)
+        };
         var evidence = new Dictionary<int, CueVoiceGenderEvidence>
         {
             [451] = DirectionalOnly(SpeakerVoiceGender.Male, 0.990, combined: 0.020),
@@ -53,8 +62,8 @@ public sealed class HardVoiceDirectionalFallbackTests
         var result = new DeterministicGenderReviewService().Review(
             source,
             translated,
-            new Dictionary<int, string?>(),
-            new Dictionary<string, SpeakerGenderEvidence>(),
+            speakers,
+            speakerEvidence,
             evidence,
             hardVoiceTurnOnly: true);
 
