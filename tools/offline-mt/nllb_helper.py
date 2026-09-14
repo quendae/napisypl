@@ -4,13 +4,19 @@ import gc
 import importlib.metadata
 import json
 import pathlib
+import re
 import sys
+from collections import Counter
 from collections.abc import Callable, Sequence
 
 SOURCE_LANGUAGE = "eng_Latn"
 TARGET_LANGUAGE = "pol_Latn"
 MADLAD_TARGET_PREFIX = "<2pl> "
 DEFAULT_RUNTIME_VERSION = "transformers-4.57.6"
+
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+_NUMBER_RE = re.compile(r"(?<!\w)\d+(?!\w)")
+_DEGENERATE_SYMBOLS = "*#~|=_"
 
 _translate_texts: Callable[[Sequence[str]], list[str]] | None = None
 _model_name = "unknown"
@@ -36,6 +42,11 @@ def emit(payload: dict) -> None:
     sys.stdout.flush()
 
 
+def emit_diagnostic(payload: dict) -> None:
+    sys.stderr.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+    sys.stderr.flush()
+
+
 def infer_model_family(config: dict) -> str:
     model_type = str(config.get("model_type", "")).strip().lower()
     if model_type in {"m2m_100", "nllb_moe"}:
@@ -51,6 +62,86 @@ def prepare_source_texts(family: str, texts: Sequence[str]) -> list[str]:
     if family == "madlad":
         return [MADLAD_TARGET_PREFIX + text for text in texts]
     raise RuntimeError(f"unsupported offline MT model family: {family}")
+
+
+def _word_tokens(text: str) -> list[str]:
+    return [token.casefold() for token in _WORD_RE.findall(text)]
+
+
+def _longest_consecutive_numeric_run(values: Sequence[int]) -> int:
+    if not values:
+        return 0
+    best = 1
+    current = 1
+    for previous, value in zip(values, values[1:]):
+        if value == previous + 1:
+            current += 1
+            best = max(best, current)
+        else:
+            current = 1
+    return best
+
+
+def detect_degenerate_output(source_text: str, translated_text: str) -> str | None:
+    source_text = source_text or ""
+    translated_text = translated_text or ""
+
+    for symbol in _DEGENERATE_SYMBOLS:
+        output_count = translated_text.count(symbol)
+        source_count = source_text.count(symbol)
+        if output_count >= 24 and output_count >= source_count + 16:
+            return "symbol_run"
+
+    output_numbers = [int(value) for value in _NUMBER_RE.findall(translated_text)]
+    source_numbers = _NUMBER_RE.findall(source_text)
+    if (
+        len(output_numbers) >= 12
+        and len(output_numbers) >= len(source_numbers) + 8
+        and _longest_consecutive_numeric_run(output_numbers) >= 12
+    ):
+        return "numeric_run"
+
+    source_words = _word_tokens(source_text)
+    output_words = _word_tokens(translated_text)
+    if len(output_words) >= 24:
+        _, dominant_count = Counter(output_words).most_common(1)[0]
+        dominant_ratio = dominant_count / len(output_words)
+        if (
+            dominant_count >= 16
+            and dominant_ratio >= 0.65
+            and len(output_words) > (len(source_words) * 3) + 12
+        ):
+            return "dominant_token"
+
+    if len(output_words) > max(96, (len(source_words) * 8) + 32):
+        return "length_explosion"
+
+    return None
+
+
+def generation_kwargs(
+    target_language_id: int | None,
+    source_text: str,
+    *,
+    retry: bool,
+) -> dict:
+    kwargs: dict[str, object] = {
+        "max_new_tokens": 256,
+        "num_beams": 4,
+    }
+    if retry:
+        source_word_count = max(1, len(_word_tokens(source_text)))
+        kwargs.update(
+            {
+                "max_new_tokens": max(32, min(128, (source_word_count * 4) + 16)),
+                "no_repeat_ngram_size": 3,
+                "repetition_penalty": 1.15,
+                "early_stopping": True,
+            }
+        )
+    if target_language_id is not None:
+        kwargs["forced_bos_token_id"] = target_language_id
+    return kwargs
 
 
 def default_batch_size(family: str, model_size_bytes: int, gpu: bool) -> int:
@@ -151,6 +242,33 @@ def load_model(model_path: str) -> None:
 
     batch_size = default_batch_size(family, model_weight_size(model_directory), gpu)
 
+    def run_generation(source_batch: Sequence[str], *, retry: bool) -> list[str]:
+        if retry and len(source_batch) != 1:
+            raise ValueError("degenerate-output retry requires exactly one segment")
+        prepared = prepare_source_texts(family, source_batch)
+        encoded = None
+        generated = None
+        try:
+            encoded = tokenizer(
+                prepared,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
+            )
+            encoded = {key: value.to(device) for key, value in encoded.items()}
+            kwargs = generation_kwargs(
+                target_language_id,
+                source_batch[0] if source_batch else "",
+                retry=retry,
+            )
+            with torch.inference_mode():
+                generated = model.generate(**encoded, **kwargs)
+            return tokenizer.batch_decode(generated, skip_special_tokens=True)
+        finally:
+            encoded = None
+            generated = None
+
     def translate_texts(texts: Sequence[str]) -> list[str]:
         nonlocal batch_size
         global _batch_size
@@ -159,41 +277,54 @@ def load_model(model_path: str) -> None:
         while start < len(texts):
             current_size = min(batch_size, len(texts) - start)
             batch = list(texts[start : start + current_size])
-            prepared = prepare_source_texts(family, batch)
-            encoded = None
-            generated = None
             try:
-                encoded = tokenizer(
-                    prepared,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=512,
-                )
-                encoded = {key: value.to(device) for key, value in encoded.items()}
-                generation_kwargs = {
-                    "max_new_tokens": 256,
-                    "num_beams": 4,
-                }
-                if target_language_id is not None:
-                    generation_kwargs["forced_bos_token_id"] = target_language_id
-                with torch.inference_mode():
-                    generated = model.generate(**encoded, **generation_kwargs)
-                output.extend(tokenizer.batch_decode(generated, skip_special_tokens=True))
+                decoded = run_generation(batch, retry=False)
+
+                if family == "madlad":
+                    for index, (source_text, translated_text) in enumerate(
+                        zip(batch, decoded, strict=True)
+                    ):
+                        reason = detect_degenerate_output(source_text, translated_text)
+                        if reason is None:
+                            continue
+
+                        emit_diagnostic(
+                            {
+                                "event": "translation_degenerate_output",
+                                "family": family,
+                                "reason": reason,
+                                "attempt": 1,
+                                "action": "retry_single_segment",
+                                "sourceWordCount": len(_word_tokens(source_text)),
+                                "outputWordCount": len(_word_tokens(translated_text)),
+                            }
+                        )
+
+                        retried_text = run_generation([source_text], retry=True)[0]
+                        retry_reason = detect_degenerate_output(source_text, retried_text)
+                        emit_diagnostic(
+                            {
+                                "event": "translation_degenerate_output_retry",
+                                "family": family,
+                                "reason": retry_reason or "none",
+                                "attempt": 2,
+                                "result": "still_degenerate" if retry_reason else "recovered",
+                                "sourceWordCount": len(_word_tokens(source_text)),
+                                "outputWordCount": len(_word_tokens(retried_text)),
+                            }
+                        )
+                        decoded[index] = retried_text
+
+                output.extend(decoded)
                 start += current_size
             except RuntimeError as exc:
                 message = str(exc).lower()
                 if gpu and "out of memory" in message and current_size > 1:
-                    encoded = None
-                    generated = None
                     batch_size = max(1, current_size // 2)
                     _batch_size = batch_size
                     clear_gpu_cache(torch)
                     continue
                 raise
-            finally:
-                encoded = None
-                generated = None
         return output
 
     _translate_texts = translate_texts
