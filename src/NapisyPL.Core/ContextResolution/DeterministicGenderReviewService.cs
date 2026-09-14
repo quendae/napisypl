@@ -103,21 +103,23 @@ public sealed partial class DeterministicGenderReviewService
             {
                 resolver = "hard_voice_sequence";
 
-                // A weak directional cue is useful for the addressee experiment below,
-                // but it is too noisy to rewrite the current speaker's own morphology.
-                // Prefer a stable speaker classification; otherwise require the cue to
-                // have passed the normal M/K evidence gate (evidence.Gender != Unknown).
-                var hasCurrentSelfGender = TryGetHardVoiceSpeakerSelfGender(
+                // Weak directional audio remains useful for the turn experiment,
+                // but self morphology is allowed to veto a conflicting local cue
+                // when the translated sentence contains two consistent markers.
+                // Stable diarized speaker evidence still has the highest priority.
+                var hasCurrentSelfGender = TryGetHardVoiceSpeakerSelfGenderSafely(
                     currentSpeaker,
                     speakerGenderEvidence,
                     localCueGender,
                     cue.Index,
+                    originalText,
                     out var currentSelfGender,
                     out var currentSelfConfidence);
 
                 if (hasCurrentSelfGender)
                 {
                     text = FixSpeakerAgreement(sourceCue.Text, text, currentSelfGender);
+                    text = FixFirstPersonPredicateAgreement(text, currentSelfGender);
                     targetGender = currentSelfGender;
                     confidence = currentSelfConfidence;
                     gatePassed = true;
@@ -131,11 +133,21 @@ public sealed partial class DeterministicGenderReviewService
 
                 if (hardVoiceTurn.IsResolved)
                 {
-                    reasonCode = hardVoiceTurn.ReasonCode;
-                    targetGender = hardVoiceTurn.TargetGender;
-                    confidence = hardVoiceTurn.Confidence;
-                    gatePassed = true;
-                    text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
+                    if (ShouldPreserveStrongAddresseeGender(text, hardVoiceTurn.TargetGender))
+                    {
+                        reasonCode = "intra_cue_addressee_gender_conflict";
+                        targetGender = SpeakerVoiceGender.Unknown;
+                        confidence = hardVoiceTurn.Confidence;
+                        gatePassed = false;
+                    }
+                    else
+                    {
+                        reasonCode = hardVoiceTurn.ReasonCode;
+                        targetGender = hardVoiceTurn.TargetGender;
+                        confidence = hardVoiceTurn.Confidence;
+                        gatePassed = true;
+                        text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
+                    }
                 }
                 else
                 {
@@ -152,6 +164,7 @@ public sealed partial class DeterministicGenderReviewService
                     TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
                 {
                     text = FixSpeakerAgreement(sourceCue.Text, text, speakerGender);
+                    text = FixFirstPersonPredicateAgreement(text, speakerGender);
                 }
 
                 var localTurn = LocalTurnGenderResolver.Resolve(
