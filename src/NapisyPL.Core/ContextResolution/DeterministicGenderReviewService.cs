@@ -3,6 +3,20 @@ using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
 
+public sealed record DeterministicGenderCueDiagnostic(
+    int CueId,
+    string? CurrentSpeaker,
+    bool HasGenderedCandidate,
+    string? CandidateWord,
+    string Resolver,
+    string ReasonCode,
+    SpeakerVoiceGender TargetGender,
+    double Confidence,
+    bool GatePassed,
+    string? MatchedWord,
+    string? Replacement,
+    bool Changed);
+
 public sealed partial class DeterministicGenderReviewService
 {
     private const double MinimumAddresseeConfidence = 0.94;
@@ -30,12 +44,18 @@ public sealed partial class DeterministicGenderReviewService
     private static readonly IReadOnlyDictionary<string, string> SpeakerFemaleToMale = Reverse(SpeakerMaleToFemale);
     private static readonly IReadOnlyDictionary<string, string> AddresseeFemaleToMale = Reverse(AddresseeMaleToFemale);
 
+    private static readonly string[] GenderedSuffixes =
+    [
+        "łabym", "łabyś", "łbym", "łbyś", "łam", "łem", "łaś", "łeś"
+    ];
+
     public IReadOnlyList<SubtitleCue> Review(
         IReadOnlyList<SubtitleCue> source,
         IReadOnlyList<SubtitleCue> translated,
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
-        IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cueGenderEvidence = null)
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cueGenderEvidence = null,
+        ICollection<DeterministicGenderCueDiagnostic>? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(translated);
@@ -58,7 +78,9 @@ public sealed partial class DeterministicGenderReviewService
             }
 
             cueSpeakers.TryGetValue(cue.Index, out var currentSpeaker);
-            var text = cue.Text;
+            var originalText = cue.Text;
+            var candidateWord = FindGenderedCandidate(originalText);
+            var text = originalText;
 
             if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
                 TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
@@ -66,12 +88,31 @@ public sealed partial class DeterministicGenderReviewService
                 text = FixSpeakerAgreement(text, speakerGender);
             }
 
+            var resolver = "none";
+            var reasonCode = "unresolved";
+            var targetGender = SpeakerVoiceGender.Unknown;
+            var confidence = 0d;
+            var gatePassed = false;
+
             var localTurn = LocalTurnGenderResolver.Resolve(
                 source,
                 cueSpeakers,
                 localCueGender,
                 cue.Index,
                 speakerGenderEvidence);
+            if (localTurn.IsResolved)
+            {
+                resolver = "local_turn";
+                reasonCode = localTurn.ReasonCode;
+                targetGender = localTurn.Gender;
+                confidence = localTurn.Confidence;
+                gatePassed = localTurn.Confidence >= MinimumAddresseeConfidence;
+            }
+            else
+            {
+                reasonCode = localTurn.ReasonCode;
+            }
+
             if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
             {
                 text = FixAddresseeAgreement(text, localTurn.Gender);
@@ -79,18 +120,47 @@ public sealed partial class DeterministicGenderReviewService
             else if (!string.IsNullOrWhiteSpace(currentSpeaker))
             {
                 var addressee = DialogueAddresseeResolver.ResolveDetailed(source, cueSpeakers, cue.Index);
+                if (addressee.IsResolved)
+                {
+                    resolver = "dialogue_addressee";
+                    reasonCode = addressee.ReasonCode;
+                    confidence = addressee.Confidence;
+                    gatePassed = addressee.Confidence >= MinimumAddresseeConfidence;
+                }
+
                 if (addressee.IsResolved &&
                     addressee.Confidence >= MinimumAddresseeConfidence &&
                     !string.Equals(addressee.SpeakerId, currentSpeaker, StringComparison.Ordinal) &&
                     TryEligibleGender(addressee.SpeakerId!, speakerGenderEvidence, out var addresseeGender))
                 {
+                    targetGender = addresseeGender;
                     text = FixAddresseeAgreement(text, addresseeGender);
                 }
             }
 
-            result.Add(string.Equals(text, cue.Text, StringComparison.Ordinal)
-                ? cue
-                : cue with { Text = text });
+            var changed = !string.Equals(text, originalText, StringComparison.Ordinal);
+            var (matchedWord, replacement) = changed
+                ? FindFirstChangedWordPair(originalText, text)
+                : (null, null);
+
+            if (diagnostics is not null && (candidateWord is not null || changed))
+            {
+                diagnostics.Add(new DeterministicGenderCueDiagnostic(
+                    cue.Index,
+                    currentSpeaker,
+                    candidateWord is not null,
+                    candidateWord,
+                    resolver,
+                    reasonCode,
+                    targetGender,
+                    confidence,
+                    gatePassed,
+                    matchedWord,
+                    replacement,
+                    changed));
+            }
+
+            result.Add(changed ? cue with { Text = text } : cue);
         }
 
         return result;
@@ -146,6 +216,39 @@ public sealed partial class DeterministicGenderReviewService
 
             return original;
         });
+
+    private static string? FindGenderedCandidate(string text)
+    {
+        foreach (Match match in WordRegex().Matches(text))
+        {
+            var lower = match.Value.ToLowerInvariant();
+            if (SpeakerMaleToFemale.ContainsKey(lower) ||
+                SpeakerFemaleToMale.ContainsKey(lower) ||
+                AddresseeMaleToFemale.ContainsKey(lower) ||
+                AddresseeFemaleToMale.ContainsKey(lower) ||
+                GenderedSuffixes.Any(suffix =>
+                    lower.EndsWith(suffix, StringComparison.Ordinal) && lower.Length > suffix.Length))
+            {
+                return match.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static (string? From, string? To) FindFirstChangedWordPair(string before, string after)
+    {
+        var beforeWords = WordRegex().Matches(before).Select(match => match.Value).ToArray();
+        var afterWords = WordRegex().Matches(after).Select(match => match.Value).ToArray();
+        var count = Math.Min(beforeWords.Length, afterWords.Length);
+        for (var index = 0; index < count; index++)
+        {
+            if (!string.Equals(beforeWords[index], afterWords[index], StringComparison.Ordinal))
+                return (beforeWords[index], afterWords[index]);
+        }
+
+        return (null, null);
+    }
 
     private static string MatchCasing(string source, string replacement)
     {
