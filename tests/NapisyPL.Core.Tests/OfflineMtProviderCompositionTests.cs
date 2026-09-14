@@ -6,12 +6,10 @@ namespace NapisyPL.Core.Tests;
 public sealed class OfflineMtProviderCompositionTests
 {
     [Theory]
-    [InlineData("Firefox/Bergamot (offline)", "Firefox/Bergamot EN→PL")]
-    [InlineData("OPUS-MT / Marian (offline)", "OPUS-MT / Marian EN→PL")]
     [InlineData("NLLB 600M — Fast", "NLLB 600M — Fast")]
     [InlineData("NLLB 1.3B — Balanced", "NLLB 1.3B — Balanced")]
+    [InlineData("NLLB 3.3B — Quality Test", "NLLB 3.3B — Quality Test")]
     [InlineData("MADLAD-400 3B — Quality", "MADLAD-400 3B — Quality")]
-    [InlineData("NLLB-200 600M (offline, benchmark)", "NLLB 600M — Fast")]
     public void ProviderFactory_CreateOfflineMtProvider_IsLazyAndNeedsNoCloudSettings(
         string providerName,
         string expectedDisplayName)
@@ -29,12 +27,10 @@ public sealed class OfflineMtProviderCompositionTests
     }
 
     [Theory]
-    [InlineData("Firefox/Bergamot (offline)")]
-    [InlineData("OPUS-MT / Marian (offline)")]
     [InlineData("NLLB 600M — Fast")]
     [InlineData("NLLB 1.3B — Balanced")]
+    [InlineData("NLLB 3.3B — Quality Test")]
     [InlineData("MADLAD-400 3B — Quality")]
-    [InlineData("NLLB-200 600M (offline, benchmark)")]
     public void ProviderUiProfile_OfflineMtProviders_HideCloudFields(string providerName)
     {
         var profile = ProviderUiProfile.For(providerName);
