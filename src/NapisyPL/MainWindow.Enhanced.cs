@@ -54,7 +54,7 @@ public partial class MainWindow
         var diarizationOptions = SpeakerDiarizationOptions.CreateDefault();
         var diarizationAssets = new SpeakerDiarizationAssetManager(_enhancedAudioHttpClient, diarizationOptions);
         var diarization = new SpeakerDiarizationService(diarizationAssets, diarizationOptions);
-        var diarizationCache = SpeakerDiarizationCache.CreateDefault();
+        var diarizationCache = SpeakerDiarizationCache.CreateDefault(diarizationOptions);
 
         var genderOptions = SpeakerVoiceGenderOptions.CreateDefault();
         var genderAssets = new SpeakerVoiceGenderAssetManager(_enhancedAudioHttpClient, genderOptions);
