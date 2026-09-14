@@ -108,11 +108,13 @@ class NllbProtocolTests(unittest.TestCase):
         repeated_no = ", ".join(["Nie"] * 128)
         repeated_hello = ", ".join(["Hej"] * 85)
         repeated_symbols = "Kto się poddaje... " + "* " * 128
+        repeated_phrase = " ".join(["tak właśnie jest"] * 20)
         numeric_run = "20, um... " + ", ".join(str(value) for value in range(22, 86))
 
         self.assertEqual("dominant_token", module.detect_degenerate_output("No.", repeated_no))
         self.assertEqual("dominant_token", module.detect_degenerate_output("Hey.", repeated_hello))
         self.assertEqual("symbol_run", module.detect_degenerate_output("Who gives up?", repeated_symbols))
+        self.assertEqual("repeated_ngram", module.detect_degenerate_output("That is how it is.", repeated_phrase))
         self.assertEqual("numeric_run", module.detect_degenerate_output("I was 20, um...", numeric_run))
 
     def test_detect_degenerate_output_allows_short_intentional_repetition(self):
