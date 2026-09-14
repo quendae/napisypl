@@ -26,7 +26,7 @@ public partial class MainWindow
 
             SetStatus(
                 HardVoiceCheckBox.IsChecked == true
-                    ? "Enhanced 1000/1000 włączony — działa wyłącznie bezpośredni test M↔K według następnego rozmówcy."
+                    ? "Enhanced test M/K włączony — płeć jest wymuszana z kierunku audio dla każdej wykrywalnej wypowiedzi."
                     : "Enhanced włączony — audio i kolejność rozmówców będą użyte tylko do deterministycznej korekty rodzaju.",
                 StatusKind.Normal);
         }
@@ -55,8 +55,8 @@ public partial class MainWindow
         {
             SetStatus(
                 HardVoiceCheckBox.IsChecked == true
-                    ? "Test 1000/1000 aktywny — tylko kolejni różnopłciowi speakerzy z confidence 1000/1000 mogą zmienić formę."
-                    : "Test 1000/1000 wyłączony — Enhanced używa standardowych bezpiecznych resolverów.",
+                    ? "Test M/K aktywny — ignoruję normalne progi pewności i wymuszam Male/Female z kierunku audio; M↔K steruje formą adresata."
+                    : "Test M/K wyłączony — Enhanced używa standardowych bezpiecznych resolverów.",
                 StatusKind.Normal);
         }
 
