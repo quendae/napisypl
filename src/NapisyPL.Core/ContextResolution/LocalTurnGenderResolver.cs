@@ -6,7 +6,9 @@ public sealed record CueVoiceGenderEvidence(
     SpeakerVoiceGender Gender,
     double Confidence,
     double CombinedEvidence,
-    double DurationSeconds);
+    double DurationSeconds,
+    SpeakerVoiceGender DirectionalGender = SpeakerVoiceGender.Unknown,
+    double DirectionalConfidence = 0);
 
 public static class CueGenderEvidenceEvaluator
 {
@@ -23,18 +25,41 @@ public static class CueGenderEvidenceEvaluator
         }
 
         var combined = male + female;
-        if (combined < MinimumCombinedEvidence)
+        if (combined <= 0)
             return new CueVoiceGenderEvidence(SpeakerVoiceGender.Unknown, 0, combined, durationSeconds);
 
-        var confidence = Math.Max(male, female) / combined;
-        if (confidence < MinimumNormalizedConfidence)
-            return new CueVoiceGenderEvidence(SpeakerVoiceGender.Unknown, confidence, combined, durationSeconds);
+        var directionalGender = male >= female ? SpeakerVoiceGender.Male : SpeakerVoiceGender.Female;
+        var directionalConfidence = Math.Max(male, female) / combined;
+
+        if (combined < MinimumCombinedEvidence)
+        {
+            return new CueVoiceGenderEvidence(
+                SpeakerVoiceGender.Unknown,
+                0,
+                combined,
+                durationSeconds,
+                directionalGender,
+                directionalConfidence);
+        }
+
+        if (directionalConfidence < MinimumNormalizedConfidence)
+        {
+            return new CueVoiceGenderEvidence(
+                SpeakerVoiceGender.Unknown,
+                directionalConfidence,
+                combined,
+                durationSeconds,
+                directionalGender,
+                directionalConfidence);
+        }
 
         return new CueVoiceGenderEvidence(
-            male >= female ? SpeakerVoiceGender.Male : SpeakerVoiceGender.Female,
-            confidence,
+            directionalGender,
+            directionalConfidence,
             combined,
-            durationSeconds);
+            durationSeconds,
+            directionalGender,
+            directionalConfidence);
     }
 }
 
@@ -51,9 +76,15 @@ public sealed record LocalTurnGenderResolution(
 
 public static class LocalTurnGenderResolver
 {
+    private const double MinimumDirectionalAnswerCombinedEvidence = 0.015;
+    private const double MinimumDirectionalAnswerConfidence = 0.94;
     private static readonly TimeSpan MaximumTurnGap = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ImmediateQuestionGap = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan MaximumOverlap = TimeSpan.FromMilliseconds(350);
+    private static readonly HashSet<string> ExplicitAnswerOpeners = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "no", "nope", "yes", "yeah", "yep", "sure", "absolutely", "okay", "ok", "right"
+    };
 
     public static LocalTurnGenderResolution Resolve(
         IReadOnlyList<SubtitleCue> cues,
@@ -92,6 +123,18 @@ public static class LocalTurnGenderResolver
                 out var nextGender,
                 out var nextConfidence))
         {
+            if (TryResolveDirectionalImmediateAnswer(
+                    current,
+                    next,
+                    gap,
+                    cueSpeakers,
+                    cueGenderEvidence,
+                    speakerGenderEvidence,
+                    out var directional))
+            {
+                return directional;
+            }
+
             return LocalTurnGenderResolution.Unresolved("missing_next_gender");
         }
 
@@ -143,6 +186,64 @@ public static class LocalTurnGenderResolver
             nextGender,
             Math.Min(0.95, stableConfidence),
             "next_cue_same_gender_stable_turn");
+    }
+
+    private static bool TryResolveDirectionalImmediateAnswer(
+        SubtitleCue current,
+        SubtitleCue next,
+        TimeSpan gap,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        IReadOnlyDictionary<string, SpeakerGenderEvidence>? speakerGenderEvidence,
+        out LocalTurnGenderResolution resolution)
+    {
+        resolution = LocalTurnGenderResolution.Unresolved("missing_next_gender");
+
+        if (gap > ImmediateQuestionGap ||
+            !current.Text.Contains('?') ||
+            !LooksLikeExplicitAnswer(next.Text) ||
+            !cueGenderEvidence.TryGetValue(next.Index, out var evidence) ||
+            evidence.Gender != SpeakerVoiceGender.Unknown ||
+            evidence.DirectionalGender == SpeakerVoiceGender.Unknown ||
+            evidence.DirectionalConfidence < MinimumDirectionalAnswerConfidence ||
+            evidence.CombinedEvidence < MinimumDirectionalAnswerCombinedEvidence ||
+            evidence.DurationSeconds < 0.75)
+        {
+            return false;
+        }
+
+        // If the next diarized speaker already has a reliable speaker-level gender,
+        // let the normal strict path use it. This fallback exists only for the case
+        // where diarization merged a rapid question/answer exchange and the cue-level
+        // classifier is directionally strong but below the global evidence floor.
+        if (TryEligibleSpeaker(next.Index, cueSpeakers, speakerGenderEvidence, out _))
+            return false;
+
+        resolution = new LocalTurnGenderResolution(
+            evidence.DirectionalGender,
+            Math.Min(0.95, evidence.DirectionalConfidence),
+            "next_cue_directional_question_answer");
+        return true;
+    }
+
+    private static bool LooksLikeExplicitAnswer(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var span = text.AsSpan().TrimStart();
+        while (!span.IsEmpty && !char.IsLetter(span[0]))
+            span = span[1..].TrimStart();
+        if (span.IsEmpty)
+            return false;
+
+        var length = 0;
+        while (length < span.Length && char.IsLetter(span[length]))
+            length++;
+        if (length == 0)
+            return false;
+
+        return ExplicitAnswerOpeners.Contains(span[..length].ToString());
     }
 
     private static bool IsStableSameGenderNextTurn(
