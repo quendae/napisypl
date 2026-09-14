@@ -3,6 +3,10 @@ setlocal EnableExtensions
 
 cd /d "%~dp0"
 set "EXPECTED_BRANCH=feature/offline-mt-gpu-profiles"
+set "CURRENT_BRANCH="
+set "CURRENT_COMMIT="
+set "DOTNET_MAJOR="
+set "DIRTY="
 
 echo.
 echo ========================================
@@ -66,6 +70,11 @@ if not defined DOTNET_MAJOR (
 if %DOTNET_MAJOR% LSS 10 (
     echo [ERROR] .NET 10 SDK or newer is required. Installed major version: %DOTNET_MAJOR%
     goto :fail
+)
+
+if /i "%~1"=="--check" (
+    echo [CHECK] Git, branch, clean working tree and .NET SDK are OK.
+    exit /b 0
 )
 
 echo [1/4] Updating %EXPECTED_BRANCH%...
