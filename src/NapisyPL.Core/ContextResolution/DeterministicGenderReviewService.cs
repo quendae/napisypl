@@ -93,47 +93,61 @@ public sealed partial class DeterministicGenderReviewService
             var candidateWord = FindGenderedCandidate(originalText);
             var text = originalText;
 
-            if (!hardVoiceTurnOnly &&
-                !string.IsNullOrWhiteSpace(currentSpeaker) &&
-                TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
-            {
-                text = FixSpeakerAgreement(text, speakerGender);
-            }
-
             var resolver = "none";
             var reasonCode = "unresolved";
             var targetGender = SpeakerVoiceGender.Unknown;
             var confidence = 0d;
             var gatePassed = false;
 
-            var hardVoiceTurn = HardVoiceTurnResolver.Resolve(
-                source,
-                cueSpeakers,
-                speakerGenderEvidence,
-                cue.Index);
-
             if (hardVoiceTurnOnly)
             {
-                resolver = "hard_voice_turn_1000";
-                reasonCode = hardVoiceTurn.ReasonCode;
-                targetGender = hardVoiceTurn.TargetGender;
-                confidence = hardVoiceTurn.Confidence;
-                gatePassed = hardVoiceTurn.IsResolved;
+                resolver = "hard_voice_sequence";
+
+                var hasCurrentDirection = HardVoiceTurnResolver.TryGetForcedGender(
+                    localCueGender,
+                    cue.Index,
+                    out var currentCueGender,
+                    out var currentCueConfidence);
+
+                if (hasCurrentDirection)
+                {
+                    text = FixSpeakerAgreement(text, currentCueGender);
+                    targetGender = currentCueGender;
+                    confidence = currentCueConfidence;
+                    gatePassed = true;
+                }
+
+                var hardVoiceTurn = HardVoiceTurnResolver.Resolve(
+                    source,
+                    cueSpeakers,
+                    localCueGender,
+                    cue.Index);
 
                 if (hardVoiceTurn.IsResolved)
+                {
+                    reasonCode = hardVoiceTurn.ReasonCode;
+                    targetGender = hardVoiceTurn.TargetGender;
+                    confidence = hardVoiceTurn.Confidence;
+                    gatePassed = true;
                     text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
-            }
-            else if (hardVoiceTurn.IsResolved)
-            {
-                resolver = "hard_voice_turn_1000";
-                reasonCode = hardVoiceTurn.ReasonCode;
-                targetGender = hardVoiceTurn.TargetGender;
-                confidence = hardVoiceTurn.Confidence;
-                gatePassed = true;
-                text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
+                }
+                else
+                {
+                    var speakerSelfChanged = !string.Equals(text, originalText, StringComparison.Ordinal);
+                    reasonCode = speakerSelfChanged && hasCurrentDirection
+                        ? "current_cue_gender"
+                        : hardVoiceTurn.ReasonCode;
+                    gatePassed = hasCurrentDirection;
+                }
             }
             else
             {
+                if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+                    TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
+                {
+                    text = FixSpeakerAgreement(text, speakerGender);
+                }
+
                 var localTurn = LocalTurnGenderResolver.Resolve(
                     source,
                     cueSpeakers,
