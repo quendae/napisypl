@@ -151,9 +151,12 @@ public sealed partial class DeterministicGenderReviewService
         return SpeakerVoiceGender.Unknown;
     }
 
-    private static string FixFirstPersonPredicateAgreement(string text, SpeakerVoiceGender gender)
+    private static string FixFirstPersonPredicateAgreement(
+        string sourceText,
+        string text,
+        SpeakerVoiceGender gender)
     {
-        if (gender == SpeakerVoiceGender.Unknown)
+        if (gender == SpeakerVoiceGender.Unknown || EnglishQuotedFirstPersonRegex().IsMatch(sourceText))
             return text;
 
         var map = gender == SpeakerVoiceGender.Female

@@ -33,8 +33,22 @@ public sealed partial class DeterministicGenderReviewService
             ["poszedłem"] = "poszłam",
             ["wyszedłem"] = "wyszłam",
             ["przyszedłem"] = "przyszłam",
-            ["odszedłem"] = "odeszłam"
+            ["odszedłem"] = "odeszłam",
+            ["płynąłem"] = "płynęłam",
+            ["wziąłem"] = "wzięłam",
+            ["zacząłem"] = "zaczęłam",
+            ["jadłem"] = "jadłam",
+            ["szedłem"] = "szłam"
         };
+
+    private static readonly HashSet<string> SpeakerPastVerbStems = new(StringComparer.Ordinal)
+    {
+        "by", "bra", "chcia", "czyta", "da", "dosta", "działa", "gra", "jecha",
+        "kaza", "kocha", "kupi", "mia", "mówi", "myśla", "napisa", "obejrza",
+        "pamięta", "pocałowa", "pracowa", "pyta", "robi", "siedzia", "słysza", "sta",
+        "szuka", "uderzy", "umia", "widzia", "wiedzia", "wysyła", "zachorowa", "założy",
+        "znalaz", "zobaczy", "zosta", "zrobi"
+    };
 
     private static readonly IReadOnlyDictionary<string, string> AddresseeMaleToFemale =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -119,7 +133,7 @@ public sealed partial class DeterministicGenderReviewService
                 if (hasCurrentSelfGender)
                 {
                     text = FixSpeakerAgreement(sourceCue.Text, text, currentSelfGender);
-                    text = FixFirstPersonPredicateAgreement(text, currentSelfGender);
+                    text = FixFirstPersonPredicateAgreement(sourceCue.Text, text, currentSelfGender);
                     targetGender = currentSelfGender;
                     confidence = currentSelfConfidence;
                     gatePassed = true;
@@ -164,7 +178,15 @@ public sealed partial class DeterministicGenderReviewService
                     TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
                 {
                     text = FixSpeakerAgreement(sourceCue.Text, text, speakerGender);
-                    text = FixFirstPersonPredicateAgreement(text, speakerGender);
+                    text = FixFirstPersonPredicateAgreement(sourceCue.Text, text, speakerGender);
+                    if (!string.Equals(text, originalText, StringComparison.Ordinal))
+                    {
+                        resolver = "speaker_self";
+                        reasonCode = "current_speaker_gender";
+                        targetGender = speakerGender;
+                        confidence = speakerGenderEvidence[currentSpeaker!].Confidence;
+                        gatePassed = true;
+                    }
                 }
 
                 var localTurn = LocalTurnGenderResolver.Resolve(
@@ -183,7 +205,8 @@ public sealed partial class DeterministicGenderReviewService
                 }
                 else
                 {
-                    reasonCode = localTurn.ReasonCode;
+                    if (string.Equals(text, originalText, StringComparison.Ordinal))
+                        reasonCode = localTurn.ReasonCode;
                 }
 
                 if (localTurn.IsResolved && localTurn.Confidence >= MinimumAddresseeConfidence)
@@ -264,6 +287,9 @@ public sealed partial class DeterministicGenderReviewService
         string text,
         SpeakerVoiceGender gender)
     {
+        if (sourceText is not null && EnglishQuotedFirstPersonRegex().IsMatch(sourceText))
+            return text;
+
         // Polish present-tense forms such as "wysyłam" can look exactly like a
         // feminine past-tense suffix to a purely string-based rewriter. When the
         // English source is explicitly present progressive, do not apply the
@@ -271,6 +297,9 @@ public sealed partial class DeterministicGenderReviewService
         // mappings remain available.
         var protectGenericPastSuffix = sourceText is not null &&
             EnglishFirstPersonPresentProgressiveRegex().IsMatch(sourceText);
+        var maximumReplacements = sourceText is null
+            ? int.MaxValue
+            : EnglishFirstPersonPronounRegex().Matches(sourceText).Count;
 
         return gender switch
         {
@@ -278,12 +307,14 @@ public sealed partial class DeterministicGenderReviewService
                 text,
                 SpeakerMaleToFemale,
                 [("łbym", "łabym"), ("łem", "łam")],
-                protectGenericPastSuffix),
+                protectGenericPastSuffix,
+                maximumReplacements),
             SpeakerVoiceGender.Male => FixWords(
                 text,
                 SpeakerFemaleToMale,
                 [("łabym", "łbym"), ("łam", "łem")],
-                protectGenericPastSuffix),
+                protectGenericPastSuffix,
+                maximumReplacements),
             _ => text
         };
     }
@@ -394,14 +425,24 @@ public sealed partial class DeterministicGenderReviewService
         string text,
         IReadOnlyDictionary<string, string> irregular,
         IReadOnlyList<(string From, string To)> suffixes,
-        bool protectGenericPastSuffix = false) =>
+        bool protectGenericPastSuffix = false,
+        int maximumReplacements = int.MaxValue)
+    {
+        var replacements = 0;
+        return
         WordRegex().Replace(text, match =>
         {
             var original = match.Value;
             var lower = original.ToLowerInvariant();
 
+            if (replacements >= maximumReplacements)
+                return original;
+
             if (irregular.TryGetValue(lower, out var irregularReplacement))
+            {
+                replacements++;
                 return MatchCasing(original, irregularReplacement);
+            }
 
             foreach (var (from, to) in suffixes)
             {
@@ -410,12 +451,19 @@ public sealed partial class DeterministicGenderReviewService
 
                 if (!lower.EndsWith(from, StringComparison.Ordinal) || lower.Length <= from.Length)
                     continue;
+                if ((from == "łam" || from == "łem") && !IsKnownFirstPersonPastVerb(lower, from))
+                    continue;
                 var replacement = lower[..^from.Length] + to;
+                replacements++;
                 return MatchCasing(original, replacement);
             }
 
             return original;
         });
+    }
+
+    private static bool IsKnownFirstPersonPastVerb(string word, string suffix) =>
+        SpeakerPastVerbStems.Contains(word[..^suffix.Length]);
 
     private static string? FindGenderedCandidate(string text)
     {
@@ -469,4 +517,11 @@ public sealed partial class DeterministicGenderReviewService
 
     [GeneratedRegex(@"\bI\s*(?:['’]m|am)\b[^.!?]{0,100}\b\p{L}+ing\b", RegexOptions.IgnoreCase)]
     private static partial Regex EnglishFirstPersonPresentProgressiveRegex();
+
+    [GeneratedRegex(@"\bI\b", RegexOptions.IgnoreCase)]
+    private static partial Regex EnglishFirstPersonPronounRegex();
+
+    [GeneratedRegex("(?:[\"“][^\"”]{0,120}\\bI\\b[^\"”]{0,120}[\"”]|(?:^|[\\s,:;])'[^']{0,120}\\bI\\b[^']{0,120}')", RegexOptions.IgnoreCase)]
+    private static partial Regex EnglishQuotedFirstPersonRegex();
+
 }

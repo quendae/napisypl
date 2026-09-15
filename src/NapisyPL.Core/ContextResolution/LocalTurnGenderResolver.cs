@@ -146,7 +146,11 @@ public static class LocalTurnGenderResolver
             out var currentGender,
             out var currentConfidence);
 
-        if (hasCurrentGender && currentGender != nextGender)
+        if (hasCurrentGender &&
+            currentGender != nextGender &&
+            differentLocalSpeakers &&
+            current.Text.Contains('?') &&
+            LooksLikeExplicitAnswer(next.Text))
         {
             return new LocalTurnGenderResolution(
                 nextGender,
@@ -164,7 +168,9 @@ public static class LocalTurnGenderResolver
         // strong turn-taking evidence. Per-cue audio remains useful, but when it
         // agrees with stronger speaker-level evidence we keep the stronger
         // confidence instead of letting a noisy short cue downgrade the turn.
-        if (gap <= ImmediateQuestionGap && current.Text.Contains('?'))
+        if ((!hasCurrentGender || currentGender == nextGender) &&
+            gap <= ImmediateQuestionGap &&
+            current.Text.Contains('?'))
         {
             var confidence = hasCurrentGender
                 ? Math.Min(currentConfidence, nextConfidence)

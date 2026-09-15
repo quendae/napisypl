@@ -44,6 +44,59 @@ public sealed class SpeakerCueMapperTests
     }
 
     [Fact]
+    public void Map_DoesNotAssignSpeakerForTraceOverlap()
+    {
+        var cues = new[]
+        {
+            new SubtitleCue(10, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(12), "Caption")
+        };
+        var speakers = new[]
+        {
+            new SpeakerSegment(11.99, 13, 0)
+        };
+
+        var mapped = SpeakerCueMapper.Map(cues, speakers);
+
+        Assert.Null(mapped[10]);
+    }
+
+    [Fact]
+    public void Map_DoesNotAssignSpeakerWhenLargestOverlapIsTied()
+    {
+        var cues = new[]
+        {
+            new SubtitleCue(10, TimeSpan.Zero, TimeSpan.FromSeconds(2), "Caption")
+        };
+        var speakers = new[]
+        {
+            new SpeakerSegment(0, 1, 0),
+            new SpeakerSegment(1, 2, 1)
+        };
+
+        var mapped = SpeakerCueMapper.Map(cues, speakers);
+
+        Assert.Null(mapped[10]);
+    }
+
+    [Fact]
+    public void Map_DoesNotAssignSpeakerWhenOverlapsAreNearlyTied()
+    {
+        var cues = new[]
+        {
+            new SubtitleCue(10, TimeSpan.Zero, TimeSpan.FromSeconds(2.1), "Caption")
+        };
+        var speakers = new[]
+        {
+            new SpeakerSegment(0, 1.05, 0),
+            new SpeakerSegment(1.05, 2.0, 1)
+        };
+
+        var mapped = SpeakerCueMapper.Map(cues, speakers);
+
+        Assert.Null(mapped[10]);
+    }
+
+    [Fact]
     public void Map_UsesStableZeroPaddedSpeakerIds()
     {
         var cues = new[]

@@ -107,6 +107,84 @@ public sealed class HardVoiceTurnResolverTests
     }
 
     [Fact]
+    public void Resolve_WhenNextCueFollowsLongGap_DoesNotResolveAcrossSceneBoundary()
+    {
+        var cues = new[]
+        {
+            Cue(1, 0, 1, "Did you do it?"),
+            Cue(2, 31, 32, "Yes.")
+        };
+        var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.97),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.92)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(
+            cues,
+            new Dictionary<int, string?>(),
+            cueGender,
+            1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
+    public void Resolve_WhenCuesBelongToSameSpeaker_DoesNotResolve()
+    {
+        var cues = new[] { Cue(1, 0, 1, "Did you do it?"), Cue(2, 1.1, 2, "Yes.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_00" };
+        var genders = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.97),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.92)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(cues, speakers, genders, 1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
+    public void Resolve_WhenCuesOverlapTooMuch_DoesNotResolve()
+    {
+        var cues = new[] { Cue(1, 0, 2, "Did you do it?"), Cue(2, 1, 3, "Yes.") };
+        var genders = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.97),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.92)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(cues, new Dictionary<int, string?>(), genders, 1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
+    public void Resolve_WhenImmediateThirdSpeakerAppears_DoesNotResolve()
+    {
+        var cues = new[]
+        {
+            Cue(1, 0, 1, "Did you do it?"),
+            Cue(2, 1.1, 2, "Wait."),
+            Cue(3, 2.1, 3, "Yes.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_00", [2] = "SPEAKER_01", [3] = "SPEAKER_02"
+        };
+        var genders = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.97),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.92)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(cues, speakers, genders, 1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
     public void Review_MaleThenFemaleAcceptedPerCue_RewritesFemaleAddressee()
     {
         var source = new[]

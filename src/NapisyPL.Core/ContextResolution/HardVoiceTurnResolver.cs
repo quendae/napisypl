@@ -13,6 +13,9 @@ public sealed record HardVoiceTurnResolution(
 
 public static class HardVoiceTurnResolver
 {
+    private static readonly TimeSpan MaximumTurnGap = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan MaximumOverlap = TimeSpan.FromMilliseconds(350);
+
     public static HardVoiceTurnResolution Resolve(
         IReadOnlyList<SubtitleCue> cues,
         IReadOnlyDictionary<int, string?> cueSpeakers,
@@ -39,8 +42,25 @@ public static class HardVoiceTurnResolver
             return Unresolved("no_next_cue");
 
         var nextCue = cues[position + 1];
+        var currentCue = cues[position];
+        var gap = nextCue.Start >= currentCue.End ? nextCue.Start - currentCue.End : TimeSpan.Zero;
+        var overlap = currentCue.End > nextCue.Start ? currentCue.End - nextCue.Start : TimeSpan.Zero;
+        if (gap > MaximumTurnGap)
+            return Unresolved("next_cue_too_far");
+        if (overlap > MaximumOverlap)
+            return Unresolved("next_cue_overlap");
+
         cueSpeakers.TryGetValue(currentCueId, out var currentSpeaker);
         cueSpeakers.TryGetValue(nextCue.Index, out var nextSpeaker);
+        if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+            !string.IsNullOrWhiteSpace(nextSpeaker) &&
+            string.Equals(currentSpeaker, nextSpeaker, StringComparison.Ordinal))
+        {
+            return Unresolved("same_speaker_turn", currentSpeaker, nextSpeaker);
+        }
+
+        if (HasImmediateThirdSpeaker(cues, cueSpeakers, position, currentSpeaker, nextSpeaker))
+            return Unresolved("third_speaker_ambiguity", currentSpeaker, nextSpeaker);
 
         if (!TryGetForcedGender(cueGenderEvidence, currentCueId, out var currentGender, out var currentConfidence))
         {
@@ -117,6 +137,30 @@ public static class HardVoiceTurnResolver
         }
 
         return false;
+    }
+
+    private static bool HasImmediateThirdSpeaker(
+        IReadOnlyList<SubtitleCue> cues,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        int currentPosition,
+        string? currentSpeaker,
+        string? nextSpeaker)
+    {
+        if (string.IsNullOrWhiteSpace(currentSpeaker) ||
+            string.IsNullOrWhiteSpace(nextSpeaker) ||
+            currentPosition + 2 >= cues.Count)
+        {
+            return false;
+        }
+
+        var next = cues[currentPosition + 1];
+        var after = cues[currentPosition + 2];
+        var gap = after.Start >= next.End ? after.Start - next.End : TimeSpan.Zero;
+        return gap <= MaximumTurnGap &&
+               cueSpeakers.TryGetValue(after.Index, out var afterSpeaker) &&
+               !string.IsNullOrWhiteSpace(afterSpeaker) &&
+               !string.Equals(afterSpeaker, currentSpeaker, StringComparison.Ordinal) &&
+               !string.Equals(afterSpeaker, nextSpeaker, StringComparison.Ordinal);
     }
 
     private static HardVoiceTurnResolution Unresolved(

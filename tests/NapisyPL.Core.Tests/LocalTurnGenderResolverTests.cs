@@ -126,6 +126,53 @@ public sealed class LocalTurnGenderResolverTests
     }
 
     [Fact]
+    public void Resolve_WhenOppositeGenderNextCueHasSameLocalSpeaker_DoesNotTreatItAsAddressee()
+    {
+        var cues = new[]
+        {
+            Cue(1, 0.0, 1.0, "Did you do it?"),
+            Cue(2, 1.2, 2.0, "Yes.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_00",
+            [2] = "SPEAKER_00"
+        };
+        var cueGender = Evidence(
+            (1, SpeakerVoiceGender.Male),
+            (2, SpeakerVoiceGender.Female));
+
+        var result = LocalTurnGenderResolver.Resolve(cues, speakers, cueGender, 1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
+    public void Resolve_WhenOppositeGenderNextCueIsFollowedByThirdSpeaker_DoesNotTreatItAsAddressee()
+    {
+        var cues = new[]
+        {
+            Cue(1, 0.0, 1.0, "Did you do it?"),
+            Cue(2, 1.2, 2.0, "Wait."),
+            Cue(3, 2.1, 3.0, "Yes, I did.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_00",
+            [2] = "SPEAKER_01",
+            [3] = "SPEAKER_02"
+        };
+        var cueGender = Evidence(
+            (1, SpeakerVoiceGender.Male),
+            (2, SpeakerVoiceGender.Female),
+            (3, SpeakerVoiceGender.Male));
+
+        var result = LocalTurnGenderResolver.Resolve(cues, speakers, cueGender, 1);
+
+        Assert.False(result.IsResolved);
+    }
+
+    [Fact]
     public void Review_UsesLocalTurnGenderToFixMarriedExampleWhenGlobalSpeakerGenderIsUnavailable()
     {
         var source = new[]
@@ -234,6 +281,150 @@ public sealed class LocalTurnGenderResolverTests
             cueGender);
 
         Assert.Equal("Zatrzymaj się. Ożeniłeś się?", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_DoesNotRewritePresentTenseDzialamAsPastTense()
+    {
+        var source = new[] { Cue(1, 0, 1, "I work.") };
+        var translated = new[] { Cue(1, 0, 1, "Działam.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender);
+
+        Assert.Equal("Działam.", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_DoesNotRewriteFirstPersonInsideAnotherSpeakersQuote()
+    {
+        var source = new[] { Cue(1, 0, 1, "She said, 'I went home.'") };
+        var translated = new[] { Cue(1, 0, 1, "Powiedziała: „Poszłam do domu.”") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender);
+
+        Assert.Equal("Powiedziała: „Poszłam do domu.”", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_PreservesPresentFormInSentenceThatAlsoContainsPastTense()
+    {
+        var source = new[] { Cue(1, 0, 1, "I worked yesterday and today I operate here.") };
+        var translated = new[] { Cue(1, 0, 1, "Pracowałam wczoraj, a dziś działam tutaj.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender);
+
+        Assert.Equal("Pracowałem wczoraj, a dziś działam tutaj.", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_DoesNotRewriteFirstPersonPredicateInsideAnotherSpeakersQuote()
+    {
+        var source = new[] { Cue(1, 0, 1, "She said, \"I am tired.\"") };
+        var translated = new[] { Cue(1, 0, 1, "Powiedziała: „Jestem zmęczona.”") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender);
+
+        Assert.Equal("Powiedziała: „Jestem zmęczona.”", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_RewritesPastFormForIrregularEnglishVerb()
+    {
+        var source = new[] { Cue(1, 0, 1, "I saw him.") };
+        var translated = new[] { Cue(1, 0, 1, "Widziałem go.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(source, translated, speakers, speakerGender);
+
+        Assert.Equal("Widziałam go.", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_PreservesPresentWolamInMixedTenseSentence()
+    {
+        var source = new[] { Cue(1, 0, 1, "I worked yesterday and now I call him.") };
+        var translated = new[] { Cue(1, 0, 1, "Pracowałam wczoraj, a teraz go wołam.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(source, translated, speakers, speakerGender);
+
+        Assert.Equal("Pracowałem wczoraj, a teraz go wołam.", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_DoesNotRewriteInstrumentalNounThatSharesPastSuffix()
+    {
+        var source = new[] { Cue(1, 0, 1, "I hit him with a table.") };
+        var translated = new[] { Cue(1, 0, 1, "Uderzyłem go stołem.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(source, translated, speakers, speakerGender);
+
+        Assert.Equal("Uderzyłam go stołem.", result[0].Text);
+    }
+
+    [Fact]
+    public void Review_DoesNotRewriteInstrumentalNounBeforePastVerb()
+    {
+        var source = new[] { Cue(1, 0, 1, "I sailed through the canal.") };
+        var translated = new[] { Cue(1, 0, 1, "Kanałem płynąłem.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00" };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_00"] = new(SpeakerVoiceGender.Female, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(source, translated, speakers, speakerGender);
+
+        Assert.Equal("Kanałem płynęłam.", result[0].Text);
     }
 
     [Theory]
