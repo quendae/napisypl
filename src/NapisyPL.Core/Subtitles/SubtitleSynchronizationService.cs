@@ -46,8 +46,7 @@ public sealed class SubtitleSynchronizationService
             .Select(scale => Evaluate(referenceStarts, referenceEnds, candidate, scale))
             .ToArray();
         var best = evaluations
-            .OrderByDescending(evaluation => evaluation.CompleteMatchedCueCount)
-            .ThenByDescending(evaluation => evaluation.Coverage)
+            .OrderByDescending(evaluation => evaluation.Coverage)
             .ThenBy(evaluation => evaluation.P90ResidualTicks)
             .ThenBy(evaluation => Math.Abs(evaluation.Transform.Scale - 1))
             .First();
@@ -105,16 +104,9 @@ public sealed class SubtitleSynchronizationService
             : initial;
         matches = Match(referenceStarts, referenceEnds, candidate, transform);
 
-        var firstMatch = Array.FindIndex(matches.CompleteCueMatches, match => match);
-        var lastMatch = Array.FindLastIndex(matches.CompleteCueMatches, match => match);
-        if (firstMatch < 0)
+        if (matches.CompleteMatchedCueCount == 0)
             return new Evaluation(transform, 0, 0, long.MaxValue, long.MaxValue, false);
 
-        var relevant = matches.CompleteCueMatches[firstMatch..(lastMatch + 1)];
-        var candidateCoverage = matches.CompleteMatchedCueCount / (double)relevant.Length;
-        var referenceCoverage = Math.Min(
-            CalculateReferenceCoverage(matches.Starts),
-            CalculateReferenceCoverage(matches.Ends));
         var residuals = matches.Events
             .Where(match => matches.CompleteCueMatches[match.CuePosition])
             .Select(match => match.ResidualTicks)
@@ -131,7 +123,7 @@ public sealed class SubtitleSynchronizationService
         return new Evaluation(
             transform,
             matches.CompleteMatchedCueCount,
-            Math.Min(candidateCoverage, referenceCoverage),
+            matches.CompleteMatchedCueCount / (double)Math.Max(referenceStarts.Length, candidate.Count),
             median,
             p90,
             transformedValid);
@@ -151,7 +143,13 @@ public sealed class SubtitleSynchronizationService
             })
             .Select(value => (double)value)
             .ToArray();
-        return TimeSpan.FromTicks((long)Math.Round(Median(offsets)));
+        var densestCluster = offsets
+            .Select(offset => offsets.Where(candidateOffset =>
+                Math.Abs(candidateOffset - offset) <= InitialResidualWindow.Ticks).ToArray())
+            .OrderByDescending(cluster => cluster.Length)
+            .ThenBy(cluster => Median(cluster.Select(value => Math.Abs(value - Median(cluster))).ToArray()))
+            .First();
+        return TimeSpan.FromTicks((long)Math.Round(Median(densestCluster)));
     }
 
     private static MatchSet Match(
@@ -234,15 +232,6 @@ public sealed class SubtitleSynchronizationService
 
     private static long ScaleTicks(long ticks, double scale) => (long)Math.Round(ticks * scale);
 
-    private static double CalculateReferenceCoverage(IReadOnlyList<BoundaryMatch> matches)
-    {
-        if (matches.Count == 0)
-            return 0;
-        var first = matches.Min(match => match.ReferencePosition);
-        var last = matches.Max(match => match.ReferencePosition);
-        return matches.Count / (double)(last - first + 1);
-    }
-
     private static long TransformTicks(long ticks, SubtitleTimeTransform transform) =>
         (long)Math.Round(ticks * transform.Scale + transform.Offset.Ticks);
 
@@ -268,7 +257,8 @@ public sealed class SubtitleSynchronizationService
     }
 
     private static bool AreValid(IReadOnlyList<SubtitleCue> cues, bool requireOrdered) =>
-        cues.Count > 0 && cues.All(cue => cue.Start >= TimeSpan.Zero && cue.End > cue.Start) &&
+        cues.Count > 0 && cues.All(cue => cue.Start >= TimeSpan.Zero && cue.End > cue.Start && !string.IsNullOrWhiteSpace(cue.Text)) &&
+        cues.Select(cue => cue.Index).Distinct().Count() == cues.Count &&
         (!requireOrdered || cues.Zip(cues.Skip(1), (previous, current) => previous.Start <= current.Start).All(ordered => ordered));
 
     private static SubtitleTimingAnalysis Rejected(SubtitleTimeTransform? transform = null) =>

@@ -97,6 +97,22 @@ public sealed class SubtitleSynchronizationServiceTests
     }
 
     [Fact]
+    public void Analyze_RejectsFourCueFragmentOfLongReferenceTimeline()
+    {
+        var reference = Timeline(10, 10, 100);
+        var candidate = reference
+            .Skip(48)
+            .Take(4)
+            .Select(cue => Cue(cue.Index + 500, cue.Start.TotalSeconds, cue.End.TotalSeconds))
+            .ToArray();
+
+        var analysis = new SubtitleSynchronizationService().Analyze(reference, candidate);
+
+        Assert.Equal(SubtitleSyncDecision.Rejected, analysis.Decision);
+        Assert.InRange(analysis.MatchedCueCoverage, 0, 0.05);
+    }
+
+    [Fact]
     public void Apply_ClampsNegativeStartsAndRenumbersCuesInTimelineOrder()
     {
         var candidate = new[]
@@ -128,7 +144,7 @@ public sealed class SubtitleSynchronizationServiceTests
     }
 
     [Fact]
-    public void Analyze_IgnoresTrailingProviderCredits()
+    public void Analyze_ToleratesTwoTrailingProviderCreditsWithoutChangingTransform()
     {
         var reference = Timeline(10, 10, 10);
         var dialogue = reference
@@ -145,8 +161,44 @@ public sealed class SubtitleSynchronizationServiceTests
         var analysis = service.Analyze(reference, withCredits);
 
         Assert.Equal(baseline.Decision, analysis.Decision);
-        Assert.Equal(baseline.MatchedCueCoverage, analysis.MatchedCueCoverage, 3);
+        Assert.InRange(analysis.MatchedCueCoverage, 0.75, baseline.MatchedCueCoverage);
+        Assert.InRange(analysis.Transform.Offset.TotalMilliseconds, -101, -99);
         Assert.Equal(baseline.P90Residual, analysis.P90Residual);
+    }
+
+    [Fact]
+    public void Analyze_PrefersBroadDialogueFitOverTwelveTrailingCredits()
+    {
+        var reference = Timeline(10, 10, 10);
+        var dialogue = reference
+            .Select(cue => Cue(cue.Index + 100, cue.Start.TotalSeconds + 0.1, cue.End.TotalSeconds + 0.1));
+        var credits = Enumerable.Range(1, 12)
+            .Select(index => Cue(500 + index, 200 + index * 5, 201 + index * 5));
+        var candidate = dialogue.Concat(credits).ToArray();
+
+        var analysis = new SubtitleSynchronizationService().Analyze(reference, candidate);
+
+        Assert.Equal(SubtitleSyncDecision.Rejected, analysis.Decision);
+        Assert.InRange(analysis.Transform.Offset.TotalMilliseconds, -101, -99);
+        Assert.InRange(analysis.MatchedCueCoverage, 0.45, 0.46);
+    }
+
+    [Fact]
+    public void Analyze_RejectsBlankTextAndDuplicateIndexes()
+    {
+        var reference = Timeline(10, 10, 10);
+        var blankText = reference
+            .Select((cue, position) => position == 4 ? cue with { Text = " " } : cue)
+            .ToArray();
+        var duplicateIndex = reference
+            .Select((cue, position) => position == 4 ? cue with { Index = 4 } : cue)
+            .ToArray();
+        var service = new SubtitleSynchronizationService();
+
+        Assert.Equal(SubtitleSyncDecision.Rejected, service.Analyze(reference, blankText).Decision);
+        Assert.Equal(SubtitleSyncDecision.Rejected, service.Analyze(reference, duplicateIndex).Decision);
+        Assert.Throws<ArgumentException>(() => service.Apply(blankText, SubtitleTimeTransform.Identity));
+        Assert.Throws<ArgumentException>(() => service.Apply(duplicateIndex, SubtitleTimeTransform.Identity));
     }
 
     private static SubtitleCue Cue(int index, double startSeconds, double endSeconds) =>
