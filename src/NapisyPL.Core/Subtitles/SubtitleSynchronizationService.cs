@@ -139,21 +139,54 @@ public sealed class SubtitleSynchronizationService
         IReadOnlyList<SubtitleCue> candidate,
         double scale)
     {
-        var offsets = candidate
-            .SelectMany(cue => new[]
+        var offsets = new double[candidate.Count * 2];
+        for (var position = 0; position < candidate.Count; position++)
+        {
+            var cue = candidate[position];
+            var start = ScaleTicks(cue.Start.Ticks, scale);
+            var end = ScaleTicks(cue.End.Ticks, scale);
+            offsets[position * 2] = Nearest(referenceStarts, start) - start;
+            offsets[position * 2 + 1] = Nearest(referenceEnds, end) - end;
+        }
+
+        Array.Sort(offsets);
+
+        var windowTicks = (double)InitialResidualWindow.Ticks;
+        var clusterStart = 0;
+        var clusterEnd = 0;
+        var bestStart = 0;
+        var bestEnd = 0;
+        var bestMedianDistance = double.PositiveInfinity;
+        for (var center = 0; center < offsets.Length; center++)
+        {
+            while (offsets[center] - offsets[clusterStart] > windowTicks)
+                clusterStart++;
+            while (clusterEnd < offsets.Length && offsets[clusterEnd] - offsets[center] <= windowTicks)
+                clusterEnd++;
+
+            var count = clusterEnd - clusterStart;
+            var bestCount = bestEnd - bestStart;
+            if (count < bestCount)
+                continue;
+
+            var medianDistance = Math.Abs(Median(offsets, clusterStart, clusterEnd));
+            if (count > bestCount || medianDistance < bestMedianDistance)
             {
-                Nearest(referenceStarts, ScaleTicks(cue.Start.Ticks, scale)) - ScaleTicks(cue.Start.Ticks, scale),
-                Nearest(referenceEnds, ScaleTicks(cue.End.Ticks, scale)) - ScaleTicks(cue.End.Ticks, scale)
-            })
-            .Select(value => (double)value)
-            .ToArray();
-        var densestCluster = offsets
-            .Select(offset => offsets.Where(candidateOffset =>
-                Math.Abs(candidateOffset - offset) <= InitialResidualWindow.Ticks).ToArray())
-            .OrderByDescending(cluster => cluster.Length)
-            .ThenBy(cluster => Median(cluster.Select(value => Math.Abs(value - Median(cluster))).ToArray()))
-            .First();
-        return TimeSpan.FromTicks((long)Math.Round(Median(densestCluster)));
+                bestStart = clusterStart;
+                bestEnd = clusterEnd;
+                bestMedianDistance = medianDistance;
+            }
+        }
+
+        return TimeSpan.FromTicks((long)Math.Round(Median(offsets, bestStart, bestEnd)));
+    }
+
+    private static double Median(double[] sortedValues, int start, int end)
+    {
+        var middle = start + (end - start) / 2;
+        return (end - start) % 2 == 1
+            ? sortedValues[middle]
+            : (sortedValues[middle - 1] + sortedValues[middle]) / 2;
     }
 
     private static MatchSet Match(
