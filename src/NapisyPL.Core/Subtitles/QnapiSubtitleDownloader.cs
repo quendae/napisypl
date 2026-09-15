@@ -11,9 +11,10 @@ public delegate Task<QnapiProcessResult> QnapiProcessInvoker(
     ProcessStartInfo startInfo,
     CancellationToken cancellationToken);
 
-public sealed class QnapiSubtitleDownloader : ISubtitleDownloader
+public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveSubtitleDownloader
 {
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
+    private static readonly TimeSpan InteractiveProcessTimeout = TimeSpan.FromMinutes(5);
     private readonly IQnapiRuntime _runtime;
     private readonly SrtParser _parser;
     private readonly QnapiProcessInvoker _processInvoker;
@@ -33,11 +34,26 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader
             throw new ArgumentOutOfRangeException(nameof(processTimeout));
     }
 
-    public async Task<DownloadedSubtitles?> DownloadAsync(
+    public Task<DownloadedSubtitles?> DownloadAsync(
         string videoPath,
         SubtitleLanguage language,
         IProgress<string>? status = null,
         CancellationToken cancellationToken = default)
+        => DownloadCoreAsync(videoPath, language, interactive: false, status, cancellationToken);
+
+    public Task<DownloadedSubtitles?> DownloadInteractiveAsync(
+        string videoPath,
+        SubtitleLanguage language,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default) =>
+        DownloadCoreAsync(videoPath, language, interactive: true, status, cancellationToken);
+
+    private async Task<DownloadedSubtitles?> DownloadCoreAsync(
+        string videoPath,
+        SubtitleLanguage language,
+        bool interactive,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
         var absoluteVideoPath = Path.GetFullPath(videoPath);
@@ -48,28 +64,17 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader
         var extension = "npl" + Guid.NewGuid().ToString("N");
         var outputPath = Path.ChangeExtension(absoluteVideoPath, extension);
         var languageCode = language == SubtitleLanguage.Polish ? "pl" : "en";
+        var startInfo = CreateStartInfo(executable, absoluteVideoPath, languageCode, extension, interactive);
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = executable,
-            WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        foreach (var argument in new[]
-                 {
-                     "-q", "-d", "-l", languageCode, "-lb", languageCode,
-                     "-f", "SRT", "-e", extension, absoluteVideoPath
-                 })
-            startInfo.ArgumentList.Add(argument);
+        status?.Report(interactive
+            ? "Otwieram QNapi — wybierz polskie napisy…"
+            : language == SubtitleLanguage.Polish
+                ? "Szukam polskich napisów w QNapi…"
+                : "Szukam angielskich napisów w QNapi…");
 
-        status?.Report(language == SubtitleLanguage.Polish
-            ? "Szukam polskich napisów w QNapi…"
-            : "Szukam angielskich napisów w QNapi…");
-
-        using var timeout = new CancellationTokenSource(_processTimeout);
+        using var timeout = new CancellationTokenSource(interactive
+            ? _processTimeout > InteractiveProcessTimeout ? _processTimeout : InteractiveProcessTimeout
+            : _processTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {
@@ -116,6 +121,33 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader
                 // This is a unique owned sidecar. Failure to clean it must not hide the real result.
             }
         }
+    }
+
+    private static ProcessStartInfo CreateStartInfo(
+        string executable,
+        string absoluteVideoPath,
+        string languageCode,
+        string extension,
+        bool interactive)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = !interactive,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        if (!interactive)
+            startInfo.ArgumentList.Add("-q");
+        foreach (var argument in new[]
+                 {
+                     "-d", "-l", languageCode, "-lb", languageCode,
+                     "-f", "SRT", "-e", extension, absoluteVideoPath
+                 })
+            startInfo.ArgumentList.Add(argument);
+        return startInfo;
     }
 
     private static async Task<QnapiProcessResult> RunProcessAsync(

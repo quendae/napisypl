@@ -8,6 +8,129 @@ namespace NapisyPL.Core.Tests;
 public sealed class QnapiSubtitleDownloaderTests
 {
     [Fact]
+    public async Task DownloadInteractiveAsync_ShowsQnapiAndParsesOnlyItsOwnedSidecar()
+    {
+        using var fixture = new QnapiFixture();
+        ProcessStartInfo? observed = null;
+        string? output = null;
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            async (startInfo, cancellationToken) =>
+            {
+                observed = startInfo;
+                output = Path.ChangeExtension(fixture.VideoPath, ArgumentValue(startInfo.ArgumentList, "-e"));
+                await File.WriteAllTextAsync(output,
+                    "1\n00:00:01,000 --> 00:00:02,500\nWybrany napis.\n",
+                    new UTF8Encoding(false), cancellationToken);
+                return new QnapiProcessResult(0, string.Empty, string.Empty);
+            });
+
+        var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish);
+
+        Assert.NotNull(result);
+        Assert.Equal(SubtitleLanguage.Polish, result.Language);
+        Assert.Equal("Wybrany napis.", result.Cues.Single().Text);
+        Assert.NotNull(observed);
+        Assert.DoesNotContain("-q", observed.ArgumentList);
+        Assert.False(observed.CreateNoWindow);
+        Assert.Equal("pl", ArgumentValue(observed.ArgumentList, "-l"));
+        Assert.Equal("pl", ArgumentValue(observed.ArgumentList, "-lb"));
+        Assert.NotNull(output);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public async Task DownloadInteractiveAsync_DeletesSidecarWhenCancelled()
+    {
+        using var fixture = new QnapiFixture();
+        string? output = null;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            async (startInfo, cancellationToken) =>
+            {
+                output = Path.ChangeExtension(fixture.VideoPath, ArgumentValue(startInfo.ArgumentList, "-e"));
+                await File.WriteAllTextAsync(output, "1\n00:00:01,000 --> 00:00:02,000\nNapis.\n", cancellationToken);
+                entered.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return new QnapiProcessResult(0, string.Empty, string.Empty);
+            });
+        using var cancellation = new CancellationTokenSource();
+        var operation = ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish, cancellationToken: cancellation.Token);
+        await entered.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+
+        Assert.NotNull(output);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public async Task DownloadInteractiveAsync_DeletesMalformedSidecar()
+    {
+        using var fixture = new QnapiFixture();
+        string? output = null;
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            async (startInfo, cancellationToken) =>
+            {
+                output = Path.ChangeExtension(fixture.VideoPath, ArgumentValue(startInfo.ArgumentList, "-e"));
+                await File.WriteAllTextAsync(output, "not an srt", cancellationToken);
+                return new QnapiProcessResult(0, string.Empty, string.Empty);
+            });
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+                fixture.VideoPath, SubtitleLanguage.Polish));
+
+        Assert.NotNull(output);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public async Task DownloadInteractiveAsync_ReturnsNullWhenNoSelectionCreatesSidecar()
+    {
+        using var fixture = new QnapiFixture();
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            (_, _) => Task.FromResult(new QnapiProcessResult(0, string.Empty, string.Empty)));
+
+        var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task DownloadInteractiveAsync_UsesLongerTimeoutThanAutomaticSearch()
+    {
+        using var fixture = new QnapiFixture();
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            async (startInfo, cancellationToken) =>
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(30), cancellationToken);
+                var output = Path.ChangeExtension(fixture.VideoPath, ArgumentValue(startInfo.ArgumentList, "-e"));
+                await File.WriteAllTextAsync(output, "1\n00:00:01,000 --> 00:00:02,000\nNapis.\n", cancellationToken);
+                return new QnapiProcessResult(0, string.Empty, string.Empty);
+            },
+            TimeSpan.FromMilliseconds(1));
+
+        var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
     public async Task DownloadAsync_UsesIsolatedSameLanguageArgumentsAndParsesSrt()
     {
         using var fixture = new QnapiFixture();

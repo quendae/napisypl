@@ -52,7 +52,7 @@
             <StackPanel Spacing="8">
               <CheckBox x:Name="SearchSubtitlesCheckBox" Content="Najpierw szukaj polskich napisów (QNapi)"
                         IsChecked="True" IsCheckedChanged="OnSearchSubtitlesChanged" FontWeight="SemiBold" />
-              <TextBlock Text="Dla filmów: pobierz PL → jeśli brak, pobierz EN i przetłumacz. Bez wyniku użyj wybranej ścieżki z filmu. Istniejący plik .pl.srt zostanie zachowany."
+              <TextBlock Text="Dla filmu: pobierz PL i porównaj czasy z osadzoną angielską ścieżką. Bezpieczne korekty są automatyczne; potem możesz wybrać QNapi lub lokalny SRT, a tłumaczenie EN jest ostatnią opcją. Istniejący plik .pl.srt zostanie zachowany."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
               <TextBlock Text="Wyszukiwanie wymaga internetu. Przy pierwszym użyciu pobieramy QNapi (~18 MB). Tłumaczenie lokalnym modelem nadal działa offline po wyłączeniu wyszukiwania."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />

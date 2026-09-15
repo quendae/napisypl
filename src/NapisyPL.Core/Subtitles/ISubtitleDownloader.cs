@@ -17,3 +17,13 @@ public interface ISubtitleDownloader
         IProgress<string>? status = null,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>Opens a provider-owned selector for a single video and returns its validated subtitle result.</summary>
+public interface IInteractiveSubtitleDownloader
+{
+    Task<DownloadedSubtitles?> DownloadInteractiveAsync(
+        string videoPath,
+        SubtitleLanguage language,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default);
+}

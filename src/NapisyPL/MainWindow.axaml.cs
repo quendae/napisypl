@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly MediaProbeService _mediaProbe;
     private readonly TranslationPipeline _pipeline;
     private readonly SubtitleAcquisitionPipeline _subtitlePipeline;
+    private readonly ISubtitleFallbackInteraction _subtitleFallbackInteraction;
     private readonly FolderBatchService _folderBatch;
     private readonly SettingsStore _settingsStore = new();
     private readonly DispatcherTimer _elapsedTimer;
@@ -59,7 +60,10 @@ public partial class MainWindow : Window
         var coordinator = new TranslationCoordinator();
         _pipeline = new TranslationPipeline(parser, writer, extraction, coordinator);
         var qnapi = new QnapiSubtitleDownloader(new QnapiRuntimeManager(_httpClient), parser);
-        _subtitlePipeline = new SubtitleAcquisitionPipeline(_pipeline, qnapi);
+        var cueReader = new SubtitleCueReader(extraction, parser);
+        var synchronization = new SubtitleSynchronizationService();
+        _subtitlePipeline = new SubtitleAcquisitionPipeline(_pipeline, qnapi, cueReader, synchronization);
+        _subtitleFallbackInteraction = new SubtitleAlternativeSelector(this, qnapi, () => _inputPath);
         _folderBatch = new FolderBatchService(_folderQueuePlanner, _mediaProbe, _subtitlePipeline, _appLogger);
 
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -410,9 +414,10 @@ public partial class MainWindow : Window
         var translationProgress = new Progress<TranslationProgress>(ReportTranslationProgress);
         var statusProgress = new Progress<string>(ReportSubtitleStatus);
 
-        var result = await _subtitlePipeline.TranslateAsync(
+        var result = await _subtitlePipeline.TranslateInteractiveAsync(
             inputPath,
             selectedTrack,
+            _subtitleFallbackInteraction,
             provider,
             ExportTxtCheckBox.IsChecked == true,
             translationProgress,

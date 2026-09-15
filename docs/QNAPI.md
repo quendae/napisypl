@@ -21,7 +21,9 @@ qnapi.exe -q -d -l en -lb en -f SRT -e npl<losowy_id> <film>
 
 Losowe, alfanumeryczne rozszerzenie izoluje plik wyjściowy. QNapi nie dotyka istniejącego `.srt` ani `.pl.srt`. NapisyPL odczytuje utworzony plik, sprawdza strukturę i czasy SRT, a następnie usuwa plik tymczasowy. Brak takiego pliku oznacza brak wyniku, ponieważ [kod CLI QNapi nie przekazuje zwykłych błędów pojedynczego pliku w końcowym kodzie wyjścia](https://github.com/QNapi/qnapi/blob/master/cli/src/clisubtitlesdownloader.cpp).
 
-Obok programu znajduje się kontrolowany `qnapi.ini`. Włącza konwersję do UTF-8/SRT, tryb bez okien i wyszukiwanie do pierwszego wyniku. Wyłącza stary silnik OpenSubtitles XML-RPC. Pozostają silniki NapiProjekt oraz Napisy24.
+Gdy automatycznie znaleziony polski plik nie pasuje pewnie do czasów osadzonej angielskiej ścieżki, dla pojedynczego filmu aplikacja pokazuje krótkie okno wyboru. Pozwala ono uruchomić QNapi bez `-q`, aby wybrać alternatywny wynik w jego własnym oknie, albo wskazać lokalny plik `.srt`. Oba źródła są ponownie sprawdzane względem czasów filmu; lokalny plik nie jest zmieniany. Tłumaczenie angielskich napisów jest ostatnią alternatywą. Przetwarzanie folderu pozostaje nieinteraktywne.
+
+Obok programu znajduje się kontrolowany `qnapi.ini`. Włącza konwersję do UTF-8/SRT, tryb bez okien i wyszukiwanie do pierwszego wyniku. Wyłącza stary silnik OpenSubtitles XML-RPC. Pozostają silniki NapiProjekt oraz Napisy24. Interaktywne uruchomienie nie zmienia wspólnego `qnapi.ini`; różni się wyłącznie brakiem `-q` i `CreateNoWindow=false`. Także ono używa prywatnego losowego rozszerzenia pliku wyjściowego.
 
 ## Dlaczego OpenSubtitles jest wyłączony
 
@@ -35,7 +37,7 @@ NapiProjekt obsługuje zarówno `PL`, jak i `ENG`; mapowanie języka i protokó�
 - NapiProjekt i Napisy24 są starymi, nieudokumentowanymi publicznie integracjami. Zmiana po stronie serwera może przerwać pobieranie bez aktualizacji aplikacji.
 - Oba silniki w QNapi używają adresów HTTP, a nie HTTPS. Zapytanie zawiera skrót filmu, jego rozmiar, nazwę pliku i parametry klienta; transport nie jest szyfrowany.
 - Angielskie napisy nie mają obecnie drugiego sprawnego dostawcy. Pełne zastępstwo wymaga integracji z nowym REST API OpenSubtitles.com i klucza aplikacji.
-- QNapi jest uruchamiany z limitem 90 sekund. Anulowanie lub przekroczenie limitu kończy całe drzewo procesu i usuwa prywatny plik wyjściowy.
+- Automatyczne QNapi jest uruchamiane z limitem 90 sekund. Wybór interaktywny ma limit 5 minut, aby użytkownik mógł wybrać wynik. Anulowanie lub przekroczenie limitu kończy całe drzewo procesu i usuwa prywatny plik wyjściowy.
 
 ## Licencja i źródła
 
