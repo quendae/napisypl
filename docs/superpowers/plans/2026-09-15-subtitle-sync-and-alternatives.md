@@ -4,7 +4,7 @@
 
 **Goal:** Validate and safely synchronize downloaded Polish subtitles against embedded English timing, offer interactive QNapi or local SRT alternatives, and invoke machine translation only after Polish options are exhausted.
 
-**Architecture:** Add a pure robust timeline analyzer in Core, then inject an embedded-reference reader and an optional alternative selector into the existing acquisition pipeline. Keep QNapi process details inside its adapter and implement the modal single-file chooser in Avalonia; folder batches disable interactive selection and continue to the English fallback.
+**Architecture:** Add a pure robust timeline analyzer in Core, then inject an embedded-reference reader into the existing acquisition pipeline. The concrete pipeline exposes a single-file interactive method while its existing interface method remains noninteractive by construction. Keep QNapi process details inside its adapter and implement the modal chooser in Avalonia; folder batches continue to the English fallback without access to modal interaction.
 
 **Tech Stack:** .NET 10, C#, Avalonia, xUnit, FFmpeg, external QNapi executable.
 
@@ -71,19 +71,19 @@ Commit: `feat: analyze and synchronize subtitle timing`
 ### Task 2: Reference extraction and acquisition policy
 
 **Files:**
-- Create: `src/NapisyPL.Core/Subtitles/IEmbeddedSubtitleReader.cs`
-- Create: `src/NapisyPL.Core/Subtitles/EmbeddedSubtitleReader.cs`
-- Create: `src/NapisyPL.Core/Subtitles/ISubtitleAlternativeSelector.cs`
+- Create: `src/NapisyPL.Core/Subtitles/ISubtitleCueReader.cs`
+- Create: `src/NapisyPL.Core/Subtitles/SubtitleCueReader.cs`
+- Create: `src/NapisyPL.Core/Subtitles/ISubtitleFallbackInteraction.cs`
 - Modify: `src/NapisyPL.Core/Subtitles/SubtitleAcquisitionPipeline.cs`
 - Modify: `tests/NapisyPL.Core.Tests/SubtitleAcquisitionPipelineTests.cs`
 
 **Interfaces:**
 - Consumes: Task 1 `SubtitleSynchronizationService` and `SubtitleTimingAnalysis`.
-- Produces: `IEmbeddedSubtitleReader.ReadAsync(videoPath, track, status, cancellationToken)`, `SubtitleAlternativeRequest`, `SubtitleAlternativeSelection`, `ISubtitleAlternativeSelector.SelectAsync(request, cancellationToken)` and the reordered acquisition behavior.
+- Produces: `ISubtitleCueReader.ReadEmbeddedAsync(...)`, `ISubtitleCueReader.ReadFileAsync(...)`, `SubtitleFallbackRequest`, `SubtitleFallbackChoice`, `ISubtitleFallbackInteraction.ChooseAsync(...)`, `SubtitleAcquisitionPipeline.TranslateInteractiveAsync(...)`, and the reordered acquisition behavior. The existing `ITranslationPipeline.TranslateAsync` stays unchanged and noninteractive.
 
 - [ ] **Step 1: Write failing acquisition tests for reference-first comparison**
 
-Add fakes for the embedded reader and alternative selector. Assert that a safe downloaded Polish shift is transformed before save, a 100 ms aligned candidate keeps its original times, and an unsafe candidate is not written.
+Add fakes for the cue reader and fallback interaction. Assert that a safe downloaded Polish shift is transformed before save, a 100 ms aligned candidate keeps its original times, and an unsafe candidate is not written.
 
 - [ ] **Step 2: Run acquisition tests and verify RED**
 
@@ -93,7 +93,7 @@ Expected: compilation fails for the new constructor dependencies and selector co
 
 - [ ] **Step 3: Implement the reference reader and Polish comparison path**
 
-`EmbeddedSubtitleReader` uses `SubtitleExtractionService.ExtractToTemporarySrtAsync`, parses UTF-8 with `SrtParser`, validates cues, and deletes the temporary file in `finally`. Update `SubtitleAcquisitionPipeline` to read a selected text track once, analyze downloaded Polish cues, keep aligned timing, apply safe timing, and withhold unsafe output.
+`SubtitleCueReader` uses `SubtitleExtractionService.ExtractToTemporarySrtAsync`, parses UTF-8 with `SrtParser`, validates cues, and deletes the temporary file in `finally`. It also reads a manually selected SRT without modifying it. Update `SubtitleAcquisitionPipeline` to read a selected text track once, analyze downloaded Polish cues, keep aligned timing, apply safe timing, and withhold unsafe output.
 
 - [ ] **Step 4: Write failing tests for final fallback order and explicit alternative choices**
 
@@ -105,7 +105,7 @@ Confirm the embedded-English-before-QNapi-English assertion fails under the old 
 
 - [ ] **Step 6: Implement the policy and alternative contract**
 
-Make selector injection optional. Exhaust automatic and selected Polish before translating. Prefer already extracted embedded English cues; otherwise call the English QNapi pass. Preserve handled exception reporting, cancellation, atomic writes, and existing-output behavior.
+Implement `TranslateInteractiveAsync` on the concrete pipeline and a shared private core method; keep the interface method noninteractive. Exhaust automatic and selected Polish before translating. Prefer already extracted embedded English cues via `TranslateVideoSubtitlesAsync`; otherwise call the English QNApi pass. Preserve handled exception reporting, cancellation, atomic writes, and existing-output behavior. Treat a selected track as an automatic English MT source only when its language tag is `eng` or `en`; an untagged track may still be a timing reference but requires the explicit interaction choice before translation.
 
 - [ ] **Step 7: Run focused and full Core tests**
 
@@ -130,7 +130,7 @@ Commit: `feat: validate Polish subtitles before translation`
 - Modify: `tests/NapisyPL.Core.Tests/SubtitleSearchUiTests.cs`
 
 **Interfaces:**
-- Consumes: Task 2 `ISubtitleAlternativeSelector` and timing summary records.
+- Consumes: Task 2 `ISubtitleFallbackInteraction` and timing summary records.
 - Produces: `IInteractiveSubtitleDownloader.DownloadInteractiveAsync(...)` and the Avalonia selector that can run QNapi or parse a user-picked SRT.
 
 - [ ] **Step 1: Write failing QNapi tests for interactive invocation**
@@ -147,7 +147,7 @@ Extract common invocation logic without changing automatic arguments. Interactiv
 
 - [ ] **Step 4: Write failing static UI composition tests**
 
-Assert the main window constructs `EmbeddedSubtitleReader`, `SubtitleSynchronizationService`, and `SubtitleAlternativeSelector`; the selector displays provider/coverage/offset/scale/P90; and the folder path disables selector interaction while a folder batch runs.
+Assert the main window constructs `SubtitleCueReader`, `SubtitleSynchronizationService`, and the Avalonia fallback interaction; the interaction displays provider/coverage/offset/scale/P90; and the folder path calls only the noninteractive `ITranslationPipeline` entry point.
 
 - [ ] **Step 5: Run UI composition tests and verify RED**
 
@@ -155,7 +155,7 @@ Run: `.run/dotnet/dotnet.exe test tests/NapisyPL.Core.Tests/NapisyPL.Core.Tests.
 
 - [ ] **Step 6: Implement the Avalonia selector and wiring**
 
-Show a compact modal only for single-file processing. Offer interactive QNapi, local `.srt` selection, use without timing changes for review-grade candidates, or continue to English. Parse local SRT via `SrtParser` without modifying it. Set an interaction-enabled flag false around `FolderBatchService.TranslateFolderAsync` and restore it in `finally`.
+Show a compact modal only through `TranslateInteractiveAsync` in single-file processing. Offer interactive QNapi, local `.srt` selection, use without timing changes for review-grade candidates, or continue to English. Parse local SRT via `SubtitleCueReader` without modifying it. Folder processing continues to call the noninteractive interface method and has no mutable interaction flag.
 
 - [ ] **Step 7: Update user-facing copy and QNapi documentation**
 
@@ -205,4 +205,3 @@ Run `git status --short`, inspect the branch diff, and verify `Run-SubFlow.bat` 
 - [ ] **Step 6: Commit Task 4**
 
 Commit: `test: cover subtitle synchronization scenario`
-

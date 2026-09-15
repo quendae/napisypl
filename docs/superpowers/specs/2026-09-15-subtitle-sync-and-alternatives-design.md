@@ -39,7 +39,7 @@ The analyzer ignores unmatched leading/trailing cues, including provider credits
 
 ## Alternative subtitle boundary
 
-The core pipeline accepts an optional `ISubtitleAlternativeSelector`. It receives the video path, desired language, the rejected automatic candidate and its timing analysis, and whether an embedded reference exists. It returns either a parsed candidate plus an explicit user choice (`ApplyRecommendedTransform`, `UseWithoutChanges`, or `Cancel`) or no candidate.
+The concrete acquisition pipeline exposes `TranslateInteractiveAsync(..., ISubtitleFallbackInteraction, ...)` for the single-file UI. Its existing `ITranslationPipeline.TranslateAsync` implementation calls the same core flow with no interaction. This keeps modal behavior structurally unavailable to `FolderBatchService` instead of depending on mutable flags. The interaction receives the rejected automatic candidate and timing analysis, then returns an action: interactive QNapi, local Polish SRT, translate embedded English, or cancel.
 
 The Avalonia implementation shows the timing summary and offers:
 
@@ -47,7 +47,7 @@ The Avalonia implementation shows the timing summary and offers:
 - select a local `.srt` file;
 - continue to English translation.
 
-The QNapi adapter owns its temporary sidecar and deletes it after parsing in automatic and interactive modes. Local SRT files remain untouched. The selector is disabled for folder batches.
+The QNapi adapter owns its temporary sidecar and deletes it after parsing in automatic and interactive modes. Local SRT files remain untouched. Folder batches only see `ITranslationPipeline` and therefore cannot invoke the interaction.
 
 ## Safety and diagnostics
 
@@ -60,4 +60,3 @@ The QNapi adapter owns its temporary sidecar and deletes it after parsing in aut
 ## MadLad and idioms
 
 MadLad-400 3B remains the default local last-resort translator. The observed 802-cue run completed without an out-of-memory failure on the user's 16 GB GPU. Human Polish subtitles remain preferable because they are shorter and more idiomatic. General idiom expansion is a separate feature: it should use a small source-anchored lexicon with regression tests rather than global Polish string replacement.
-
