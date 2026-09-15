@@ -6,6 +6,16 @@ namespace NapisyPL.Core.Tests;
 public sealed class AppSettingsTests
 {
     [Fact]
+    public void SubtitleSearch_IsEnabledByDefaultAndPersists()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var json = JsonSerializer.Serialize(new AppSettings { SearchSubtitles = false }, options);
+
+        Assert.False(JsonSerializer.Deserialize<AppSettings>(json, options)!.SearchSubtitles);
+        Assert.True(new AppSettings().SearchSubtitles);
+    }
+
+    [Fact]
     public void ExportTxt_IsSessionOnly_AndIsNotPersisted()
     {
         var settings = new AppSettings { ExportTxt = true };

@@ -15,7 +15,7 @@ public sealed class EnhancedTranslationPipeline(
     TranslationCoordinator translationCoordinator,
     SpeakerDiarizationAnalysisService speakerAnalysis,
     DeterministicGenderReviewService deterministicReview,
-    IAppLogger? logger = null) : ITranslationPipeline
+    IAppLogger? logger = null) : IVideoSubtitleTranslationPipeline
 {
     public bool HardVoiceTurnOnly { get; set; }
 
@@ -39,15 +39,58 @@ public sealed class EnhancedTranslationPipeline(
         if (selectedTrack is null || !selectedTrack.IsText)
             throw new InvalidOperationException("Enhanced wymaga tekstowej ścieżki napisów.");
 
-        var file = Path.GetFileName(inputPath);
-        logger?.Info(
-            "translation_options",
-            ("file", file),
-            ("provider", provider.DisplayName),
-            ("exportTxt", exportTxt),
-            ("enhanced", true),
-            ("hardVoiceMode", HardVoiceTurnOnly ? "forced_binary" : "off"));
+        LogTranslationOptions(inputPath, provider, exportTxt);
+        IReadOnlyList<SubtitleCue> sourceCues;
+        try
+        {
+            sourceCues = await ExtractSourceCuesAsync(inputPath, selectedTrack, status, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogFailure(Path.GetFileName(inputPath), ex);
+            throw;
+        }
 
+        return await TranslateVideoSubtitlesCoreAsync(
+            inputPath,
+            sourceCues,
+            provider,
+            exportTxt,
+            translationProgress,
+            status,
+            cancellationToken,
+            logOptions: false);
+    }
+
+    public Task<TranslationResult> TranslateVideoSubtitlesAsync(
+        string videoPath,
+        IReadOnlyList<SubtitleCue> sourceCues,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress = null,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TranslationPipeline.VideoExtensions.Contains(Path.GetExtension(videoPath)))
+            throw new NotSupportedException("Enhanced wymaga ścieżki pliku wideo.");
+
+        return TranslateVideoSubtitlesCoreAsync(
+            videoPath,
+            sourceCues,
+            provider,
+            exportTxt,
+            translationProgress,
+            status,
+            cancellationToken,
+            logOptions: true);
+    }
+
+    private async Task<IReadOnlyList<SubtitleCue>> ExtractSourceCuesAsync(
+        string inputPath,
+        SubtitleTrack selectedTrack,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
         string? temporarySrt = null;
         try
         {
@@ -56,7 +99,33 @@ public sealed class EnhancedTranslationPipeline(
                 inputPath, selectedTrack, status, cancellationToken);
 
             var content = await File.ReadAllTextAsync(temporarySrt, Encoding.UTF8, cancellationToken);
-            var sourceCues = srtParser.Parse(content);
+            return srtParser.Parse(content);
+        }
+        finally
+        {
+            if (temporarySrt is not null)
+            {
+                try { File.Delete(temporarySrt); } catch { }
+            }
+        }
+    }
+
+    private async Task<TranslationResult> TranslateVideoSubtitlesCoreAsync(
+        string inputPath,
+        IReadOnlyList<SubtitleCue> sourceCues,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress,
+        IProgress<string>? status,
+        CancellationToken cancellationToken,
+        bool logOptions)
+    {
+        var file = Path.GetFileName(inputPath);
+        if (logOptions)
+            LogTranslationOptions(inputPath, provider, exportTxt);
+
+        try
+        {
             if (sourceCues.Count == 0)
                 throw new InvalidDataException("Enhanced: nie udało się odczytać żadnych kwestii z napisów.");
 
@@ -343,22 +412,27 @@ public sealed class EnhancedTranslationPipeline(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger?.Error(
-                "enhanced_failed",
-                ("file", file),
-                ("stage", "translation_pipeline"),
-                ("category", ex.GetType().Name),
-                ("result", "failed"));
+            LogFailure(file, ex);
             throw;
         }
-        finally
-        {
-            if (temporarySrt is not null)
-            {
-                try { File.Delete(temporarySrt); } catch { }
-            }
-        }
     }
+
+    private void LogFailure(string file, Exception ex) =>
+        logger?.Error(
+            "enhanced_failed",
+            ("file", file),
+            ("stage", "translation_pipeline"),
+            ("category", ex.GetType().Name),
+            ("result", "failed"));
+
+    private void LogTranslationOptions(string inputPath, ITranslationProvider provider, bool exportTxt) =>
+        logger?.Info(
+            "translation_options",
+            ("file", Path.GetFileName(inputPath)),
+            ("provider", provider.DisplayName),
+            ("exportTxt", exportTxt),
+            ("enhanced", true),
+            ("hardVoiceMode", HardVoiceTurnOnly ? "forced_binary" : "off"));
 
     private static int ToPermille(double value) =>
         (int)Math.Round(Math.Clamp(value, 0, 1) * 1000, MidpointRounding.AwayFromZero);

@@ -1,14 +1,14 @@
 # NapisyPL
 
-**NapisyPL** to mała aplikacja desktopowa dla Windows, która robi jedną rzecz: bierze angielskie napisy i zapisuje ich polskie tłumaczenie.
+**NapisyPL** to aplikacja desktopowa dla Windows, która najpierw szuka gotowych polskich napisów, a gdy ich nie ma — pobiera angielskie lub korzysta z napisów osadzonych w filmie i zapisuje polskie tłumaczenie.
 
 > Aktualny checkpoint rozwoju trybu Enhanced, wyniki benchmarków i plan dalszych prac: [`docs/ENHANCED_STATUS_AND_PLAN.md`](docs/ENHANCED_STATUS_AND_PLAN.md).
 
 ## Jak to działa
 
 1. Przeciągnij do okna film albo plik napisów.
-2. Dla filmu NapisyPL wykryje osadzone ścieżki napisów i automatycznie wybierze angielską ścieżkę tekstową, jeśli jest oznaczona jako `eng`/`en`.
-3. Wybierz tłumacza, wpisz klucz API (jeśli jest potrzebny) i kliknij **Tłumacz na polski**.
+2. Pozostaw włączone **Najpierw szukaj polskich napisów (QNapi)** i kliknij **Pobierz napisy / tłumacz**.
+3. NapisyPL szuka kolejno napisów PL i EN. Polski wynik zapisuje bez uruchamiania modelu. Angielski wynik tłumaczy wybranym dostawcą. Gdy QNapi niczego nie znajdzie, aplikacja używa wybranej angielskiej ścieżki tekstowej osadzonej w filmie.
 
 Wynik jest zapisywany obok pliku źródłowego jako `nazwa.pl.srt`. Można dodatkowo zaznaczyć eksport `nazwa.pl.txt`. Dla wejściowego TXT wynik jest tylko TXT.
 
@@ -18,7 +18,13 @@ Wynik jest zapisywany obok pliku źródłowego jako `nazwa.pl.srt`. Można dodat
 - napisy: SRT, ASS, SSA, VTT,
 - zwykły tekst: TXT.
 
-Aplikacja **nie transkrybuje dźwięku**. Jeśli film nie zawiera ścieżki napisów, niczego nie generuje. Bitmapowe napisy PGS/VobSub/XSub są wykrywane, ale w pierwszej wersji nie są obsługiwane, ponieważ wymagałyby OCR.
+Aplikacja **nie transkrybuje dźwięku**. Film bez osadzonych napisów może zostać obsłużony, jeśli QNapi znajdzie pasujący plik PL lub EN. Bitmapowe napisy PGS/VobSub/XSub są wykrywane, ale nie są bezpośrednio odczytywane, ponieważ wymagałyby OCR.
+
+## Wyszukiwanie napisów przez QNapi
+
+Przy pierwszym wyszukiwaniu aplikacja pobiera oficjalny pakiet QNapi 0.2.3 (~18 MB), sprawdza jego sumę SHA-256 i instaluje prywatnie w `%LocalAppData%\NapisyPL\qnapi\0.2.3\`. Istniejący plik `nazwa.pl.srt` jest zachowywany. Wyszukiwanie można wyłączyć, aby zawsze korzystać z dotychczasowego trybu tłumaczenia.
+
+Integracja używa baz NapiProjekt i Napisy24. Wyszukiwanie angielskich napisów jest obecnie rozwiązaniem awaryjnym opartym na NapiProjekt; stary silnik OpenSubtitles w QNapi został wyłączony po zamknięciu używanego przez niego API. Szczegóły działania, prywatności i licencji opisuje [`docs/QNAPI.md`](docs/QNAPI.md).
 
 ASS/SSA/VTT są normalizowane do SRT. Zaawansowane style ASS nie są przenoszone — priorytetem jest tekst i timing.
 

@@ -20,7 +20,7 @@
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
         <StackPanel Spacing="2">
           <TextBlock Text="SubFlow" FontSize="27" FontWeight="SemiBold" />
-          <TextBlock Text="Angielskie napisy → polskie. Pojedynczy film, plik napisów albo cały folder."
+          <TextBlock Text="Pobierz polskie napisy lub przetłumacz angielskie. Film, plik napisów albo cały folder."
                      Foreground="{DynamicResource MutedBrush}" FontSize="14" TextWrapping="Wrap" />
         </StackPanel>
         <TextBlock Grid.Column="1" Text="offline + cloud" Foreground="{DynamicResource MutedBrush}"
@@ -45,6 +45,17 @@
                 <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" Padding="16,8" />
                 <Button x:Name="ChooseFolderButton" Content="Wybierz folder" Click="OnChooseFolderClick" Padding="16,8" />
               </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <CheckBox x:Name="SearchSubtitlesCheckBox" Content="Najpierw szukaj polskich napisów (QNapi)"
+                        IsChecked="True" IsCheckedChanged="OnSearchSubtitlesChanged" FontWeight="SemiBold" />
+              <TextBlock Text="Dla filmów: pobierz PL → jeśli brak, pobierz EN i przetłumacz. Bez wyniku użyj wybranej ścieżki z filmu. Istniejący plik .pl.srt zostanie zachowany."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="Wyszukiwanie wymaga internetu. Przy pierwszym użyciu pobieramy QNapi (~18 MB). Tłumaczenie lokalnym modelem nadal działa offline po wyłączeniu wyszukiwania."
+                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 

@@ -8,7 +8,7 @@ public sealed class TranslationPipeline(
     SrtParser srtParser,
     SubtitleWriter writer,
     SubtitleExtractionService extractionService,
-    TranslationCoordinator coordinator) : ITranslationPipeline
+    TranslationCoordinator coordinator) : IVideoSubtitleTranslationPipeline
 {
     public static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -21,7 +21,7 @@ public sealed class TranslationPipeline(
     };
 
     public bool UseEnhanced { get; set; }
-    public ITranslationPipeline? EnhancedPipeline { get; set; }
+    public IVideoSubtitleTranslationPipeline? EnhancedPipeline { get; set; }
 
     public static bool IsSupportedInput(string path)
     {
@@ -58,6 +58,53 @@ public sealed class TranslationPipeline(
         IProgress<string>? status,
         CancellationToken cancellationToken) =>
         TranslateCoreAsync(inputPath, selectedTrack, provider, exportTxt, translationProgress, status, cancellationToken);
+
+    public async Task<TranslationResult> TranslateVideoSubtitlesAsync(
+        string videoPath,
+        IReadOnlyList<SubtitleCue> sourceCues,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress = null,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!VideoExtensions.Contains(Path.GetExtension(videoPath)))
+            throw new NotSupportedException("Przekazane napisy wymagają ścieżki pliku wideo.");
+
+        if (UseEnhanced && EnhancedPipeline is not null)
+        {
+            return await EnhancedPipeline.TranslateVideoSubtitlesAsync(
+                videoPath,
+                sourceCues,
+                provider,
+                exportTxt,
+                translationProgress,
+                status,
+                cancellationToken);
+        }
+
+        if (sourceCues.Count == 0)
+            throw new InvalidDataException("Nie udało się odczytać żadnych kwestii z napisów.");
+
+        status?.Report($"Tłumaczę {sourceCues.Count} kwestii…");
+        var translated = translationProgress is null
+            ? await coordinator.TranslateCuesAsync(sourceCues, provider, progress: (IProgress<double>?)null, cancellationToken)
+            : await coordinator.TranslateCuesAsync(sourceCues, provider, translationProgress, cancellationToken);
+        var directory = Path.GetDirectoryName(videoPath) ?? Environment.CurrentDirectory;
+        var stem = Path.GetFileNameWithoutExtension(videoPath);
+        var srtOutput = Path.Combine(directory, stem + ".pl.srt");
+        status?.Report("Zapisuję wynik…");
+        await writer.WriteSrtAsync(srtOutput, translated, cancellationToken);
+
+        string? txtOutput = null;
+        if (exportTxt)
+        {
+            txtOutput = Path.Combine(directory, stem + ".pl.txt");
+            await writer.WriteTxtAsync(txtOutput, translated, cancellationToken);
+        }
+
+        return new TranslationResult(srtOutput, txtOutput, translated.Count);
+    }
 
     private async Task<TranslationResult> TranslateCoreAsync(
         string inputPath,

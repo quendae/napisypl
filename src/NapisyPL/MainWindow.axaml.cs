@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.Models;
 using NapisyPL.Core.Services;
+using NapisyPL.Core.Subtitles;
 using NapisyPL.Core.Translation;
 using NapisyPL.Settings;
 
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
     private readonly FolderQueuePlanner _folderQueuePlanner = new();
     private readonly MediaProbeService _mediaProbe;
     private readonly TranslationPipeline _pipeline;
+    private readonly SubtitleAcquisitionPipeline _subtitlePipeline;
     private readonly FolderBatchService _folderBatch;
     private readonly SettingsStore _settingsStore = new();
     private readonly DispatcherTimer _elapsedTimer;
@@ -56,7 +58,9 @@ public partial class MainWindow : Window
         var writer = new SubtitleWriter();
         var coordinator = new TranslationCoordinator();
         _pipeline = new TranslationPipeline(parser, writer, extraction, coordinator);
-        _folderBatch = new FolderBatchService(_folderQueuePlanner, _mediaProbe, _pipeline, _appLogger);
+        var qnapi = new QnapiSubtitleDownloader(new QnapiRuntimeManager(_httpClient), parser);
+        _subtitlePipeline = new SubtitleAcquisitionPipeline(_pipeline, qnapi);
+        _folderBatch = new FolderBatchService(_folderQueuePlanner, _mediaProbe, _subtitlePipeline, _appLogger);
 
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _elapsedTimer.Tick += (_, _) => RefreshElapsedText();
@@ -79,6 +83,7 @@ public partial class MainWindow : Window
         ModelTextBox.Text = settings.Model;
         BaseUrlTextBox.Text = settings.BaseUrl;
         ExportTxtCheckBox.IsChecked = settings.ExportTxt;
+        SearchSubtitlesCheckBox.IsChecked = settings.SearchSubtitles;
         _loadingSettings = false;
         ApplyProviderUi(useDefaults: false);
         RefreshReadyState();
@@ -242,8 +247,11 @@ public partial class MainWindow : Window
 
             if (_tracks.Count == 0)
             {
-                SetStatus("Ten film nie zawiera żadnej ścieżki napisów.", StatusKind.Error);
-                TrackHintText.Text = "Napisy nie będą tworzone z dźwięku — ta aplikacja nie używa transkrypcji.";
+                SetStatus(SearchSubtitlesCheckBox.IsChecked == true
+                    ? "Film nie ma osadzonych napisów — możesz wyszukać je przez QNapi."
+                    : "Ten film nie zawiera żadnej ścieżki napisów.",
+                    SearchSubtitlesCheckBox.IsChecked == true ? StatusKind.Normal : StatusKind.Error);
+                TrackHintText.Text = "Włącz wyszukiwanie QNapi albo załaduj osobny plik napisów. Aplikacja nie używa transkrypcji.";
                 return;
             }
 
@@ -252,8 +260,9 @@ public partial class MainWindow : Window
 
             if (_tracks.All(track => !track.IsText))
             {
-                SetStatus("Znaleziono tylko napisy obrazkowe (np. PGS/VobSub). Ta wersja nie używa OCR.", StatusKind.Error);
-                TrackHintText.Text = "Wybierz film z tekstową ścieżką napisów albo załaduj osobny plik SRT/ASS/VTT.";
+                SetStatus("Znaleziono tylko napisy obrazkowe — QNapi może wyszukać wersję tekstową.",
+                    SearchSubtitlesCheckBox.IsChecked == true ? StatusKind.Normal : StatusKind.Error);
+                TrackHintText.Text = "Włącz wyszukiwanie QNapi albo załaduj osobny plik SRT/ASS/VTT. Ta wersja nie używa OCR.";
             }
             else if (selected is not null && selected.Language is "eng" or "en")
             {
@@ -350,22 +359,18 @@ public partial class MainWindow : Window
             return;
 
         var providerName = ProviderComboBox.SelectedItem as string ?? "Gemini";
-        ITranslationProvider provider;
-        try
-        {
-            provider = ProviderFactory.Create(
+        var apiKey = ApiKeyTextBox.Text ?? string.Empty;
+        var model = ModelTextBox.Text ?? string.Empty;
+        var baseUrl = BaseUrlTextBox.Text ?? string.Empty;
+        ITranslationProvider provider = new DeferredTranslationProvider(() => ProviderFactory.Create(
                 _httpClient,
                 providerName,
-                ApiKeyTextBox.Text ?? string.Empty,
-                ModelTextBox.Text ?? string.Empty,
-                BaseUrlTextBox.Text ?? string.Empty,
-                _appLogger);
-        }
-        catch (Exception ex)
-        {
-            SetStatus(ex.Message, StatusKind.Error);
-            return;
-        }
+                apiKey,
+                model,
+                baseUrl,
+                _appLogger));
+        _subtitlePipeline.Enabled = SearchSubtitlesCheckBox.IsChecked == true;
+        _folderBatch.AllowMissingSubtitleTracks = _subtitlePipeline.Enabled;
 
         await SaveSettingsAsync();
         ResetOperationProgress();
@@ -403,9 +408,9 @@ public partial class MainWindow : Window
 
         var selectedTrack = TrackComboBox.SelectedItem as SubtitleTrack;
         var translationProgress = new Progress<TranslationProgress>(ReportTranslationProgress);
-        var statusProgress = new Progress<string>(message => SetStatus(message, StatusKind.Normal));
+        var statusProgress = new Progress<string>(ReportSubtitleStatus);
 
-        var result = await ((ITranslationPipeline)_pipeline).TranslateAsync(
+        var result = await _subtitlePipeline.TranslateAsync(
             inputPath,
             selectedTrack,
             provider,
@@ -417,7 +422,7 @@ public partial class MainWindow : Window
         _lastOutputPath = result.PrimaryOutputPath;
         ProgressBar.Value = 100;
         BatchDetailText.Text = $"Segment {result.SegmentCount} / {result.SegmentCount} · gotowe";
-        SetStatus($"Gotowe — przetłumaczono {result.SegmentCount} kwestii. Zapisano {Path.GetFileName(result.PrimaryOutputPath)}", StatusKind.Success);
+        SetStatus($"Gotowe — {result.SegmentCount} kwestii w {Path.GetFileName(result.PrimaryOutputPath)}", StatusKind.Success);
         OpenFolderButton.Content = "Pokaż plik";
         OpenFolderButton.IsVisible = true;
     }
@@ -441,9 +446,9 @@ public partial class MainWindow : Window
 
         ProgressBar.Value = 100;
         BatchCurrentText.Text = Path.GetFileName(folder);
-        BatchDetailText.Text = $"Przetłumaczone {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}";
+        BatchDetailText.Text = $"Gotowe {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}";
         SetStatus(
-            $"Gotowe — przetłumaczone {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}.",
+            $"Zakończono — gotowe {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}.",
             result.Failed > 0 ? StatusKind.Error : StatusKind.Success);
         OpenFolderButton.Content = "Otwórz folder";
         OpenFolderButton.IsVisible = true;
@@ -462,6 +467,8 @@ public partial class MainWindow : Window
 
     private void ReportFolderProgress(FolderBatchProgress value)
     {
+        if (value.Message is not null)
+            ReportSubtitleStatus(value.Message);
         LiveProgressPanel.IsVisible = true;
         BatchTitleText.Text = $"Folder · plik {value.FileIndex} / {value.FileCount}";
         BatchCurrentText.Text = value.FileName;
@@ -517,6 +524,7 @@ public partial class MainWindow : Window
     {
         "queued" => "W kolejce…",
         "probing" => "Analizuję ścieżki napisów…",
+        "preparing" => "Wyszukuję lub przygotowuję napisy…",
         "translating" => "Przygotowuję tłumaczenie…",
         "completed" => "Gotowe",
         "skipped" => "Pominięto",
@@ -592,6 +600,7 @@ public partial class MainWindow : Window
         BaseUrlTextBox.IsEnabled = false;
         RevealKeyCheckBox.IsEnabled = false;
         ExportTxtCheckBox.IsEnabled = false;
+        SearchSubtitlesCheckBox.IsEnabled = false;
         TrackComboBox.IsEnabled = false;
         TranslateButton.IsEnabled = false;
         CancelButton.IsVisible = true;
@@ -613,6 +622,7 @@ public partial class MainWindow : Window
         BaseUrlTextBox.IsEnabled = true;
         RevealKeyCheckBox.IsEnabled = true;
         ExportTxtCheckBox.IsEnabled = true;
+        SearchSubtitlesCheckBox.IsEnabled = true;
         TrackComboBox.IsEnabled = true;
         ProgressBar.IsIndeterminate = false;
         if (!keepProgress) ProgressBar.Value = 0;
@@ -623,6 +633,7 @@ public partial class MainWindow : Window
 
     private void RefreshReadyState()
     {
+        TranslateButton.Content = SearchSubtitlesCheckBox.IsChecked == true ? "Pobierz napisy / tłumacz" : "Tłumacz na polski";
         if (_busy)
         {
             TranslateButton.IsEnabled = false;
@@ -643,7 +654,7 @@ public partial class MainWindow : Window
 
         if (TranslationPipeline.VideoExtensions.Contains(Path.GetExtension(_inputPath)))
         {
-            TranslateButton.IsEnabled = TrackComboBox.SelectedItem is SubtitleTrack { IsText: true };
+            TranslateButton.IsEnabled = SearchSubtitlesCheckBox.IsChecked == true || TrackComboBox.SelectedItem is SubtitleTrack { IsText: true };
             return;
         }
 
@@ -660,6 +671,7 @@ public partial class MainWindow : Window
             Provider = ProviderComboBox.SelectedItem as string ?? "Gemini",
             Model = ModelTextBox.Text ?? string.Empty,
             BaseUrl = BaseUrlTextBox.Text ?? string.Empty,
+            SearchSubtitles = SearchSubtitlesCheckBox.IsChecked == true,
             ExportTxt = ExportTxtCheckBox.IsChecked == true
         };
         await _settingsStore.SaveAsync(settings);

@@ -107,6 +107,63 @@ public sealed class FolderBatchServiceTests
     }
 
     [Fact]
+    public async Task TranslateFolderAsync_WhenMissingTracksAreAllowed_RoutesVideoToPipeline()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var movie = Path.Combine(root, "movie.mkv");
+            File.WriteAllText(movie, string.Empty);
+            var pipeline = new FakePipeline();
+            var service = new FolderBatchService(new FolderQueuePlanner(), new FakeProbe { Result = [] }, pipeline, NullAppLogger.Instance)
+            {
+                AllowMissingSubtitleTracks = true
+            };
+
+            var result = await service.TranslateFolderAsync(root, new FakeProvider(), exportTxt: false);
+
+            Assert.Equal([movie], pipeline.Calls);
+            Assert.Null(Assert.Single(pipeline.Tracks));
+            Assert.Equal(1, result.Translated);
+        }
+        finally
+        {
+            DeleteTempDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task TranslateFolderAsync_WhenBitmapTracksAreAllowed_RoutesVideoWithoutTrackToPipeline()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var movie = Path.Combine(root, "movie.mkv");
+            File.WriteAllText(movie, string.Empty);
+            var bitmapTrack = new SubtitleTrack(2, "hdmv_pgs_subtitle", "eng", "English PGS", false);
+            var pipeline = new FakePipeline();
+            var service = new FolderBatchService(
+                new FolderQueuePlanner(),
+                new FakeProbe { Result = [bitmapTrack] },
+                pipeline,
+                NullAppLogger.Instance)
+            {
+                AllowMissingSubtitleTracks = true
+            };
+
+            var result = await service.TranslateFolderAsync(root, new FakeProvider(), exportTxt: false);
+
+            Assert.Equal([movie], pipeline.Calls);
+            Assert.Null(Assert.Single(pipeline.Tracks));
+            Assert.Equal(1, result.Translated);
+        }
+        finally
+        {
+            DeleteTempDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task TranslateFolderAsync_AutoSelectsEnglishTextTrackAndReportsProgress()
     {
         var root = CreateTempDirectory();

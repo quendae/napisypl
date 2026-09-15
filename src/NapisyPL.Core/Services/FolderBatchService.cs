@@ -10,6 +10,8 @@ public sealed class FolderBatchService(
     ITranslationPipeline pipeline,
     IAppLogger logger)
 {
+    public bool AllowMissingSubtitleTracks { get; set; }
+
     public async Task<FolderBatchResult> TranslateFolderAsync(
         string folder,
         ITranslationProvider provider,
@@ -48,7 +50,7 @@ public sealed class FolderBatchService(
                 {
                     progress?.Report(new FolderBatchProgress(fileIndex, queue.Count, fileName, null, "probing"));
                     var tracks = await mediaProbe.ProbeAsync(item.InputPath, cancellationToken: cancellationToken);
-                    if (tracks.Count == 0)
+                    if (!AllowMissingSubtitleTracks && tracks.Count == 0)
                     {
                         skipped++;
                         files.Add(new FolderFileResult(item.InputPath, FolderFileStatus.Skipped, null, "no_subtitles"));
@@ -57,7 +59,7 @@ public sealed class FolderBatchService(
                         continue;
                     }
 
-                    if (tracks.All(track => !track.IsText))
+                    if (!AllowMissingSubtitleTracks && tracks.All(track => !track.IsText))
                     {
                         skipped++;
                         files.Add(new FolderFileResult(item.InputPath, FolderFileStatus.Skipped, null, "bitmap_only"));
@@ -67,7 +69,7 @@ public sealed class FolderBatchService(
                     }
 
                     selectedTrack = FfprobeParser.ChooseDefault(tracks);
-                    if (selectedTrack is null || !selectedTrack.IsText)
+                    if (!AllowMissingSubtitleTracks && (selectedTrack is null || !selectedTrack.IsText))
                     {
                         skipped++;
                         files.Add(new FolderFileResult(item.InputPath, FolderFileStatus.Skipped, null, "no_text_subtitles"));
@@ -87,6 +89,8 @@ public sealed class FolderBatchService(
                     provider,
                     exportTxt,
                     translationProgress,
+                    status: new InlineProgress<string>(message => progress?.Report(
+                        new FolderBatchProgress(fileIndex, queue.Count, fileName, null, "preparing", message))),
                     cancellationToken: cancellationToken);
 
                 translated++;

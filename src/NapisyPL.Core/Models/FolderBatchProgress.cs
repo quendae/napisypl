@@ -5,4 +5,5 @@ public sealed record FolderBatchProgress(
     int FileCount,
     string FileName,
     TranslationProgress? Translation,
-    string Stage);
+    string Stage,
+    string? Message = null);
