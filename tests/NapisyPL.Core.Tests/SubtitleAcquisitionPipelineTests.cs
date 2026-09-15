@@ -205,6 +205,17 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task InteractiveDismissedSelectorIsTreatedAsCancel()
+    {
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new FakeDownloader(_ => null), new FakeCueReader(Cues(0, "English")),
+            new SubtitleSynchronizationService());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TranslateInteractiveAsync(
+            Video, new SubtitleTrack(4, "subrip", "eng", null, true), new NullFallback(), NoTranslator(), false));
+    }
+
+    [Fact]
     public async Task InteractiveQnapiChoiceIsAnalyzedBeforeItsPolishCandidateIsWritten()
     {
         var reference = Cues(0, "English");
@@ -494,6 +505,12 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
     {
         public Task<SubtitleFallbackChoice> ChooseAsync(SubtitleFallbackRequest request,
             IProgress<string>? status = null, CancellationToken cancellationToken = default) => Task.FromResult(choice);
+    }
+    private sealed class NullFallback : ISubtitleFallbackInteraction
+    {
+        public Task<SubtitleFallbackChoice> ChooseAsync(SubtitleFallbackRequest request,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SubtitleFallbackChoice>(null!);
     }
     private sealed class SequenceFallback(params SubtitleFallbackChoice[] choices) : ISubtitleFallbackInteraction
     {

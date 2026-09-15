@@ -128,7 +128,8 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             {
                 var choice = await fallbackInteraction.ChooseAsync(
                     new SubtitleFallbackRequest(reviewCandidate, reviewAnalysis,
-                        embeddedCues is not null, IsEnglish(selectedTrack)), status, cancellationToken);
+                        embeddedCues is not null, IsEnglish(selectedTrack)), status, cancellationToken)
+                    ?? new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 switch (choice.Action)

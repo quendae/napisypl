@@ -50,33 +50,41 @@ public sealed class SubtitleAlternativeSelector(
               $"skala: {analysis?.Transform.Scale:F6} · P90: {analysis?.P90Residual.TotalMilliseconds:F0} ms\n" +
               $"Ocena dopasowania: {analysis?.Decision}.";
 
-        void Close(SubtitleFallbackChoice choice) => dialog.Close(choice);
         var buttons = new List<Button>();
-        Button AddButton(string text, Func<Task> action)
+        var actionRunning = false;
+        var closed = false;
+        dialog.Closed += (_, _) => closed = true;
+
+        void Close(SubtitleFallbackChoice choice)
+        {
+            if (closed || !dialog.IsVisible)
+                return;
+            closed = true;
+            dialog.Close(choice);
+        }
+
+        bool CanContinue() => !closed && dialog.IsVisible;
+
+        Button AddButton(string text, Func<Task<SubtitleFallbackChoice?>> action)
         {
             var button = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch };
-            button.Click += async (_, _) => await action();
+            button.Click += (_, _) => _ = RunActionAsync(action);
             buttons.Add(button);
             actions.Children.Add(button);
             return button;
         }
 
-        AddButton("Otwórz QNapi i wybierz napisy", async () =>
+        async Task RunActionAsync(Func<Task<SubtitleFallbackChoice?>> action)
         {
-            var path = videoPath();
-            if (string.IsNullOrWhiteSpace(path))
-                throw new InvalidOperationException("Nie wybrano filmu dla interaktywnego QNapi.");
+            if (actionRunning || !CanContinue())
+                return;
+            actionRunning = true;
             SetButtonsEnabled(false);
             try
             {
-                var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, cancellationToken);
-                if (chosen is null)
-                {
-                    detail.Text = "Nie wybrano pliku w QNapi. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
-                    SetButtonsEnabled(true);
-                    return;
-                }
-                Close(new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: chosen));
+                var choice = await action();
+                if (choice is not null && CanContinue())
+                    Close(choice);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -84,15 +92,35 @@ public sealed class SubtitleAlternativeSelector(
             }
             catch (Exception ex)
             {
-                detail.Text = "QNapi nie zwróciło użytecznych napisów: " + ex.Message;
-                SetButtonsEnabled(true);
+                if (CanContinue())
+                    detail.Text = "Nie udało się wykonać wybranej akcji: " + ex.Message;
             }
+            finally
+            {
+                actionRunning = false;
+                if (CanContinue())
+                    SetButtonsEnabled(true);
+            }
+        }
+
+        AddButton("Otwórz QNapi i wybierz napisy", async () =>
+        {
+            var path = videoPath();
+            if (string.IsNullOrWhiteSpace(path))
+                throw new InvalidOperationException("Nie wybrano filmu dla interaktywnego QNapi.");
+            var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, cancellationToken);
+            if (chosen is null)
+            {
+                detail.Text = "Nie wybrano pliku w QNapi. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
+                return null;
+            }
+            return new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: chosen);
         });
 
         AddButton("Wybierz lokalny plik SRT", async () =>
         {
             if (!owner.StorageProvider.CanOpen)
-                return;
+                return null;
             var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = "Wybierz polskie napisy SRT",
@@ -100,21 +128,20 @@ public sealed class SubtitleAlternativeSelector(
                 FileTypeFilter = [new FilePickerFileType("Napisy SRT") { Patterns = ["*.srt"] }]
             });
             var file = files.FirstOrDefault();
-            if (file is not null)
-                Close(new SubtitleFallbackChoice(SubtitleFallbackAction.UseLocalPolishSrt, file.Path.LocalPath));
+            return file is null
+                ? null
+                : new SubtitleFallbackChoice(SubtitleFallbackAction.UseLocalPolishSrt, file.Path.LocalPath);
         });
 
         if (request.PolishCandidate is not null && analysis?.Decision == SubtitleSyncDecision.NeedsReview)
         {
             AddButton("Zastosuj zalecaną korektę czasu", () =>
             {
-                Close(new SubtitleFallbackChoice(SubtitleFallbackAction.ApplyRecommendedTransform));
-                return Task.CompletedTask;
+                return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.ApplyRecommendedTransform));
             });
             AddButton("Użyj bez zmiany czasu", () =>
             {
-                Close(new SubtitleFallbackChoice(SubtitleFallbackAction.UseWithoutChanges));
-                return Task.CompletedTask;
+                return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.UseWithoutChanges));
             });
         }
 
@@ -123,19 +150,18 @@ public sealed class SubtitleAlternativeSelector(
                     ? "Przetłumacz osadzoną angielską ścieżkę"
                     : "Przetłumacz wybraną ścieżkę z filmu", () =>
             {
-                Close(new SubtitleFallbackChoice(SubtitleFallbackAction.TranslateEmbeddedEnglish));
-                return Task.CompletedTask;
+                return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.TranslateEmbeddedEnglish));
             });
 
         AddButton("Anuluj", () =>
         {
-            Close(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
-            return Task.CompletedTask;
+            return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
         });
 
         using var registration = cancellationToken.Register(() =>
             Dispatcher.UIThread.Post(() => Close(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel))));
-        return await dialog.ShowDialog<SubtitleFallbackChoice>(owner);
+        return await dialog.ShowDialog<SubtitleFallbackChoice>(owner)
+            ?? new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel);
 
         void SetButtonsEnabled(bool enabled)
         {

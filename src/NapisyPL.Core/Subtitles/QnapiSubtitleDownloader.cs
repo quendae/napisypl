@@ -72,9 +72,7 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
                 ? "Szukam polskich napisów w QNapi…"
                 : "Szukam angielskich napisów w QNapi…");
 
-        using var timeout = new CancellationTokenSource(interactive
-            ? _processTimeout > InteractiveProcessTimeout ? _processTimeout : InteractiveProcessTimeout
-            : _processTimeout);
+        using var timeout = new CancellationTokenSource(interactive ? InteractiveProcessTimeout : _processTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {

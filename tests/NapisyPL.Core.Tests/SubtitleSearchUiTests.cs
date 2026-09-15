@@ -37,6 +37,20 @@ public sealed class SubtitleSearchUiTests
         Assert.DoesNotContain("TranslateInteractiveAsync", folderHandler, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AlternativeSelectorHandlesDismissalAndAsyncActionFailures()
+    {
+        var root = FindRepositoryRoot();
+        var selector = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "SubtitleAlternativeSelector.cs"));
+        var downloader = File.ReadAllText(Path.Combine(root, "src", "NapisyPL.Core", "Subtitles", "QnapiSubtitleDownloader.cs"));
+
+        Assert.Contains("?? new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel)", selector, StringComparison.Ordinal);
+        Assert.Contains("RunActionAsync", selector, StringComparison.Ordinal);
+        Assert.Contains("catch (Exception ex)", selector, StringComparison.Ordinal);
+        Assert.Contains("dialog.IsVisible", selector, StringComparison.Ordinal);
+        Assert.Contains("new CancellationTokenSource(interactive ? InteractiveProcessTimeout : _processTimeout)", downloader, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
