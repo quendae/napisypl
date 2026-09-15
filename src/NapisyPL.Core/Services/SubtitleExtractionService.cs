@@ -1,8 +1,9 @@
 using NapisyPL.Core.Models;
+using NapisyPL.Core.Subtitles;
 
 namespace NapisyPL.Core.Services;
 
-public sealed class SubtitleExtractionService(FfmpegManager ffmpegManager, ProcessRunner processRunner)
+public sealed class SubtitleExtractionService(FfmpegManager ffmpegManager, ProcessRunner processRunner) : ISubtitleCueExtractor
 {
     public async Task<string> ExtractToTemporarySrtAsync(
         string mediaPath,

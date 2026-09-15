@@ -5,27 +5,74 @@ using NapisyPL.Core.Translation;
 
 namespace NapisyPL.Core.Subtitles;
 
-/// <summary>Resolves video subtitles before invoking any translation provider.</summary>
-public sealed class SubtitleAcquisitionPipeline(
-    IVideoSubtitleTranslationPipeline translationPipeline,
-    ISubtitleDownloader downloader) : ITranslationPipeline
+/// <summary>Resolves Polish subtitles before invoking any translation provider.</summary>
+public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
 {
+    private readonly IVideoSubtitleTranslationPipeline _translationPipeline;
+    private readonly ISubtitleDownloader _downloader;
+    private readonly ISubtitleCueReader? _cueReader;
+    private readonly SubtitleSynchronizationService? _synchronization;
     private readonly SrtParser _parser = new();
     private readonly SubtitleWriter _writer = new();
+
+    public SubtitleAcquisitionPipeline(IVideoSubtitleTranslationPipeline translationPipeline, ISubtitleDownloader downloader)
+    {
+        _translationPipeline = translationPipeline ?? throw new ArgumentNullException(nameof(translationPipeline));
+        _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
+    }
+
+    public SubtitleAcquisitionPipeline(
+        IVideoSubtitleTranslationPipeline translationPipeline,
+        ISubtitleDownloader downloader,
+        ISubtitleCueReader cueReader,
+        SubtitleSynchronizationService synchronization)
+    {
+        _translationPipeline = translationPipeline ?? throw new ArgumentNullException(nameof(translationPipeline));
+        _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
+        _cueReader = cueReader ?? throw new ArgumentNullException(nameof(cueReader));
+        _synchronization = synchronization ?? throw new ArgumentNullException(nameof(synchronization));
+    }
+
     public bool Enabled { get; set; } = true;
 
-    public async Task<TranslationResult> TranslateAsync(
+    public Task<TranslationResult> TranslateAsync(
         string inputPath,
         SubtitleTrack? selectedTrack,
         ITranslationProvider provider,
         bool exportTxt,
         IProgress<TranslationProgress>? translationProgress = null,
         IProgress<string>? status = null,
+        CancellationToken cancellationToken = default) =>
+        TranslateCoreAsync(inputPath, selectedTrack, provider, exportTxt, null, translationProgress, status, cancellationToken);
+
+    public Task<TranslationResult> TranslateInteractiveAsync(
+        string inputPath,
+        SubtitleTrack? selectedTrack,
+        ISubtitleFallbackInteraction fallbackInteraction,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress = null,
+        IProgress<string>? status = null,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fallbackInteraction);
+        return TranslateCoreAsync(inputPath, selectedTrack, provider, exportTxt, fallbackInteraction,
+            translationProgress, status, cancellationToken);
+    }
+
+    private async Task<TranslationResult> TranslateCoreAsync(
+        string inputPath,
+        SubtitleTrack? selectedTrack,
+        ITranslationProvider provider,
+        bool exportTxt,
+        ISubtitleFallbackInteraction? fallbackInteraction,
+        IProgress<TranslationProgress>? translationProgress,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!Enabled || !TranslationPipeline.VideoExtensions.Contains(Path.GetExtension(inputPath)))
-            return await translationPipeline.TranslateAsync(inputPath, selectedTrack, provider, exportTxt,
+            return await _translationPipeline.TranslateAsync(inputPath, selectedTrack, provider, exportTxt,
                 translationProgress, status, cancellationToken);
 
         var output = Path.Combine(Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory,
@@ -38,60 +85,181 @@ public sealed class SubtitleAcquisitionPipeline(
             return await SavePolishAsync(output, existing, exportTxt, writeSrt: false, cancellationToken);
         }
 
+        IReadOnlyList<SubtitleCue>? embeddedCues = null;
         var failures = new List<string>();
-        foreach (var language in new[] { SubtitleLanguage.Polish, SubtitleLanguage.English })
+        if (selectedTrack is { IsText: true } && _cueReader is not null)
         {
-            var label = language == SubtitleLanguage.Polish ? "PL" : "EN";
-            status?.Report($"QNapi: szukam napisów {label}…");
-            DownloadedSubtitles? found;
             try
             {
-                found = await downloader.DownloadAsync(inputPath, language, status, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (found is null)
-                {
-                    status?.Report($"QNapi: nie znaleziono napisów {label}.");
-                    continue;
-                }
-                if (found.Language != language)
-                    throw new InvalidDataException($"Źródło zwróciło inny język niż {label}.");
-                ValidateCues(found.Cues);
+                status?.Report("Odczytuję wybraną ścieżkę napisów z filmu…");
+                embeddedCues = await _cueReader.ReadEmbeddedAsync(inputPath, selectedTrack, status, cancellationToken);
+                ValidateCues(embeddedCues);
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or HttpRequestException or TimeoutException
-                                       or UnauthorizedAccessException or Win32Exception or NotSupportedException)
+            catch (Exception ex) when (IsHandledSubtitleException(ex))
             {
-                failures.Add($"{label}: {ex.Message}");
-                status?.Report($"Wyszukiwanie {label} nie powiodło się: {ex.Message}");
-                continue;
+                failures.Add("embedded: " + ex.Message);
+                status?.Report("Nie udało się odczytać wybranej ścieżki napisów: " + ex.Message);
+            }
+        }
+
+        DownloadedSubtitles? automaticPolish = null;
+        SubtitleTimingAnalysis? automaticAnalysis = null;
+        var downloadedPolish = await TryDownloadAsync(inputPath, SubtitleLanguage.Polish, failures, status, cancellationToken);
+        if (downloadedPolish is not null)
+        {
+            automaticPolish = downloadedPolish;
+            var prepared = PreparePolish(downloadedPolish.Cues, embeddedCues);
+            automaticAnalysis = prepared.Analysis;
+            if (prepared.Cues is not null)
+            {
+                status?.Report($"Znaleziono polskie napisy ({downloadedPolish.Provider}) — zapisuję bez tłumaczenia.");
+                return await SavePolishAsync(output, prepared.Cues, exportTxt, writeSrt: true, cancellationToken);
             }
 
-            if (language == SubtitleLanguage.Polish)
-            {
-                status?.Report($"Znaleziono polskie napisy ({found.Provider}) — zapisuję bez tłumaczenia.");
-                return await SavePolishAsync(output, found.Cues, exportTxt, writeSrt: true, cancellationToken);
-            }
+            ReportWithheldCandidate(downloadedPolish, automaticAnalysis, status);
+        }
 
-            status?.Report($"Znaleziono angielskie napisy ({found.Provider}) — tłumaczę z zachowaniem audio filmu.");
-            return await translationPipeline.TranslateVideoSubtitlesAsync(inputPath, found.Cues, provider,
+        if (fallbackInteraction is not null)
+        {
+            var choice = await fallbackInteraction.ChooseAsync(
+                new SubtitleFallbackRequest(automaticPolish, automaticAnalysis,
+                    embeddedCues is not null && IsEnglish(selectedTrack)), status, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            switch (choice.Action)
+            {
+                case SubtitleFallbackAction.DownloadInteractivePolish:
+                    if (choice.InteractivePolish is not { Language: SubtitleLanguage.Polish } interactivePolish)
+                        throw new InvalidDataException("Interaktywne QNapi nie zwróciło poprawnych polskich napisów.");
+                    var preparedInteractive = PreparePolish(interactivePolish.Cues, embeddedCues);
+                    if (preparedInteractive.Cues is not null)
+                        return await SavePolishAsync(output, preparedInteractive.Cues, exportTxt, writeSrt: true, cancellationToken);
+                    ReportWithheldCandidate(interactivePolish, preparedInteractive.Analysis, status);
+                    break;
+
+                case SubtitleFallbackAction.UseLocalPolishSrt:
+                    if (string.IsNullOrWhiteSpace(choice.LocalSrtPath) || _cueReader is null)
+                        throw new InvalidDataException("Wybierz lokalny plik SRT z polskimi napisami.");
+                    var localCues = await _cueReader.ReadFileAsync(choice.LocalSrtPath, cancellationToken);
+                    var preparedLocal = PreparePolish(localCues, embeddedCues);
+                    if (preparedLocal.Cues is not null)
+                        return await SavePolishAsync(output, preparedLocal.Cues, exportTxt, writeSrt: true, cancellationToken);
+                    ReportWithheldCandidate(new DownloadedSubtitles(SubtitleLanguage.Polish, "lokalny plik", localCues), preparedLocal.Analysis, status);
+                    break;
+
+                case SubtitleFallbackAction.ApplyRecommendedTransform when automaticPolish is not null &&
+                                                                         automaticAnalysis?.Decision == SubtitleSyncDecision.NeedsReview &&
+                                                                         _synchronization is not null:
+                    return await SavePolishAsync(output, _synchronization.Apply(automaticPolish.Cues, automaticAnalysis.Transform),
+                        exportTxt, writeSrt: true, cancellationToken);
+
+                case SubtitleFallbackAction.UseWithoutChanges when automaticPolish is not null &&
+                                                                  automaticAnalysis?.Decision == SubtitleSyncDecision.NeedsReview:
+                    return await SavePolishAsync(output, automaticPolish.Cues, exportTxt, writeSrt: true, cancellationToken);
+
+                case SubtitleFallbackAction.TranslateEmbeddedEnglish:
+                    if (embeddedCues is null)
+                        throw new InvalidOperationException("Nie ma wczytanej ścieżki napisów z filmu do tłumaczenia.");
+                    status?.Report("Używam wybranej ścieżki z filmu jako źródła tłumaczenia.");
+                    return await _translationPipeline.TranslateVideoSubtitlesAsync(inputPath, embeddedCues, provider,
+                        exportTxt, translationProgress, status, cancellationToken);
+
+                case SubtitleFallbackAction.Cancel:
+                    throw new OperationCanceledException("Wybór alternatywnych napisów został anulowany.", cancellationToken);
+
+                default:
+                    throw new InvalidOperationException("Wybrana alternatywa napisów nie jest dostępna dla bieżącego wyniku.");
+            }
+        }
+
+        if (embeddedCues is not null && IsEnglish(selectedTrack))
+        {
+            status?.Report("Używam angielskiej ścieżki z filmu jako źródła tłumaczenia.");
+            return await _translationPipeline.TranslateVideoSubtitlesAsync(inputPath, embeddedCues, provider,
                 exportTxt, translationProgress, status, cancellationToken);
         }
 
-        if (selectedTrack is { IsText: true })
+        var downloadedEnglish = await TryDownloadAsync(inputPath, SubtitleLanguage.English, failures, status, cancellationToken);
+        if (downloadedEnglish is not null)
+        {
+            status?.Report($"Znaleziono angielskie napisy ({downloadedEnglish.Provider}) — tłumaczę z zachowaniem audio filmu.");
+            return await _translationPipeline.TranslateVideoSubtitlesAsync(inputPath, downloadedEnglish.Cues, provider,
+                exportTxt, translationProgress, status, cancellationToken);
+        }
+
+        if (selectedTrack is { IsText: true } && _cueReader is null)
         {
             status?.Report("Brak pobranych napisów — używam wybranej ścieżki z filmu.");
-            return await translationPipeline.TranslateAsync(inputPath, selectedTrack, provider, exportTxt,
+            return await _translationPipeline.TranslateAsync(inputPath, selectedTrack, provider, exportTxt,
                 translationProgress, status, cancellationToken);
         }
 
         var reason = failures.Count > 0 ? " Wyszukiwanie napotkało błędy: " + string.Join("; ", failures) : string.Empty;
-        throw new InvalidOperationException("Nie znaleziono napisów PL ani EN i film nie ma wybranej tekstowej ścieżki. " +
+        throw new InvalidOperationException("Nie znaleziono napisów PL ani EN i film nie ma angielskiej tekstowej ścieżki. " +
             "Wczytaj pasujący plik SRT lub spróbuj ponownie później." + reason);
+    }
+
+    private async Task<DownloadedSubtitles?> TryDownloadAsync(
+        string inputPath,
+        SubtitleLanguage language,
+        ICollection<string> failures,
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
+        var label = language == SubtitleLanguage.Polish ? "PL" : "EN";
+        status?.Report($"QNapi: szukam napisów {label}…");
+        try
+        {
+            var found = await _downloader.DownloadAsync(inputPath, language, status, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (found is null)
+            {
+                status?.Report($"QNapi: nie znaleziono napisów {label}.");
+                return null;
+            }
+            if (found.Language != language)
+                throw new InvalidDataException($"Źródło zwróciło inny język niż {label}.");
+            ValidateCues(found.Cues);
+            return found;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (IsHandledSubtitleException(ex))
+        {
+            failures.Add($"{label}: {ex.Message}");
+            status?.Report($"Wyszukiwanie {label} nie powiodło się: {ex.Message}");
+            return null;
+        }
+    }
+
+    private PreparedPolish PreparePolish(IReadOnlyList<SubtitleCue> cues, IReadOnlyList<SubtitleCue>? reference)
+    {
+        ValidateCues(cues);
+        if (reference is null || _synchronization is null)
+            return new PreparedPolish(cues, null);
+
+        var analysis = _synchronization.Analyze(reference, cues);
+        return analysis.Decision switch
+        {
+            SubtitleSyncDecision.Aligned => new PreparedPolish(cues, analysis),
+            SubtitleSyncDecision.SafeToSynchronize => new PreparedPolish(_synchronization.Apply(cues, analysis.Transform), analysis),
+            _ => new PreparedPolish(null, analysis)
+        };
+    }
+
+    private static void ReportWithheldCandidate(DownloadedSubtitles candidate, SubtitleTimingAnalysis? analysis, IProgress<string>? status)
+    {
+        if (analysis is null)
+            return;
+        status?.Report($"Nie zapisuję napisów {candidate.Provider}: {analysis.Decision}, {candidate.Cues.Count} kwestii, " +
+            $"skala {analysis.Transform.Scale:F6}, przesunięcie {analysis.Transform.Offset.TotalMilliseconds:F0} ms, " +
+            $"pokrycie {analysis.MatchedCueCoverage:P0}, P90 {analysis.P90Residual.TotalMilliseconds:F0} ms.");
     }
 
     private async Task<TranslationResult> SavePolishAsync(string output, IReadOnlyList<SubtitleCue> cues,
         bool exportTxt, bool writeSrt, CancellationToken cancellationToken)
     {
+        ValidateCues(cues);
         if (writeSrt)
             await WriteNewFileAsync(output, path => _writer.WriteSrtAsync(path, cues, cancellationToken), cancellationToken);
         string? textOutput = null;
@@ -119,10 +287,20 @@ public sealed class SubtitleAcquisitionPipeline(
         }
     }
 
+    private static bool IsEnglish(SubtitleTrack? track) =>
+        track?.Language is not null && (track.Language.Equals("en", StringComparison.OrdinalIgnoreCase) ||
+                                        track.Language.Equals("eng", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsHandledSubtitleException(Exception ex) =>
+        ex is IOException or InvalidDataException or HttpRequestException or TimeoutException or UnauthorizedAccessException or
+            Win32Exception or NotSupportedException;
+
     private static void ValidateCues(IReadOnlyList<SubtitleCue> cues)
     {
         if (cues.Count == 0 || cues.Any(c => c.Start < TimeSpan.Zero || c.End <= c.Start || string.IsNullOrWhiteSpace(c.Text))
             || cues.Select(c => c.Index).Distinct().Count() != cues.Count)
             throw new InvalidDataException("Plik napisów jest pusty lub ma nieprawidłowe czasy/numery kwestii; istniejący plik nie zostanie nadpisany.");
     }
+
+    private sealed record PreparedPolish(IReadOnlyList<SubtitleCue>? Cues, SubtitleTimingAnalysis? Analysis);
 }
