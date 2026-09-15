@@ -2,7 +2,6 @@
 setlocal EnableExtensions
 
 cd /d "%~dp0"
-set "EXPECTED_BRANCH=feature/offline-mt-gpu-profiles"
 set "RUN_DIR=%CD%\.run"
 set "AMD_RUNTIME_DIR=%RUN_DIR%\nllb-amd-runtime"
 set "LOCAL_DOTNET_DIR=%RUN_DIR%\dotnet"
@@ -13,6 +12,7 @@ set "CURRENT_COMMIT="
 set "DOTNET_EXE="
 set "DOTNET_MAJOR="
 set "DIRTY="
+set "FETCH_REFSPEC="
 
 echo.
 echo ========================================
@@ -37,7 +37,7 @@ if not exist ".git" (
     echo [ERROR] This script must be run from a cloned SubFlow repository.
     echo.
     echo First-time setup:
-    echo   git clone --branch %EXPECTED_BRANCH% --single-branch https://github.com/quendae/napisypl.git
+    echo   git clone https://github.com/quendae/napisypl.git
     echo   cd napisypl
     echo   Run-SubFlow.bat
     goto :fail
@@ -49,11 +49,14 @@ if not defined CURRENT_BRANCH (
     goto :fail
 )
 
-if /i not "%CURRENT_BRANCH%"=="%EXPECTED_BRANCH%" (
-    echo [ERROR] Wrong branch: %CURRENT_BRANCH%
-    echo Expected: %EXPECTED_BRANCH%
-    echo The script will not switch branches automatically.
-    goto :fail
+for /f "delims=" %%F in ('git config --local --get-all remote.origin.fetch 2^>nul') do set "FETCH_REFSPEC=%%F"
+if /i "%FETCH_REFSPEC%"=="+refs/heads/feature/offline-mt-gpu-profiles:refs/remotes/origin/feature/offline-mt-gpu-profiles" (
+    echo [GIT] Updating legacy single-branch fetch configuration...
+    git config --local remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    if errorlevel 1 (
+        echo [ERROR] Could not update the Git fetch configuration.
+        goto :fail
+    )
 )
 
 for /f "delims=" %%S in ('git status --porcelain 2^>nul') do set "DIRTY=1"
@@ -92,11 +95,11 @@ if /i "%DOTNET_EXE%"=="%LOCAL_DOTNET%" (
 echo [SDK] Using .NET %DOTNET_MAJOR% via %DOTNET_EXE%
 
 if /i "%~1"=="--check" (
-    echo [CHECK] Git, branch, clean working tree, PowerShell and .NET SDK are OK.
+    echo [CHECK] Git, current branch, clean working tree, PowerShell and .NET SDK are OK.
     exit /b 0
 )
 
-echo [1/6] Updating %EXPECTED_BRANCH%...
+echo [1/6] Updating %CURRENT_BRANCH%...
 git pull --ff-only
 if errorlevel 1 (
     echo [ERROR] git pull --ff-only failed.

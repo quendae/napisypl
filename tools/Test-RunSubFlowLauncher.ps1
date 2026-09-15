@@ -18,7 +18,7 @@ try {
     @'
 @echo off
 if "%1 %2"=="branch --show-current" (
-  echo feature/offline-mt-gpu-profiles
+  echo codex/qnapi-subtitle-download
   exit /b 0
 )
 if "%1 %2"=="status --porcelain" exit /b 0
