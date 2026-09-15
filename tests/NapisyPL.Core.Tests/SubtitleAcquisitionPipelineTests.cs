@@ -250,6 +250,117 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task InteractiveLocalReviewCandidateIsPresentedAgainAndCanBeAcceptedWithoutChanges()
+    {
+        var reference = ExtendedCues(0, "English");
+        var localPolish = ReviewableCues(reference);
+        var fallback = new SequenceFallback(
+            new SubtitleFallbackChoice(SubtitleFallbackAction.UseLocalPolishSrt, "chosen.srt"),
+            new SubtitleFallbackChoice(SubtitleFallbackAction.UseWithoutChanges));
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new FakeDownloader(_ => null), new FakeCueReader(reference, localPolish), new SubtitleSynchronizationService());
+
+        await service.TranslateInteractiveAsync(Video, new SubtitleTrack(4, "subrip", "eng", null, true), fallback, NoTranslator(), false);
+
+        Assert.Equal(2, fallback.Requests.Count);
+        Assert.Same(localPolish, fallback.Requests[1].PolishCandidate!.Cues);
+        Assert.Equal(SubtitleSyncDecision.NeedsReview, fallback.Requests[1].TimingAnalysis!.Decision);
+        var written = new SrtParser().Parse(await File.ReadAllTextAsync(Output));
+        Assert.Equal(localPolish.Select(cue => cue.Start), written.Select(cue => cue.Start));
+    }
+
+    [Fact]
+    public async Task InteractiveRejectedLocalCandidateRequiresAnExplicitFollowUpChoice()
+    {
+        var reference = Cues(0, "English");
+        SubtitleCue[] rejected = [new SubtitleCue(1, TimeSpan.FromHours(1), TimeSpan.FromHours(1).Add(TimeSpan.FromSeconds(1)), "Polish")];
+        var fallback = new SequenceFallback(
+            new SubtitleFallbackChoice(SubtitleFallbackAction.UseLocalPolishSrt, "chosen.srt"),
+            new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
+        var inner = new FakePipeline();
+        var service = new SubtitleAcquisitionPipeline(
+            inner, new FakeDownloader(_ => null), new FakeCueReader(reference, rejected), new SubtitleSynchronizationService());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TranslateInteractiveAsync(
+            Video, new SubtitleTrack(4, "subrip", "eng", null, true), fallback, NoTranslator(), false));
+
+        Assert.Equal(2, fallback.Requests.Count);
+        Assert.Equal(SubtitleSyncDecision.Rejected, fallback.Requests[1].TimingAnalysis!.Decision);
+        Assert.Null(inner.Cues);
+    }
+
+    [Fact]
+    public async Task InteractiveInvalidLocalCandidateRePromptsForAnExplicitFollowUpChoice()
+    {
+        var fallback = new SequenceFallback(
+            new SubtitleFallbackChoice(SubtitleFallbackAction.UseLocalPolishSrt, "broken.srt"),
+            new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new FakeDownloader(_ => null),
+            new FakeCueReader(Cues(0, "English"), readFileException: new InvalidDataException("invalid local SRT")),
+            new SubtitleSynchronizationService());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TranslateInteractiveAsync(
+            Video, new SubtitleTrack(4, "subrip", "eng", null, true), fallback, NoTranslator(), false));
+
+        Assert.Equal(2, fallback.Requests.Count);
+    }
+
+    [Fact]
+    public async Task InteractiveQnapiReviewCandidateIsPresentedAgainAndCanUseItsRecommendedTransform()
+    {
+        var reference = ExtendedCues(0, "English");
+        var reviewablePolish = ReviewableCues(reference);
+        var fallback = new SequenceFallback(
+            new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, null,
+                new DownloadedSubtitles(SubtitleLanguage.Polish, "QNapi selection", reviewablePolish)),
+            new SubtitleFallbackChoice(SubtitleFallbackAction.ApplyRecommendedTransform));
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new FakeDownloader(_ => null), new FakeCueReader(reference), new SubtitleSynchronizationService());
+
+        await service.TranslateInteractiveAsync(Video, new SubtitleTrack(4, "subrip", "eng", null, true), fallback, NoTranslator(), false);
+
+        Assert.Equal(2, fallback.Requests.Count);
+        Assert.Same(reviewablePolish, fallback.Requests[1].PolishCandidate!.Cues);
+        var analysis = fallback.Requests[1].TimingAnalysis!;
+        Assert.Equal(SubtitleSyncDecision.NeedsReview, analysis.Decision);
+        var written = new SrtParser().Parse(await File.ReadAllTextAsync(Output));
+        var expected = new SubtitleSynchronizationService().Apply(reviewablePolish, analysis.Transform);
+        Assert.Equal(expected.Select(cue => ToSrtPrecision(cue.Start)), written.Select(cue => cue.Start));
+    }
+
+    [Fact]
+    public async Task EmbeddedExtractionInvalidOperationContinuesToDownloadedEnglish()
+    {
+        var messages = new List<string>();
+        var inner = new FakePipeline();
+        var downloader = new FakeDownloader(language => language == SubtitleLanguage.Polish ? null : new(language, "QNapi", English));
+        var service = new SubtitleAcquisitionPipeline(
+            inner, downloader, new ThrowingCueReader(new InvalidOperationException("ffmpeg unavailable")), new SubtitleSynchronizationService());
+
+        await service.TranslateAsync(Video, new SubtitleTrack(4, "subrip", "eng", null, true), NoTranslator(), false,
+            status: new InlineProgress<string>(messages.Add));
+
+        Assert.Equal([SubtitleLanguage.Polish, SubtitleLanguage.English], downloader.Calls);
+        Assert.Same(English, inner.Cues);
+        Assert.Contains(messages, message => message.Contains("ffmpeg unavailable", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FallbackRequestAdvertisesUntaggedEmbeddedTextSeparatelyFromAutomaticEnglish()
+    {
+        var fallback = new SequenceFallback(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new FakeDownloader(_ => null), new FakeCueReader(Cues(0, "English")), new SubtitleSynchronizationService());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TranslateInteractiveAsync(
+            Video, new SubtitleTrack(4, "subrip", null, null, true), fallback, NoTranslator(), false));
+
+        Assert.True(fallback.Requests.Single().HasEmbeddedTextTrack);
+        Assert.False(fallback.Requests.Single().HasAutomaticallyTranslatableEmbeddedEnglish);
+    }
+
+    [Fact]
     public async Task NoDownloadsUsesExistingEmbeddedTrack()
     {
         var inner = new FakePipeline();
@@ -366,18 +477,43 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
         .ToArray();
     private static TimeSpan ToSrtPrecision(TimeSpan time) => TimeSpan.FromMilliseconds((long)time.TotalMilliseconds);
     private sealed class InlineProgress<T>(Action<T> action) : IProgress<T> { public void Report(T value) => action(value); }
-    private sealed class FakeCueReader(IReadOnlyList<SubtitleCue> embedded, IReadOnlyList<SubtitleCue>? file = null) : ISubtitleCueReader
+    private sealed class FakeCueReader(
+        IReadOnlyList<SubtitleCue> embedded,
+        IReadOnlyList<SubtitleCue>? file = null,
+        Exception? readFileException = null) : ISubtitleCueReader
     {
         public Task<IReadOnlyList<SubtitleCue>> ReadEmbeddedAsync(string videoPath, SubtitleTrack track,
             IProgress<string>? status = null, CancellationToken cancellationToken = default) => Task.FromResult(embedded);
 
         public Task<IReadOnlyList<SubtitleCue>> ReadFileAsync(string subtitlePath,
-            CancellationToken cancellationToken = default) => Task.FromResult(file ?? embedded);
+            CancellationToken cancellationToken = default) => readFileException is null
+                ? Task.FromResult(file ?? embedded)
+                : Task.FromException<IReadOnlyList<SubtitleCue>>(readFileException);
     }
     private sealed class FakeFallback(SubtitleFallbackChoice choice) : ISubtitleFallbackInteraction
     {
         public Task<SubtitleFallbackChoice> ChooseAsync(SubtitleFallbackRequest request,
             IProgress<string>? status = null, CancellationToken cancellationToken = default) => Task.FromResult(choice);
+    }
+    private sealed class SequenceFallback(params SubtitleFallbackChoice[] choices) : ISubtitleFallbackInteraction
+    {
+        private readonly Queue<SubtitleFallbackChoice> _choices = new(choices);
+        public List<SubtitleFallbackRequest> Requests { get; } = [];
+
+        public Task<SubtitleFallbackChoice> ChooseAsync(SubtitleFallbackRequest request,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(_choices.Dequeue());
+        }
+    }
+    private sealed class ThrowingCueReader(Exception exception) : ISubtitleCueReader
+    {
+        public Task<IReadOnlyList<SubtitleCue>> ReadEmbeddedAsync(string videoPath, SubtitleTrack track,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default) => Task.FromException<IReadOnlyList<SubtitleCue>>(exception);
+
+        public Task<IReadOnlyList<SubtitleCue>> ReadFileAsync(string subtitlePath,
+            CancellationToken cancellationToken = default) => Task.FromException<IReadOnlyList<SubtitleCue>>(exception);
     }
     private sealed class FakeDownloader(Func<SubtitleLanguage, DownloadedSubtitles?> get) : ISubtitleDownloader
     {

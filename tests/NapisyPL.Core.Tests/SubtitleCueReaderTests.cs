@@ -9,39 +9,40 @@ public sealed class SubtitleCueReaderTests
     [Fact]
     public async Task ReadEmbeddedAsyncDeletesItsTemporarySrtAfterParsing()
     {
-        var temporarySrt = await CreateTemporarySrtAsync("1\n00:00:01,000 --> 00:00:02,000\nHello\n");
-        try
-        {
-            var reader = new SubtitleCueReader(new FakeCueExtractor(temporarySrt), new SrtParser());
+        var extractor = new FakeCueExtractor("1\n00:00:01,000 --> 00:00:02,000\nHello\n");
+        var reader = new SubtitleCueReader(extractor, new SrtParser());
 
-            var cues = await reader.ReadEmbeddedAsync("movie.mkv", new SubtitleTrack(1, "subrip", "eng", null, true));
+        var cues = await reader.ReadEmbeddedAsync("movie.mkv", new SubtitleTrack(1, "subrip", "eng", null, true));
 
-            Assert.Single(cues);
-            Assert.False(File.Exists(temporarySrt));
-        }
-        finally
-        {
-            if (File.Exists(temporarySrt)) File.Delete(temporarySrt);
-        }
+        Assert.Single(cues);
+        Assert.NotNull(extractor.OutputPath);
+        Assert.False(File.Exists(extractor.OutputPath));
     }
 
     [Fact]
     public async Task ReadEmbeddedAsyncDeletesItsTemporarySrtWhenValidationFails()
     {
-        var temporarySrt = await CreateTemporarySrtAsync("not an SRT file");
-        try
-        {
-            var reader = new SubtitleCueReader(new FakeCueExtractor(temporarySrt), new SrtParser());
+        var extractor = new FakeCueExtractor("not an SRT file");
+        var reader = new SubtitleCueReader(extractor, new SrtParser());
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadEmbeddedAsync(
-                "movie.mkv", new SubtitleTrack(1, "subrip", "eng", null, true)));
+        await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadEmbeddedAsync(
+            "movie.mkv", new SubtitleTrack(1, "subrip", "eng", null, true)));
 
-            Assert.False(File.Exists(temporarySrt));
-        }
-        finally
-        {
-            if (File.Exists(temporarySrt)) File.Delete(temporarySrt);
-        }
+        Assert.NotNull(extractor.OutputPath);
+        Assert.False(File.Exists(extractor.OutputPath));
+    }
+
+    [Fact]
+    public async Task ReadEmbeddedAsyncDeletesItsOwnedTemporarySrtWhenExtractionThrows()
+    {
+        var extractor = new FakeCueExtractor("partial", new OperationCanceledException());
+        var reader = new SubtitleCueReader(extractor, new SrtParser());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reader.ReadEmbeddedAsync(
+            "movie.mkv", new SubtitleTrack(1, "subrip", "eng", null, true)));
+
+        Assert.NotNull(extractor.OutputPath);
+        Assert.False(File.Exists(extractor.OutputPath));
     }
 
     [Fact]
@@ -51,7 +52,7 @@ public sealed class SubtitleCueReaderTests
         try
         {
             var original = await File.ReadAllTextAsync(selectedSrt);
-            var reader = new SubtitleCueReader(new FakeCueExtractor("unused.srt"), new SrtParser());
+            var reader = new SubtitleCueReader(new FakeCueExtractor("unused"), new SrtParser());
 
             var cues = await reader.ReadFileAsync(selectedSrt);
 
@@ -71,9 +72,17 @@ public sealed class SubtitleCueReaderTests
         return path;
     }
 
-    private sealed class FakeCueExtractor(string temporarySrt) : ISubtitleCueExtractor
+    private sealed class FakeCueExtractor(string content, Exception? failure = null) : ISubtitleCueExtractor
     {
-        public Task<string> ExtractToTemporarySrtAsync(string mediaPath, SubtitleTrack track,
-            IProgress<string>? status = null, CancellationToken cancellationToken = default) => Task.FromResult(temporarySrt);
+        public string? OutputPath { get; private set; }
+
+        public async Task ExtractToSrtAsync(string mediaPath, SubtitleTrack track, string outputPath,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default)
+        {
+            OutputPath = outputPath;
+            await File.WriteAllTextAsync(outputPath, content, cancellationToken);
+            if (failure is not null)
+                throw failure;
+        }
     }
 }

@@ -16,18 +16,15 @@ public sealed class SubtitleCueReader(ISubtitleCueExtractor extractionService, S
         ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
         ArgumentNullException.ThrowIfNull(track);
 
-        string? temporarySrt = null;
+        var temporarySrt = Path.Combine(Path.GetTempPath(), "NapisyPL-" + Guid.NewGuid().ToString("N") + ".srt");
         try
         {
-            temporarySrt = await extractionService.ExtractToTemporarySrtAsync(videoPath, track, status, cancellationToken);
+            await extractionService.ExtractToSrtAsync(videoPath, track, temporarySrt, status, cancellationToken);
             return await ReadAndValidateAsync(temporarySrt, cancellationToken);
         }
         finally
         {
-            if (temporarySrt is not null)
-            {
-                try { File.Delete(temporarySrt); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-            }
+            try { File.Delete(temporarySrt); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 

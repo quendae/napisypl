@@ -14,9 +14,10 @@ public enum SubtitleFallbackAction
 }
 
 public sealed record SubtitleFallbackRequest(
-    DownloadedSubtitles? AutomaticPolish,
+    DownloadedSubtitles? PolishCandidate,
     SubtitleTimingAnalysis? TimingAnalysis,
-    bool HasEmbeddedEnglish);
+    bool HasEmbeddedTextTrack,
+    bool HasAutomaticallyTranslatableEmbeddedEnglish);
 
 /// <summary>
 /// A selection from the single-file fallback UI. Interactive QNapi supplies its parsed Polish candidate here so
