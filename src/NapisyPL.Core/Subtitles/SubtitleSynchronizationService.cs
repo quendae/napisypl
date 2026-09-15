@@ -112,6 +112,8 @@ public sealed class SubtitleSynchronizationService
             .Select(match => match.ResidualTicks)
             .OrderBy(residual => residual)
             .ToArray();
+        var candidateCuesInReferenceTimeline = candidate.Count(cue =>
+            OverlapsReferenceTimeline(cue, transform, referenceStarts[0], referenceEnds[^1]));
         var median = residuals.Length == 0 ? long.MaxValue : (long)Math.Round(Median(residuals.Select(value => (double)value).ToArray()));
         var p90 = residuals.Length == 0 ? long.MaxValue : residuals[(int)Math.Ceiling(residuals.Length * 0.9) - 1];
         var transformedValid = candidate.All(cue =>
@@ -123,7 +125,9 @@ public sealed class SubtitleSynchronizationService
         return new Evaluation(
             transform,
             matches.CompleteMatchedCueCount,
-            matches.CompleteMatchedCueCount / (double)Math.Max(referenceStarts.Length, candidate.Count),
+            Math.Min(
+                matches.CompleteMatchedCueCount / (double)referenceStarts.Length,
+                candidateCuesInReferenceTimeline == 0 ? 0 : matches.CompleteMatchedCueCount / (double)candidateCuesInReferenceTimeline),
             median,
             p90,
             transformedValid);
@@ -231,6 +235,18 @@ public sealed class SubtitleSynchronizationService
         CandidateScales.Any(candidateScale => Math.Abs(scale - candidateScale) <= 0.005);
 
     private static long ScaleTicks(long ticks, double scale) => (long)Math.Round(ticks * scale);
+
+    private static bool OverlapsReferenceTimeline(
+        SubtitleCue cue,
+        SubtitleTimeTransform transform,
+        long referenceStart,
+        long referenceEnd)
+    {
+        var transformedStart = TransformTicks(cue.Start.Ticks, transform);
+        var transformedEnd = TransformTicks(cue.End.Ticks, transform);
+        return transformedEnd >= referenceStart - InitialResidualWindow.Ticks &&
+               transformedStart <= referenceEnd + InitialResidualWindow.Ticks;
+    }
 
     private static long TransformTicks(long ticks, SubtitleTimeTransform transform) =>
         (long)Math.Round(ticks * transform.Scale + transform.Offset.Ticks);

@@ -167,7 +167,7 @@ public sealed class SubtitleSynchronizationServiceTests
     }
 
     [Fact]
-    public void Analyze_PrefersBroadDialogueFitOverTwelveTrailingCredits()
+    public void Analyze_IgnoresTwelveTrailingCreditsWhenScoringDialogueCoverage()
     {
         var reference = Timeline(10, 10, 10);
         var dialogue = reference
@@ -178,9 +178,9 @@ public sealed class SubtitleSynchronizationServiceTests
 
         var analysis = new SubtitleSynchronizationService().Analyze(reference, candidate);
 
-        Assert.Equal(SubtitleSyncDecision.Rejected, analysis.Decision);
+        Assert.Equal(SubtitleSyncDecision.Aligned, analysis.Decision);
         Assert.InRange(analysis.Transform.Offset.TotalMilliseconds, -101, -99);
-        Assert.InRange(analysis.MatchedCueCoverage, 0.45, 0.46);
+        Assert.InRange(analysis.MatchedCueCoverage, 0.99, 1);
     }
 
     [Fact]
