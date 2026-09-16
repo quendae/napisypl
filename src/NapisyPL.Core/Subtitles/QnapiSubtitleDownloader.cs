@@ -13,6 +13,7 @@ public delegate Task<QnapiProcessResult> QnapiProcessInvoker(
 
 public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveSubtitleDownloader
 {
+    private const int SubtitlesNotFoundExitCode = 6;
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
     private static readonly TimeSpan InteractiveProcessTimeout = TimeSpan.FromMinutes(5);
     private readonly IQnapiRuntime _runtime;
@@ -89,6 +90,14 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
             cancellationToken.ThrowIfCancellationRequested();
             if (!File.Exists(outputPath))
             {
+                if (processResult.ExitCode == SubtitlesNotFoundExitCode)
+                {
+                    status?.Report(language == SubtitleLanguage.Polish
+                        ? "QNapi nie znalazło polskich napisów (kod 6 — brak wyników)."
+                        : "QNapi nie znalazło angielskich napisów (kod 6 — brak wyników).");
+                    return null;
+                }
+
                 if (processResult.ExitCode != 0)
                 {
                     var detail = FirstUsefulLine(processResult.StandardError, processResult.StandardOutput);

@@ -13,7 +13,8 @@ public sealed class OriginalSubtitleExportUiTests
         Assert.Contains("Content=\"Wyciągnij oryginalne napisy z pliku\"", axaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OnExtractOriginalSubtitleClick\"", axaml, StringComparison.Ordinal);
         Assert.Contains("OriginalSubtitleExportPath.Build", codeBehind, StringComparison.Ordinal);
-        Assert.Contains("ExtractToSrtAsync", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("OriginalSubtitleExportService", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("ExportAsync", codeBehind, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

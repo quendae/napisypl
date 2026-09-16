@@ -34,9 +34,10 @@ public partial class MainWindow
             var extraction = new SubtitleExtractionService(
                 new FfmpegManager(_httpClient),
                 new ProcessRunner());
+            var export = new OriginalSubtitleExportService(extraction);
             var statusProgress = new Progress<string>(message => SetStatus(message, StatusKind.Normal));
 
-            await extraction.ExtractToSrtAsync(
+            await export.ExportAsync(
                 _inputPath,
                 track,
                 outputPath,

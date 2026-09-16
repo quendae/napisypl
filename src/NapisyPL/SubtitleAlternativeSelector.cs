@@ -121,7 +121,8 @@ public sealed class SubtitleAlternativeSelector(
             var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, actionToken);
             if (chosen is null)
             {
-                detail.Text = "Nie wybrano pliku w QNapi. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
+                detail.Text = "QNapi nie znalazło wyników albo zamknięto wybór bez zapisania napisów. " +
+                              "Wybierz inną alternatywę albo przejdź do tłumaczenia.";
                 return null;
             }
             return new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: chosen);

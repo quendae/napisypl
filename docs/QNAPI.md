@@ -19,13 +19,13 @@ qnapi.exe -q -d -l pl -lb pl -f SRT -e npl<losowy_id> <film>
 qnapi.exe -q -d -l en -lb en -f SRT -e npl<losowy_id> <film>
 ```
 
-Losowe, alfanumeryczne rozszerzenie izoluje plik wyjściowy. QNapi nie dotyka istniejącego `.srt` ani `.pl.srt`. NapisyPL odczytuje utworzony plik, sprawdza strukturę i czasy SRT, a następnie usuwa plik tymczasowy. Brak takiego pliku oznacza brak wyniku, ponieważ [kod CLI QNapi nie przekazuje zwykłych błędów pojedynczego pliku w końcowym kodzie wyjścia](https://github.com/QNapi/qnapi/blob/master/cli/src/clisubtitlesdownloader.cpp).
+Losowe, alfanumeryczne rozszerzenie izoluje plik wyjściowy. QNapi nie dotyka istniejącego `.srt` ani `.pl.srt`. NapisyPL odczytuje utworzony plik, sprawdza strukturę i czasy SRT, a następnie usuwa plik tymczasowy. Kod wyjścia `6` oznacza w QNapi brak znalezionych napisów i nie jest traktowany jak awaria programu. Pozostałe niezerowe kody bez prawidłowego pliku wynikowego są zgłaszane jako błędy.
 
 Gdy film ma osadzoną tekstową ścieżkę angielską, NapisyPL porównuje z nią granice czasowe polskiego wyniku. Zgodne napisy pozostają bez zmian; dobrze potwierdzone przesunięcie albo różnica standardowego FPS jest korygowana przed zapisem. Wynik o zbyt słabym pokryciu lub dużym błędzie czasowym nie jest automatycznie używany.
 
 Gdy automatycznie znaleziony polski plik nie pasuje pewnie do czasów osadzonej angielskiej ścieżki, dla pojedynczego filmu aplikacja pokazuje krótkie okno wyboru. Pozwala ono uruchomić QNapi bez `-q`, aby wybrać alternatywny wynik w jego własnym oknie, albo wskazać lokalny plik `.srt`. Oba źródła są ponownie sprawdzane względem czasów filmu; lokalny plik nie jest zmieniany. Tłumaczenie angielskich napisów jest ostatnią alternatywą. Przetwarzanie folderu pozostaje nieinteraktywne.
 
-Obok programu znajduje się kontrolowany `qnapi.ini`. Włącza konwersję do UTF-8/SRT, tryb bez okien i wyszukiwanie do pierwszego wyniku. Wyłącza stary silnik OpenSubtitles XML-RPC. Pozostają silniki NapiProjekt oraz Napisy24. Interaktywne uruchomienie nie zmienia wspólnego `qnapi.ini`; różni się wyłącznie brakiem `-q` i `CreateNoWindow=false`. Także ono używa prywatnego losowego rozszerzenia pliku wyjściowego.
+Obok programu znajduje się kontrolowany `qnapi.ini`. Włącza konwersję do UTF-8/SRT i listę wyboru wyników. Wyłącza stary silnik OpenSubtitles XML-RPC. Pozostają silniki NapiProjekt oraz Napisy24. Automatyczne uruchomienie przekazuje `-q`, więc mimo tych ustawień pozostaje ciche i wybiera wynik bez pytania. Uruchomienie interaktywne pomija `-q`, pokazuje listę QNapi i także używa prywatnego losowego rozszerzenia pliku wyjściowego.
 
 ## Dlaczego OpenSubtitles jest wyłączony
 

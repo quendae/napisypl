@@ -172,9 +172,9 @@ public sealed class QnapiRuntimeManager : IQnapiRuntime
             firstrun=false
             ui_language=en
             no_backup=true
-            quiet_batch=true
+            quiet_batch=false
             search_policy=0
-            download_policy=2
+            download_policy=0
             post_processing=true
             encoding_method=1
             enc_from=windows-1250

@@ -25,9 +25,10 @@ public sealed class QnapiRuntimeManagerTests
         Assert.Equal(Path.Combine(fixture.Root, "test", "qnapi.exe"), executable);
         var config = await File.ReadAllTextAsync(Path.Combine(fixture.Root, "test", "qnapi.ini"));
         Assert.Contains("post_processing=true", config, StringComparison.Ordinal);
+        Assert.Contains("quiet_batch=false", config, StringComparison.Ordinal);
         Assert.Contains("enc_to=UTF-8", config, StringComparison.Ordinal);
         Assert.Contains("search_policy=0", config, StringComparison.Ordinal);
-        Assert.Contains("download_policy=2", config, StringComparison.Ordinal);
+        Assert.Contains("download_policy=0", config, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles:off", config, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateDirectories(fixture.Root, ".install-*", SearchOption.TopDirectoryOnly));
     }

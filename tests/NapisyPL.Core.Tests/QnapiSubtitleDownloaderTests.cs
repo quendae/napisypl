@@ -109,6 +109,47 @@ public sealed class QnapiSubtitleDownloaderTests
     }
 
     [Fact]
+    public async Task DownloadInteractiveAsync_ReturnsNullWhenQnapiReportsNoSubtitles()
+    {
+        using var fixture = new QnapiFixture();
+        var messages = new List<string>();
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            (_, _) => Task.FromResult(new QnapiProcessResult(6, string.Empty, string.Empty)));
+
+        var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish, new SynchronousProgress(messages));
+
+        Assert.Null(result);
+        Assert.Contains("QNapi nie znalazło polskich napisów (kod 6 — brak wyników).", messages);
+    }
+
+    [Fact]
+    public async Task DownloadInteractiveAsync_ParsesOwnedSidecarEvenWhenExitCodeIsSix()
+    {
+        using var fixture = new QnapiFixture();
+        var downloader = new QnapiSubtitleDownloader(
+            fixture.Runtime,
+            new SrtParser(),
+            async (startInfo, cancellationToken) =>
+            {
+                var output = Path.ChangeExtension(fixture.VideoPath, ArgumentValue(startInfo.ArgumentList, "-e"));
+                await File.WriteAllTextAsync(
+                    output,
+                    "1\n00:00:01,000 --> 00:00:02,000\nWybrane napisy.\n",
+                    cancellationToken);
+                return new QnapiProcessResult(6, string.Empty, string.Empty);
+            });
+
+        var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
+            fixture.VideoPath, SubtitleLanguage.Polish);
+
+        Assert.NotNull(result);
+        Assert.Equal("Wybrane napisy.", result.Cues.Single().Text);
+    }
+
+    [Fact]
     public async Task DownloadInteractiveAsync_UsesLongerTimeoutThanAutomaticSearch()
     {
         using var fixture = new QnapiFixture();
@@ -249,6 +290,11 @@ public sealed class QnapiSubtitleDownloaderTests
         var index = arguments.IndexOf(option);
         Assert.True(index >= 0 && index + 1 < arguments.Count, $"Missing value for {option}.");
         return arguments[index + 1];
+    }
+
+    private sealed class SynchronousProgress(List<string> messages) : IProgress<string>
+    {
+        public void Report(string value) => messages.Add(value);
     }
 
     private sealed class QnapiFixture : IDisposable
