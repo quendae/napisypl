@@ -49,6 +49,9 @@ public sealed class SubtitleSearchUiTests
         Assert.Contains("catch (Exception ex)", selector, StringComparison.Ordinal);
         Assert.Contains("dialog.IsVisible", selector, StringComparison.Ordinal);
         Assert.Contains("new CancellationTokenSource(interactive ? InteractiveProcessTimeout : _processTimeout)", downloader, StringComparison.Ordinal);
+        Assert.Contains("ContinueWithEnglishFallback", selector, StringComparison.Ordinal);
+        Assert.Contains("CreateLinkedTokenSource", selector, StringComparison.Ordinal);
+        Assert.Contains("activeActionCancellation?.Cancel()", selector, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

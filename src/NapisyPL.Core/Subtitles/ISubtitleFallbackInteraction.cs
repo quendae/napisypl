@@ -10,6 +10,7 @@ public enum SubtitleFallbackAction
     ApplyRecommendedTransform,
     UseWithoutChanges,
     TranslateEmbeddedEnglish,
+    ContinueWithEnglishFallback,
     Cancel
 }
 

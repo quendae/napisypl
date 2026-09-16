@@ -216,6 +216,54 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task InteractiveContinueWithEnglishFallbackDownloadsEnglishWhenNoEmbeddedCuesExist()
+    {
+        var inner = new FakePipeline();
+        var downloader = new FakeDownloader(language => language == SubtitleLanguage.Polish
+            ? null
+            : new DownloadedSubtitles(SubtitleLanguage.English, "QNapi", English));
+        var service = new SubtitleAcquisitionPipeline(inner, downloader, new FakeCueReader(English), new SubtitleSynchronizationService());
+
+        await service.TranslateInteractiveAsync(Video, null,
+            new FakeFallback(new SubtitleFallbackChoice(SubtitleFallbackAction.ContinueWithEnglishFallback)), NoTranslator(), false);
+
+        Assert.Equal([SubtitleLanguage.Polish, SubtitleLanguage.English], downloader.Calls);
+        Assert.Same(English, inner.Cues);
+    }
+
+    [Fact]
+    public async Task InteractiveContinueWithEnglishFallbackDownloadsEnglishAfterEmbeddedReadFails()
+    {
+        var inner = new FakePipeline();
+        var downloader = new FakeDownloader(language => language == SubtitleLanguage.Polish
+            ? null
+            : new DownloadedSubtitles(SubtitleLanguage.English, "QNapi", English));
+        var service = new SubtitleAcquisitionPipeline(inner, downloader,
+            new ThrowingCueReader(new InvalidDataException("embedded track unavailable")), new SubtitleSynchronizationService());
+
+        await service.TranslateInteractiveAsync(Video, new SubtitleTrack(4, "subrip", "eng", null, true),
+            new FakeFallback(new SubtitleFallbackChoice(SubtitleFallbackAction.ContinueWithEnglishFallback)), NoTranslator(), false);
+
+        Assert.Equal([SubtitleLanguage.Polish, SubtitleLanguage.English], downloader.Calls);
+        Assert.Same(English, inner.Cues);
+    }
+
+    [Fact]
+    public async Task InteractiveContinueWithEnglishFallbackUsesTaggedEmbeddedEnglishBeforeQnapi()
+    {
+        var embedded = Cues(0, "English");
+        var inner = new FakePipeline();
+        var downloader = new FakeDownloader(language => language == SubtitleLanguage.Polish ? null : throw new Exception("English QNapi must not run"));
+        var service = new SubtitleAcquisitionPipeline(inner, downloader, new FakeCueReader(embedded), new SubtitleSynchronizationService());
+
+        await service.TranslateInteractiveAsync(Video, new SubtitleTrack(4, "subrip", "eng", null, true),
+            new FakeFallback(new SubtitleFallbackChoice(SubtitleFallbackAction.ContinueWithEnglishFallback)), NoTranslator(), false);
+
+        Assert.Equal([SubtitleLanguage.Polish], downloader.Calls);
+        Assert.Same(embedded, inner.Cues);
+    }
+
+    [Fact]
     public async Task InteractiveQnapiChoiceIsAnalyzedBeforeItsPolishCandidateIsWritten()
     {
         var reference = Cues(0, "English");

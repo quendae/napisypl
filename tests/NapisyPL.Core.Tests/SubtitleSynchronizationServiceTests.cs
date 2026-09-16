@@ -74,6 +74,25 @@ public sealed class SubtitleSynchronizationServiceTests
     }
 
     [Fact]
+    public void Analyze_PrefersTighterEqualSizeOffsetClusterOverBroadNearZeroCluster()
+    {
+        var reference = Timeline(10, 10, 20);
+        var broadNearZeroShifts = new[] { -0.8, -0.4, 0.4, 0.8 };
+        var candidate = reference
+            .Select((cue, position) =>
+            {
+                var shift = position % 2 == 0 ? broadNearZeroShifts[(position / 2) % broadNearZeroShifts.Length] : 2;
+                return Cue(cue.Index + 100, cue.Start.TotalSeconds + shift, cue.End.TotalSeconds + shift);
+            })
+            .ToArray();
+
+        var analysis = new SubtitleSynchronizationService().Analyze(reference, candidate);
+
+        Assert.Equal(SubtitleSyncDecision.NeedsReview, analysis.Decision);
+        Assert.InRange(analysis.Transform.Offset.TotalSeconds, -2.001, -1.999);
+    }
+
+    [Fact]
     public void Analyze_RejectsUnrelatedTimelines()
     {
         var reference = Timeline(10, 10, 10);

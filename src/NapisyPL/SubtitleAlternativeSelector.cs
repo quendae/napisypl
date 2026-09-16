@@ -44,7 +44,7 @@ public sealed class SubtitleAlternativeSelector(
 
         var analysis = request.TimingAnalysis;
         detail.Text = request.PolishCandidate is null
-            ? "QNapi nie zwróciło polskiego pliku. Możesz wybrać inną wersję albo przejść do tłumaczenia angielskiej ścieżki."
+            ? "QNapi nie zwróciło polskiego pliku. Możesz wybrać inną wersję albo kontynuować z angielskimi napisami."
             : $"Dostawca: {request.PolishCandidate.Provider}\n" +
               $"Pokrycie: {analysis?.MatchedCueCoverage:P0} · przesunięcie: {analysis?.Transform.Offset.TotalMilliseconds:F0} ms · " +
               $"skala: {analysis?.Transform.Scale:F6} · P90: {analysis?.P90Residual.TotalMilliseconds:F0} ms\n" +
@@ -53,19 +53,25 @@ public sealed class SubtitleAlternativeSelector(
         var buttons = new List<Button>();
         var actionRunning = false;
         var closed = false;
-        dialog.Closed += (_, _) => closed = true;
+        CancellationTokenSource? activeActionCancellation = null;
+        dialog.Closed += (_, _) =>
+        {
+            closed = true;
+            activeActionCancellation?.Cancel();
+        };
 
         void Close(SubtitleFallbackChoice choice)
         {
             if (closed || !dialog.IsVisible)
                 return;
+            activeActionCancellation?.Cancel();
             closed = true;
             dialog.Close(choice);
         }
 
         bool CanContinue() => !closed && dialog.IsVisible;
 
-        Button AddButton(string text, Func<Task<SubtitleFallbackChoice?>> action)
+        Button AddButton(string text, Func<CancellationToken, Task<SubtitleFallbackChoice?>> action)
         {
             var button = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch };
             button.Click += (_, _) => _ = RunActionAsync(action);
@@ -74,15 +80,17 @@ public sealed class SubtitleAlternativeSelector(
             return button;
         }
 
-        async Task RunActionAsync(Func<Task<SubtitleFallbackChoice?>> action)
+        async Task RunActionAsync(Func<CancellationToken, Task<SubtitleFallbackChoice?>> action)
         {
             if (actionRunning || !CanContinue())
                 return;
             actionRunning = true;
             SetButtonsEnabled(false);
+            using var actionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            activeActionCancellation = actionCancellation;
             try
             {
-                var choice = await action();
+                var choice = await action(actionCancellation.Token);
                 if (choice is not null && CanContinue())
                     Close(choice);
             }
@@ -97,18 +105,20 @@ public sealed class SubtitleAlternativeSelector(
             }
             finally
             {
+                if (ReferenceEquals(activeActionCancellation, actionCancellation))
+                    activeActionCancellation = null;
                 actionRunning = false;
                 if (CanContinue())
                     SetButtonsEnabled(true);
             }
         }
 
-        AddButton("Otwórz QNapi i wybierz napisy", async () =>
+        AddButton("Otwórz QNapi i wybierz napisy", async actionToken =>
         {
             var path = videoPath();
             if (string.IsNullOrWhiteSpace(path))
                 throw new InvalidOperationException("Nie wybrano filmu dla interaktywnego QNapi.");
-            var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, cancellationToken);
+            var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, actionToken);
             if (chosen is null)
             {
                 detail.Text = "Nie wybrano pliku w QNapi. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
@@ -117,7 +127,7 @@ public sealed class SubtitleAlternativeSelector(
             return new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: chosen);
         });
 
-        AddButton("Wybierz lokalny plik SRT", async () =>
+        AddButton("Wybierz lokalny plik SRT", async _ =>
         {
             if (!owner.StorageProvider.CanOpen)
                 return null;
@@ -135,11 +145,11 @@ public sealed class SubtitleAlternativeSelector(
 
         if (request.PolishCandidate is not null && analysis?.Decision == SubtitleSyncDecision.NeedsReview)
         {
-            AddButton("Zastosuj zalecaną korektę czasu", () =>
+            AddButton("Zastosuj zalecaną korektę czasu", _ =>
             {
                 return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.ApplyRecommendedTransform));
             });
-            AddButton("Użyj bez zmiany czasu", () =>
+            AddButton("Użyj bez zmiany czasu", _ =>
             {
                 return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.UseWithoutChanges));
             });
@@ -148,12 +158,17 @@ public sealed class SubtitleAlternativeSelector(
         if (request.HasEmbeddedTextTrack)
             AddButton(request.HasAutomaticallyTranslatableEmbeddedEnglish
                     ? "Przetłumacz osadzoną angielską ścieżkę"
-                    : "Przetłumacz wybraną ścieżkę z filmu", () =>
+                    : "Przetłumacz wybraną ścieżkę z filmu", _ =>
             {
                 return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.TranslateEmbeddedEnglish));
             });
 
-        AddButton("Anuluj", () =>
+        AddButton("Kontynuuj z angielskimi napisami", _ =>
+        {
+            return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.ContinueWithEnglishFallback));
+        });
+
+        AddButton("Anuluj", _ =>
         {
             return Task.FromResult<SubtitleFallbackChoice?>(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
         });

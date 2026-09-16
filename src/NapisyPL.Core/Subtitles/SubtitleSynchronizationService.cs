@@ -156,6 +156,7 @@ public sealed class SubtitleSynchronizationService
         var clusterEnd = 0;
         var bestStart = 0;
         var bestEnd = 0;
+        var bestSpan = double.PositiveInfinity;
         var bestMedianDistance = double.PositiveInfinity;
         for (var center = 0; center < offsets.Length; center++)
         {
@@ -169,11 +170,15 @@ public sealed class SubtitleSynchronizationService
             if (count < bestCount)
                 continue;
 
+            var span = offsets[clusterEnd - 1] - offsets[clusterStart];
             var medianDistance = Math.Abs(Median(offsets, clusterStart, clusterEnd));
-            if (count > bestCount || medianDistance < bestMedianDistance)
+            if (count > bestCount ||
+                span < bestSpan ||
+                span == bestSpan && medianDistance < bestMedianDistance)
             {
                 bestStart = clusterStart;
                 bestEnd = clusterEnd;
+                bestSpan = span;
                 bestMedianDistance = medianDistance;
             }
         }

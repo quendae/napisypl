@@ -8,7 +8,7 @@
 
 1. Przeciągnij do okna film albo plik napisów.
 2. Pozostaw włączone **Najpierw szukaj polskich napisów (QNapi)** i kliknij **Pobierz napisy / tłumacz**.
-3. NapisyPL szuka kolejno napisów PL i EN. Jeśli film ma osadzoną tekstową ścieżkę angielską, sprawdza czasy znalezionych napisów PL: zgodne zostawia bez zmian, a pewną różnicę przesunięcia lub standardowego FPS koryguje automatycznie. Gdy polski wynik jest niepewny, dla pojedynczego filmu można wybrać inną wersję w QNapi albo lokalny plik SRT. Dopiero po wyczerpaniu polskich możliwości aplikacja tłumaczy angielskie napisy wybranym dostawcą.
+3. NapisyPL najpierw szuka napisów PL. Jeśli film ma osadzoną tekstową ścieżkę angielską, sprawdza czasy znalezionych napisów PL: zgodne zostawia bez zmian, a pewną różnicę przesunięcia lub standardowego FPS koryguje automatycznie. Gdy polski wynik jest niepewny, dla pojedynczego filmu można wybrać inną wersję w QNapi albo lokalny plik SRT. Po wyczerpaniu polskich możliwości aplikacja tłumaczy osadzone napisy EN; tylko gdy ich nie ma, szuka EN przez QNapi.
 
 Wynik jest zapisywany obok pliku źródłowego jako `nazwa.pl.srt`. Można dodatkowo zaznaczyć eksport `nazwa.pl.txt`. Dla wejściowego TXT wynik jest tylko TXT.
 

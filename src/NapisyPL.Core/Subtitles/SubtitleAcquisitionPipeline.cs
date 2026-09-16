@@ -197,6 +197,9 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
                         return await _translationPipeline.TranslateVideoSubtitlesAsync(inputPath, embeddedCues, provider,
                             exportTxt, translationProgress, status, cancellationToken);
 
+                    case SubtitleFallbackAction.ContinueWithEnglishFallback:
+                        goto ContinueWithEnglishFallback;
+
                     case SubtitleFallbackAction.Cancel:
                         throw new OperationCanceledException("Wybór alternatywnych napisów został anulowany.", cancellationToken);
 
@@ -206,6 +209,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             }
         }
 
+    ContinueWithEnglishFallback:
         if (embeddedCues is not null && IsEnglish(selectedTrack))
         {
             status?.Report("Używam angielskiej ścieżki z filmu jako źródła tłumaczenia.");

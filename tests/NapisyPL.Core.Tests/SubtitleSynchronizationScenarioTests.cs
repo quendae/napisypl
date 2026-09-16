@@ -8,6 +8,12 @@ namespace NapisyPL.Core.Tests;
 
 public sealed class SubtitleSynchronizationScenarioTests : IDisposable
 {
+    private static readonly int[] JitterMilliseconds =
+    [
+        -20, 20, -20, 20, -40, 40, -40, 40, -67, 67,
+        -67, 67, -120, 120, -120, 120, -193, 193, -193, 193
+    ];
+
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "NapisyPL-sync-scenario-" + Guid.NewGuid().ToString("N"));
 
     public SubtitleSynchronizationScenarioTests() => Directory.CreateDirectory(_directory);
@@ -24,12 +30,14 @@ public sealed class SubtitleSynchronizationScenarioTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(802, reference.Length);
-        Assert.Equal(768, candidate.Where(cue => !cue.Text.StartsWith("provider credit", StringComparison.Ordinal)).Count());
+        Assert.Equal(768, candidate.Length);
+        Assert.Equal(766, candidate.Where(cue => !cue.Text.StartsWith("provider credit", StringComparison.Ordinal)).Count());
         Assert.Equal(2, candidate.Where(cue => cue.Text.StartsWith("provider credit", StringComparison.Ordinal)).Count());
         Assert.Equal(SubtitleSyncDecision.Aligned, analysis.Decision);
         Assert.InRange(analysis.Transform.Scale, 0.999, 1.001);
-        Assert.InRange(analysis.Transform.Offset.TotalMilliseconds, -101, -99);
-        Assert.True(analysis.P90Residual < TimeSpan.FromMilliseconds(350), analysis.ToString());
+        Assert.InRange(analysis.Transform.Offset.TotalMilliseconds, -120, -80);
+        Assert.InRange(analysis.MedianResidual.TotalMilliseconds, 60, 75);
+        Assert.InRange(analysis.P90Residual.TotalMilliseconds, 180, 210);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10),
             $"Synchronizing 802 reference and 768 downloaded cues took {stopwatch.Elapsed}.");
 
@@ -100,7 +108,7 @@ public sealed class SubtitleSynchronizationScenarioTests : IDisposable
         var merged = Enumerable.Range(0, 20).Select(index => index * 40).ToHashSet();
         var omitted = reference.Select((_, index) => index)
             .Where(index => !merged.Contains(index) && !merged.Contains(index - 1))
-            .Take(14)
+            .Take(16)
             .ToHashSet();
         var candidate = new List<SubtitleCue>();
         for (var index = 0; index < reference.Count; index++)
@@ -108,16 +116,16 @@ public sealed class SubtitleSynchronizationScenarioTests : IDisposable
             if (merged.Contains(index) && index + 1 < reference.Count)
             {
                 candidate.Add(new SubtitleCue(candidate.Count + 1,
-                    reference[index].Start.Add(TimeSpan.FromMilliseconds(100)),
-                    reference[index + 1].End.Add(TimeSpan.FromMilliseconds(100)),
+                    Shift(reference[index].Start, index),
+                    Shift(reference[index + 1].End, index + 1),
                     "merged Polish cue " + (index + 1)));
                 index++;
             }
             else if (!omitted.Contains(index))
             {
                 candidate.Add(new SubtitleCue(candidate.Count + 1,
-                    reference[index].Start.Add(TimeSpan.FromMilliseconds(100)),
-                    reference[index].End.Add(TimeSpan.FromMilliseconds(100)),
+                    Shift(reference[index].Start, index),
+                    Shift(reference[index].End, index),
                     "Polish cue " + (index + 1)));
             }
         }
@@ -129,6 +137,9 @@ public sealed class SubtitleSynchronizationScenarioTests : IDisposable
         }
         return candidate.ToArray();
     }
+
+    private static TimeSpan Shift(TimeSpan timestamp, int index) =>
+        timestamp.Add(TimeSpan.FromMilliseconds(100 + JitterMilliseconds[index % JitterMilliseconds.Length]));
 
     private sealed class FakeCueReader(IReadOnlyList<SubtitleCue> embedded) : ISubtitleCueReader
     {
