@@ -9,6 +9,7 @@ public sealed class AppLogger : IAppLogger
     {
         "provider", "model", "file", "segmentCount", "characterCount", "batch", "batchCount",
         "elapsedMs", "httpStatus", "category", "version", "result", "reason", "reasonCode", "stage",
+        "action", "sourceWordCount", "outputWordCount", "initialIssueCount", "retryCount", "remainingIssueCount", "fallbackCount",
         "fileIndex", "fileCount", "completed", "skipped", "failed", "candidateCount",
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
         "responseChars", "speakerCount", "uniqueSpeakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",

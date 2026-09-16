@@ -246,14 +246,29 @@ public sealed class EnhancedTranslationPipeline(
             var finalQualityIssues = FinalTranslationQualityGate.Evaluate(sourceCues, reviewed);
             foreach (var issue in finalQualityIssues)
             {
-                logger?.Error(
+                logger?.Info(
                     "translation_quality_issue",
                     ("file", file),
                     ("cue", issue.CueId),
                     ("reason", issue.Reason),
                     ("sourceWordCount", issue.SourceWordCount),
                     ("outputWordCount", issue.OutputWordCount),
-                    ("action", "blocked_after_retry"));
+                    ("action", "source_fallback_after_retry"));
+            }
+
+            var qualityFallbackCueIds = finalQualityIssues
+                .Select(issue => issue.CueId)
+                .ToHashSet();
+            var qualityFallbackCueList = string.Join(", ", qualityFallbackCueIds.Order());
+            if (finalQualityIssues.Count > 0)
+            {
+                reviewed = FinalTranslationQualityGate.ReplaceIssuesWithSource(
+                    sourceCues,
+                    reviewed,
+                    finalQualityIssues);
+                status?.Report(
+                    $"Quality Pass: {finalQualityIssues.Count} cue nadal było uszkodzonych po retry — " +
+                    $"pozostawiam oryginalny tekst angielski (cue: {qualityFallbackCueList}) i zapisuję pozostałe tłumaczenie.");
             }
 
             logger?.Info(
@@ -264,17 +279,13 @@ public sealed class EnhancedTranslationPipeline(
                 ("initialIssueCount", initialQualityIssues.Count),
                 ("retryCount", qualityRetryCount),
                 ("remainingIssueCount", finalQualityIssues.Count),
-                ("result", finalQualityIssues.Count == 0 ? "success" : "blocked"));
-
-            if (finalQualityIssues.Count > 0)
-            {
-                var cueList = string.Join(", ", finalQualityIssues.Take(8).Select(issue => issue.CueId));
-                throw new InvalidOperationException(
-                    $"Quality Pass zatrzymał zapis: {finalQualityIssues.Count} cue nadal wygląda na zdegenerowane po retry (cue: {cueList}).");
-            }
+                ("fallbackCount", finalQualityIssues.Count),
+                ("result", finalQualityIssues.Count == 0 ? "success" : "source_fallback"));
 
             var changedCount = reviewed.Zip(translated)
-                .Count(pair => !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
+                .Count(pair =>
+                    !qualityFallbackCueIds.Contains(pair.First.Index) &&
+                    !string.Equals(pair.First.Text, pair.Second.Text, StringComparison.Ordinal));
 
             var sourcePositions = sourceCues
                 .Select((cue, position) => (cue.Index, position))
@@ -359,8 +370,10 @@ public sealed class EnhancedTranslationPipeline(
             }
 
             var hardVoiceResolvedCount = genderDiagnostics.Count(item =>
+                !qualityFallbackCueIds.Contains(item.CueId) &&
                 string.Equals(item.Resolver, "hard_voice_sequence", StringComparison.Ordinal) && item.GatePassed);
             var hardVoiceChangedCount = genderDiagnostics.Count(item =>
+                !qualityFallbackCueIds.Contains(item.CueId) &&
                 string.Equals(item.Resolver, "hard_voice_sequence", StringComparison.Ordinal) && item.Changed);
             var localTurnResolvedCount = HardVoiceTurnOnly
                 ? 0
@@ -395,20 +408,28 @@ public sealed class EnhancedTranslationPipeline(
 
             var directory = Path.GetDirectoryName(inputPath) ?? Environment.CurrentDirectory;
             var stem = Path.GetFileNameWithoutExtension(inputPath);
-            var srtOutput = Path.Combine(directory, stem + ".pl.srt");
-            status?.Report(HardVoiceTurnOnly
-                ? $"Enhanced test M/K: Quality Pass OK, zapisuję wynik — zmieniono {changedCount} kwestii…"
-                : $"Enhanced: Quality Pass OK, zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
+            var requiresReview = qualityFallbackCueIds.Count > 0;
+            var outputSuffix = requiresReview ? ".needs-review.pl" : ".pl";
+            var srtOutput = Path.Combine(directory, stem + outputSuffix + ".srt");
+            status?.Report(requiresReview
+                ? $"Quality Pass: zapisuję wynik do sprawdzenia — {qualityFallbackCueIds.Count} cue pozostało po angielsku…"
+                : HardVoiceTurnOnly
+                    ? $"Enhanced test M/K: Quality Pass OK, zapisuję wynik — zmieniono {changedCount} kwestii…"
+                    : $"Enhanced: Quality Pass OK, zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
             string? txtOutput = null;
             if (exportTxt)
             {
-                txtOutput = Path.Combine(directory, stem + ".pl.txt");
+                txtOutput = Path.Combine(directory, stem + outputSuffix + ".txt");
                 await writer.WriteTxtAsync(txtOutput, reviewed, cancellationToken);
             }
 
-            return new TranslationResult(srtOutput, txtOutput, reviewed.Count);
+            var reviewMessage = requiresReview
+                ? $"{qualityFallbackCueIds.Count} cue pozostało w oryginalnym języku po dwóch wadliwych wynikach modelu " +
+                  $"(cue: {qualityFallbackCueList}). Plik wymaga sprawdzenia."
+                : null;
+            return new TranslationResult(srtOutput, txtOutput, reviewed.Count, requiresReview, reviewMessage);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

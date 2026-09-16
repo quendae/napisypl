@@ -22,6 +22,7 @@ public sealed class FolderBatchService(
         var queue = planner.Plan(folder, exportTxt);
         var files = new List<FolderFileResult>(queue.Count);
         var translated = 0;
+        var reviewNeeded = 0;
         var skipped = 0;
         var failed = 0;
 
@@ -93,10 +94,30 @@ public sealed class FolderBatchService(
                         new FolderBatchProgress(fileIndex, queue.Count, fileName, null, "preparing", message))),
                     cancellationToken: cancellationToken);
 
-                translated++;
-                files.Add(new FolderFileResult(item.InputPath, FolderFileStatus.Translated, result.PrimaryOutputPath));
-                logger.Info("folder_file_done", ("file", fileName), ("result", "translated"));
-                progress?.Report(new FolderBatchProgress(fileIndex, queue.Count, fileName, null, "completed"));
+                if (result.RequiresReview)
+                {
+                    reviewNeeded++;
+                    files.Add(new FolderFileResult(
+                        item.InputPath,
+                        FolderFileStatus.NeedsReview,
+                        result.PrimaryOutputPath,
+                        "requires_review"));
+                    logger.Info("folder_file_done", ("file", fileName), ("result", "needs_review"));
+                    progress?.Report(new FolderBatchProgress(
+                        fileIndex,
+                        queue.Count,
+                        fileName,
+                        null,
+                        "needs_review",
+                        result.ReviewMessage));
+                }
+                else
+                {
+                    translated++;
+                    files.Add(new FolderFileResult(item.InputPath, FolderFileStatus.Translated, result.PrimaryOutputPath));
+                    logger.Info("folder_file_done", ("file", fileName), ("result", "translated"));
+                    progress?.Report(new FolderBatchProgress(fileIndex, queue.Count, fileName, null, "completed"));
+                }
             }
             catch (OperationCanceledException)
             {
@@ -111,7 +132,7 @@ public sealed class FolderBatchService(
             }
         }
 
-        return new FolderBatchResult(translated, skipped, failed, files);
+        return new FolderBatchResult(translated, skipped, failed, files, reviewNeeded);
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

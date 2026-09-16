@@ -199,6 +199,37 @@ public sealed class FolderBatchServiceTests
         }
     }
 
+    [Fact]
+    public async Task TranslateFolderAsync_ReportsOutputThatRequiresReviewSeparatelyFromCompletedTranslation()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var input = Path.Combine(root, "episode.srt");
+            File.WriteAllText(input, "input");
+            var pipeline = new FakePipeline(shouldReview: _ => true);
+            var reports = new List<FolderBatchProgress>();
+            var service = new FolderBatchService(new FolderQueuePlanner(), new FakeProbe(), pipeline, NullAppLogger.Instance);
+
+            var result = await service.TranslateFolderAsync(
+                root,
+                new FakeProvider(),
+                exportTxt: false,
+                new InlineProgress<FolderBatchProgress>(reports.Add));
+
+            Assert.Equal(0, result.Translated);
+            Assert.Equal(1, result.ReviewNeeded);
+            var file = Assert.Single(result.Files);
+            Assert.Equal(FolderFileStatus.NeedsReview, file.Status);
+            Assert.Equal("requires_review", file.ReasonCode);
+            Assert.Contains(reports, report => report.Stage == "needs_review");
+        }
+        finally
+        {
+            DeleteTempDirectory(root);
+        }
+    }
+
     private sealed class FakeProbe : IMediaProbeService
     {
         public IReadOnlyList<SubtitleTrack> Result { get; set; } = [];
@@ -207,7 +238,9 @@ public sealed class FolderBatchServiceTests
             Task.FromResult(Result);
     }
 
-    private sealed class FakePipeline(Func<string, bool>? shouldThrow = null) : ITranslationPipeline
+    private sealed class FakePipeline(
+        Func<string, bool>? shouldThrow = null,
+        Func<string, bool>? shouldReview = null) : ITranslationPipeline
     {
         public List<string> Calls { get; } = [];
         public List<SubtitleTrack?> Tracks { get; } = [];
@@ -229,7 +262,13 @@ public sealed class FolderBatchServiceTests
             var output = Path.Combine(
                 Path.GetDirectoryName(inputPath)!,
                 Path.GetFileNameWithoutExtension(inputPath) + (Path.GetExtension(inputPath).Equals(".txt", StringComparison.OrdinalIgnoreCase) ? ".pl.txt" : ".pl.srt"));
-            return Task.FromResult(new TranslationResult(output, null, 1));
+            var requiresReview = shouldReview?.Invoke(inputPath) == true;
+            return Task.FromResult(new TranslationResult(
+                output,
+                null,
+                1,
+                requiresReview,
+                requiresReview ? "cue 326" : null));
         }
     }
 

@@ -95,6 +95,30 @@ public static partial class FinalTranslationQualityGate
         return null;
     }
 
+    public static IReadOnlyList<SubtitleCue> ReplaceIssuesWithSource(
+        IReadOnlyList<SubtitleCue> sourceCues,
+        IReadOnlyList<SubtitleCue> translatedCues,
+        IReadOnlyCollection<TranslationQualityIssue> issues)
+    {
+        ArgumentNullException.ThrowIfNull(sourceCues);
+        ArgumentNullException.ThrowIfNull(translatedCues);
+        ArgumentNullException.ThrowIfNull(issues);
+
+        var sourceById = sourceCues.ToDictionary(cue => cue.Index);
+        var issueIds = issues.Select(issue => issue.CueId).ToHashSet();
+        foreach (var cueId in issueIds)
+        {
+            if (!sourceById.ContainsKey(cueId))
+                throw new InvalidDataException($"Quality fallback: missing source cue {cueId}.");
+        }
+
+        return translatedCues
+            .Select(cue => issueIds.Contains(cue.Index)
+                ? cue with { Text = sourceById[cue.Index].Text }
+                : cue)
+            .ToArray();
+    }
+
     private static string[] WordTokens(string text) =>
         WordRegex().Matches(text)
             .Select(match => match.Value.ToLowerInvariant())

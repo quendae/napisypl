@@ -426,8 +426,14 @@ public partial class MainWindow : Window
 
         _lastOutputPath = result.PrimaryOutputPath;
         ProgressBar.Value = 100;
-        BatchDetailText.Text = $"Segment {result.SegmentCount} / {result.SegmentCount} · gotowe";
-        SetStatus($"Gotowe — {result.SegmentCount} kwestii w {Path.GetFileName(result.PrimaryOutputPath)}", StatusKind.Success);
+        BatchDetailText.Text = result.RequiresReview
+            ? $"Segment {result.SegmentCount} / {result.SegmentCount} · wymaga sprawdzenia"
+            : $"Segment {result.SegmentCount} / {result.SegmentCount} · gotowe";
+        SetStatus(
+            result.RequiresReview
+                ? $"Zapisano wynik do sprawdzenia: {Path.GetFileName(result.PrimaryOutputPath)}. {result.ReviewMessage}"
+                : $"Gotowe — {result.SegmentCount} kwestii w {Path.GetFileName(result.PrimaryOutputPath)}",
+            result.RequiresReview ? StatusKind.Error : StatusKind.Success);
         OpenFolderButton.Content = "Pokaż plik";
         OpenFolderButton.IsVisible = true;
     }
@@ -451,10 +457,10 @@ public partial class MainWindow : Window
 
         ProgressBar.Value = 100;
         BatchCurrentText.Text = Path.GetFileName(folder);
-        BatchDetailText.Text = $"Gotowe {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}";
+        BatchDetailText.Text = $"Gotowe {result.Translated} · do sprawdzenia {result.ReviewNeeded} · pominięte {result.Skipped} · błędy {result.Failed}";
         SetStatus(
-            $"Zakończono — gotowe {result.Translated} · pominięte {result.Skipped} · błędy {result.Failed}.",
-            result.Failed > 0 ? StatusKind.Error : StatusKind.Success);
+            $"Zakończono — gotowe {result.Translated} · do sprawdzenia {result.ReviewNeeded} · pominięte {result.Skipped} · błędy {result.Failed}.",
+            result.Failed > 0 || result.ReviewNeeded > 0 ? StatusKind.Error : StatusKind.Success);
         OpenFolderButton.Content = "Otwórz folder";
         OpenFolderButton.IsVisible = true;
     }
@@ -495,7 +501,7 @@ public partial class MainWindow : Window
         _activeTranslationProgress = null;
         _elapsedTimer.Stop();
         BatchDetailText.Text = StageLabel(value.Stage);
-        var fileFinished = value.Stage is "completed" or "skipped" or "failed";
+        var fileFinished = value.Stage is "completed" or "needs_review" or "skipped" or "failed";
         ProgressBar.Value = value.FileCount == 0
             ? 0
             : Math.Clamp((double)(fileFinished ? value.FileIndex : value.FileIndex - 1) / value.FileCount * 100, 0, 100);
@@ -532,6 +538,7 @@ public partial class MainWindow : Window
         "preparing" => "Wyszukuję lub przygotowuję napisy…",
         "translating" => "Przygotowuję tłumaczenie…",
         "completed" => "Gotowe",
+        "needs_review" => "Zapisano — plik wymaga sprawdzenia",
         "skipped" => "Pominięto",
         "failed" => "Błąd — przechodzę do następnego pliku",
         _ => stage
