@@ -176,7 +176,7 @@ public sealed class EnhancedTranslationPipeline(
                 ("result", "success"));
 
             status?.Report(HardVoiceTurnOnly
-                ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi brzmi bardziej jak M albo K — poprawiam formy…"
+                ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi ma zaakceptowaną klasyfikację głosu — sprawdzam stabilne profile rozmówców…"
                 : $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu — poprawiam bezpieczne formy…");
             var reviewTimer = Stopwatch.StartNew();
             var genderDiagnostics = new List<DeterministicGenderCueDiagnostic>();
@@ -379,7 +379,7 @@ public sealed class EnhancedTranslationPipeline(
                 "enhanced_phase",
                 ("file", file),
                 ("stage", "deterministic_gender_review"),
-                ("reviewMode", HardVoiceTurnOnly ? "hard_voice_forced_binary" : "standard"),
+                ("reviewMode", HardVoiceTurnOnly ? "hard_voice_stable_evidence" : "standard"),
                 ("elapsedMs", reviewTimer.ElapsedMilliseconds),
                 ("segmentCount", translated.Count),
                 ("knownGenderCount", knownGenderCount),
@@ -432,7 +432,7 @@ public sealed class EnhancedTranslationPipeline(
             ("provider", provider.DisplayName),
             ("exportTxt", exportTxt),
             ("enhanced", true),
-            ("hardVoiceMode", HardVoiceTurnOnly ? "forced_binary" : "off"));
+            ("hardVoiceMode", HardVoiceTurnOnly ? "hard_voice_stable_evidence" : "off"));
 
     private static int ToPermille(double value) =>
         (int)Math.Round(Math.Clamp(value, 0, 1) * 1000, MidpointRounding.AwayFromZero);

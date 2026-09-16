@@ -6,7 +6,7 @@ namespace NapisyPL.Core.Tests;
 public sealed class HardVoiceDirectionalFallbackTests
 {
     [Fact]
-    public void Resolve_LowCombinedButDirectionalMaleThenFemale_UsesForcedDirections()
+    public void Resolve_LowCombinedDirectionalEvidence_DoesNotResolve()
     {
         var cues = new[]
         {
@@ -25,10 +25,8 @@ public sealed class HardVoiceDirectionalFallbackTests
             evidence,
             1);
 
-        Assert.True(result.IsResolved);
-        Assert.Equal(SpeakerVoiceGender.Male, result.CurrentGender);
-        Assert.Equal(SpeakerVoiceGender.Female, result.TargetGender);
-        Assert.Equal("next_cue_opposite_gender", result.ReasonCode);
+        Assert.False(result.IsResolved);
+        Assert.Equal("current_gender_unknown", result.ReasonCode);
     }
 
     [Fact]

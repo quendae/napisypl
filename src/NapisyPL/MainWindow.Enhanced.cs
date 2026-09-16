@@ -26,7 +26,7 @@ public partial class MainWindow
 
             SetStatus(
                 HardVoiceCheckBox.IsChecked == true
-                    ? "Enhanced test M/K włączony — płeć jest wymuszana z kierunku audio dla każdej wykrywalnej wypowiedzi."
+                    ? "Enhanced test M/K włączony — korekty wymagają zaakceptowanej klasyfikacji cue i stabilnego profilu rozmówcy."
                     : "Enhanced włączony — audio i kolejność rozmówców będą użyte tylko do deterministycznej korekty rodzaju.",
                 StatusKind.Normal);
         }
@@ -55,7 +55,7 @@ public partial class MainWindow
         {
             SetStatus(
                 HardVoiceCheckBox.IsChecked == true
-                    ? "Test M/K aktywny — ignoruję normalne progi pewności i wymuszam Male/Female z kierunku audio; M↔K steruje formą adresata."
+                    ? "Test M/K aktywny — używam tylko zaakceptowanej klasyfikacji cue; korekta mówiącego i adresata wymaga stabilnego profilu rozmówcy."
                     : "Test M/K wyłączony — Enhanced używa standardowych bezpiecznych resolverów.",
                 StatusKind.Normal);
         }

@@ -23,36 +23,19 @@ public sealed partial class DeterministicGenderReviewService
     private static bool TryGetHardVoiceSpeakerSelfGenderSafely(
         string? currentSpeaker,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
-        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
-        int cueId,
-        string translatedText,
         out SpeakerVoiceGender gender,
         out double confidence)
     {
         gender = SpeakerVoiceGender.Unknown;
         confidence = 0;
 
-        if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
-            speakerGenderEvidence.TryGetValue(currentSpeaker!, out var speakerEvidence) &&
-            SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
-        {
-            gender = speakerEvidence.Gender;
-            confidence = speakerEvidence.Confidence;
-            return true;
-        }
-
-        if (!cueGenderEvidence.TryGetValue(cueId, out var cueEvidence) ||
-            cueEvidence.Gender == SpeakerVoiceGender.Unknown)
-        {
-            return false;
-        }
-
-        var strongTextGender = InferStrongSelfGender(translatedText);
-        if (strongTextGender != SpeakerVoiceGender.Unknown && strongTextGender != cueEvidence.Gender)
+        if (string.IsNullOrWhiteSpace(currentSpeaker) ||
+            !speakerGenderEvidence.TryGetValue(currentSpeaker!, out var speakerEvidence) ||
+            !SpeakerGenderReviewEligibility.IsEligible(speakerEvidence))
             return false;
 
-        gender = cueEvidence.Gender;
-        confidence = cueEvidence.Confidence;
+        gender = speakerEvidence.Gender;
+        confidence = speakerEvidence.Confidence;
         return true;
     }
 

@@ -105,7 +105,8 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
 
         DownloadedSubtitles? automaticPolish = null;
         SubtitleTimingAnalysis? automaticAnalysis = null;
-        var downloadedPolish = await TryDownloadAsync(inputPath, SubtitleLanguage.Polish, failures, status, cancellationToken);
+        var polishDownload = await TryDownloadAsync(inputPath, SubtitleLanguage.Polish, failures, status, cancellationToken);
+        var downloadedPolish = polishDownload.Subtitles;
         if (downloadedPolish is not null)
         {
             automaticPolish = downloadedPolish;
@@ -128,7 +129,8 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             {
                 var choice = await fallbackInteraction.ChooseAsync(
                     new SubtitleFallbackRequest(reviewCandidate, reviewAnalysis,
-                        embeddedCues is not null, IsEnglish(selectedTrack)), status, cancellationToken)
+                        embeddedCues is not null, IsEnglish(selectedTrack),
+                        polishDownload.ProviderReportedNoSubtitles), status, cancellationToken)
                     ?? new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel);
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -217,7 +219,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
                 exportTxt, translationProgress, status, cancellationToken);
         }
 
-        var downloadedEnglish = await TryDownloadAsync(inputPath, SubtitleLanguage.English, failures, status, cancellationToken);
+        var downloadedEnglish = (await TryDownloadAsync(inputPath, SubtitleLanguage.English, failures, status, cancellationToken)).Subtitles;
         if (downloadedEnglish is not null)
         {
             status?.Report($"Znaleziono angielskie napisy ({downloadedEnglish.Provider}) — tłumaczę z zachowaniem audio filmu.");
@@ -237,7 +239,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             "Wczytaj pasujący plik SRT lub spróbuj ponownie później." + reason);
     }
 
-    private async Task<DownloadedSubtitles?> TryDownloadAsync(
+    private async Task<SubtitleDownloadResult> TryDownloadAsync(
         string inputPath,
         SubtitleLanguage language,
         ICollection<string> failures,
@@ -248,24 +250,34 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
         status?.Report($"QNapi: szukam napisów {label}…");
         try
         {
-            var found = await _downloader.DownloadAsync(inputPath, language, status, cancellationToken);
+            SubtitleDownloadResult result;
+            if (_downloader is ISubtitleDownloadResultProvider outcomeProvider)
+            {
+                result = await outcomeProvider.DownloadWithResultAsync(inputPath, language, status, cancellationToken);
+            }
+            else
+            {
+                var downloaded = await _downloader.DownloadAsync(inputPath, language, status, cancellationToken);
+                result = downloaded is null ? SubtitleDownloadResult.NoSelection() : SubtitleDownloadResult.Found(downloaded);
+            }
+            var found = result.Subtitles;
             cancellationToken.ThrowIfCancellationRequested();
             if (found is null)
             {
                 status?.Report($"QNapi: nie znaleziono napisów {label}.");
-                return null;
+                return result;
             }
             if (found.Language != language)
                 throw new InvalidDataException($"Źródło zwróciło inny język niż {label}.");
             ValidateCues(found.Cues);
-            return found;
+            return result;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (IsHandledSubtitleException(ex))
         {
             failures.Add($"{label}: {ex.Message}");
             status?.Report($"Wyszukiwanie {label} nie powiodło się: {ex.Message}");
-            return null;
+            return SubtitleDownloadResult.NoSelection();
         }
     }
 

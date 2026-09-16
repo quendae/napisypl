@@ -6,7 +6,7 @@ namespace NapisyPL.Core.Tests;
 public sealed class MachineTranslationTextPreprocessorTests
 {
     [Fact]
-    public void Prepare_JoinsSoftWrapBeforeSentenceSplit()
+    public void Prepare_KeepsMultipleSentencesInOneCue()
     {
         var sut = new MachineTranslationTextPreprocessor();
 
@@ -15,14 +15,14 @@ public sealed class MachineTranslationTextPreprocessorTests
         ]);
 
         Assert.Equal(
-            ["Do you think they're ever gonna forget today?", "Never."],
+            ["Do you think they're ever gonna\nforget today? Never."],
             batch.Parts);
-        Assert.Equal([2], batch.PartCounts);
+        Assert.Equal([1], batch.PartCounts);
         Assert.Equal([253], batch.OriginalSegments.Select(segment => segment.Id));
     }
 
     [Fact]
-    public void Prepare_SplitsTaggedDialogueTurns()
+    public void Prepare_PreservesTwoLineDialogueInOneCue()
     {
         var sut = new MachineTranslationTextPreprocessor();
 
@@ -33,25 +33,27 @@ public sealed class MachineTranslationTextPreprocessorTests
         ]);
 
         Assert.Equal(
-            ["<i>- Yeah, sí, problema.</i>", "<i>- And now dos problemas.</i>"],
+            ["<i>- Yeah, sí, problema.</i>\n<i>- And now dos problemas.</i>"],
             batch.Parts);
-        Assert.Equal([2], batch.PartCounts);
+        Assert.Equal([1], batch.PartCounts);
     }
 
-    [Theory]
-    [InlineData("Mr. Goodman is here. Really?", "Mr. Goodman is here.", "Really?")]
-    [InlineData("Dr. Caldera called. Answer him.", "Dr. Caldera called.", "Answer him.")]
-    [InlineData("Use it, e.g. today. Fine.", "Use it, e.g. today.", "Fine.")]
-    public void Prepare_PreservesDotAbbreviationHandling(
-        string input,
-        string firstPart,
-        string secondPart)
+    [Fact]
+    public void Prepare_LeavesEmptyCueOutOfModelInputs()
     {
         var sut = new MachineTranslationTextPreprocessor();
 
-        var batch = sut.Prepare([new TranslationSegment(1, input)]);
+        var batch = sut.Prepare([
+            new TranslationSegment(1, "   "),
+            new TranslationSegment(2, "One. Two.")
+        ]);
 
-        Assert.Equal([firstPart, secondPart], batch.Parts);
+        Assert.Equal(["One. Two."], batch.Parts);
+        Assert.Equal([0, 1], batch.PartCounts);
+
+        var result = sut.Reassemble(batch, ["Jeden. Dwa."]);
+        Assert.Equal(string.Empty, result[1]);
+        Assert.Equal("Jeden. Dwa.", result[2]);
     }
 
     [Fact]
@@ -62,7 +64,7 @@ public sealed class MachineTranslationTextPreprocessorTests
             new TranslationSegment(18, "She blamed me for it. That is serious.")
         ]);
 
-        var result = sut.Reassemble(batch, ["Obwiniła mnie za to.", "To poważna sprawa."]);
+        var result = sut.Reassemble(batch, ["Obwiniła mnie za to. To poważna sprawa."]);
 
         Assert.Equal("Obwiniła mnie za to. To poważna sprawa.", result[18]);
     }

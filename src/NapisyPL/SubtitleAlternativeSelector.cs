@@ -43,14 +43,18 @@ public sealed class SubtitleAlternativeSelector(
         dialog.Content = root;
 
         var analysis = request.TimingAnalysis;
-        detail.Text = request.PolishCandidate is null
-            ? "QNapi nie zwróciło polskiego pliku. Możesz wybrać inną wersję albo kontynuować z angielskimi napisami."
-            : $"Dostawca: {request.PolishCandidate.Provider}\n" +
+        detail.Text = request.PolishCandidate is not null
+            ? $"Dostawca: {request.PolishCandidate.Provider}\n" +
               $"Pokrycie: {analysis?.MatchedCueCoverage:P0} · przesunięcie: {analysis?.Transform.Offset.TotalMilliseconds:F0} ms · " +
               $"skala: {analysis?.Transform.Scale:F6} · P90: {analysis?.P90Residual.TotalMilliseconds:F0} ms\n" +
-              $"Ocena dopasowania: {analysis?.Decision}.";
+              $"Ocena dopasowania: {analysis?.Decision}."
+            : request.PolishSearchReportedNoSubtitles
+                ? "QNapi nie znalazło polskich napisów. Wybierz lokalny plik albo kontynuuj z angielskimi napisami."
+                : "QNapi nie zwróciło polskiego pliku. Możesz wybrać inną wersję albo kontynuować z angielskimi napisami.";
 
         var buttons = new List<Button>();
+        var interactiveQnapiAvailable = !request.PolishSearchReportedNoSubtitles;
+        Button? interactiveQnapiButton = null;
         var actionRunning = false;
         var closed = false;
         CancellationTokenSource? activeActionCancellation = null;
@@ -113,20 +117,26 @@ public sealed class SubtitleAlternativeSelector(
             }
         }
 
-        AddButton("Otwórz QNapi i wybierz napisy", async actionToken =>
+        interactiveQnapiButton = AddButton("Otwórz QNapi i wybierz napisy", async actionToken =>
         {
             var path = videoPath();
             if (string.IsNullOrWhiteSpace(path))
                 throw new InvalidOperationException("Nie wybrano filmu dla interaktywnego QNapi.");
-            var chosen = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, actionToken);
-            if (chosen is null)
+            var result = await interactiveDownloader.DownloadInteractiveAsync(path, SubtitleLanguage.Polish, status, actionToken);
+            if (result.ProviderReportedNoSubtitles)
             {
-                detail.Text = "QNapi nie znalazło wyników albo zamknięto wybór bez zapisania napisów. " +
-                              "Wybierz inną alternatywę albo przejdź do tłumaczenia.";
+                interactiveQnapiAvailable = false;
+                detail.Text = "QNapi nie znalazło polskich napisów. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
                 return null;
             }
-            return new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: chosen);
+            if (result.Subtitles is null)
+            {
+                detail.Text = "Zamknięto wybór QNapi bez zapisania napisów. Wybierz inną alternatywę albo przejdź do tłumaczenia.";
+                return null;
+            }
+            return new SubtitleFallbackChoice(SubtitleFallbackAction.DownloadInteractivePolish, InteractivePolish: result.Subtitles);
         });
+        interactiveQnapiButton.IsEnabled = interactiveQnapiAvailable;
 
         AddButton("Wybierz lokalny plik SRT", async _ =>
         {
@@ -183,6 +193,8 @@ public sealed class SubtitleAlternativeSelector(
         {
             foreach (var button in buttons)
                 button.IsEnabled = enabled;
+            if (interactiveQnapiButton is not null)
+                interactiveQnapiButton.IsEnabled = enabled && interactiveQnapiAvailable;
         }
     }
 }

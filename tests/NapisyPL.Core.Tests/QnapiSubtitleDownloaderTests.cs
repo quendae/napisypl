@@ -29,9 +29,9 @@ public sealed class QnapiSubtitleDownloaderTests
         var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
             fixture.VideoPath, SubtitleLanguage.Polish);
 
-        Assert.NotNull(result);
-        Assert.Equal(SubtitleLanguage.Polish, result.Language);
-        Assert.Equal("Wybrany napis.", result.Cues.Single().Text);
+        Assert.NotNull(result.Subtitles);
+        Assert.Equal(SubtitleLanguage.Polish, result.Subtitles.Language);
+        Assert.Equal("Wybrany napis.", result.Subtitles.Cues.Single().Text);
         Assert.NotNull(observed);
         Assert.DoesNotContain("-q", observed.ArgumentList);
         Assert.False(observed.CreateNoWindow);
@@ -105,11 +105,12 @@ public sealed class QnapiSubtitleDownloaderTests
         var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
             fixture.VideoPath, SubtitleLanguage.Polish);
 
-        Assert.Null(result);
+        Assert.Null(result.Subtitles);
+        Assert.False(result.ProviderReportedNoSubtitles);
     }
 
     [Fact]
-    public async Task DownloadInteractiveAsync_ReturnsNullWhenQnapiReportsNoSubtitles()
+    public async Task DownloadInteractiveAsync_ReportsProviderNoSubtitlesSeparatelyFromNoSelection()
     {
         using var fixture = new QnapiFixture();
         var messages = new List<string>();
@@ -121,7 +122,8 @@ public sealed class QnapiSubtitleDownloaderTests
         var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
             fixture.VideoPath, SubtitleLanguage.Polish, new SynchronousProgress(messages));
 
-        Assert.Null(result);
+        Assert.True(result.ProviderReportedNoSubtitles);
+        Assert.Null(result.Subtitles);
         Assert.Contains("QNapi nie znalazło polskich napisów (kod 6 — brak wyników).", messages);
     }
 
@@ -145,8 +147,8 @@ public sealed class QnapiSubtitleDownloaderTests
         var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
             fixture.VideoPath, SubtitleLanguage.Polish);
 
-        Assert.NotNull(result);
-        Assert.Equal("Wybrane napisy.", result.Cues.Single().Text);
+        Assert.NotNull(result.Subtitles);
+        Assert.Equal("Wybrane napisy.", result.Subtitles.Cues.Single().Text);
     }
 
     [Fact]
@@ -168,7 +170,7 @@ public sealed class QnapiSubtitleDownloaderTests
         var result = await ((IInteractiveSubtitleDownloader)downloader).DownloadInteractiveAsync(
             fixture.VideoPath, SubtitleLanguage.Polish);
 
-        Assert.NotNull(result);
+        Assert.NotNull(result.Subtitles);
     }
 
     [Fact]

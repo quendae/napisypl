@@ -420,6 +420,19 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task ProviderReportedMissingPolishSubtitlesIsPassedToTheFallbackRequest()
+    {
+        var fallback = new SequenceFallback(new SubtitleFallbackChoice(SubtitleFallbackAction.Cancel));
+        var service = new SubtitleAcquisitionPipeline(
+            new FakePipeline(), new ProviderNoResultsDownloader(), new FakeCueReader(Cues(0, "English")), new SubtitleSynchronizationService());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TranslateInteractiveAsync(
+            Video, new SubtitleTrack(4, "subrip", "eng", null, true), fallback, NoTranslator(), false));
+
+        Assert.True(fallback.Requests.Single().PolishSearchReportedNoSubtitles);
+    }
+
+    [Fact]
     public async Task NoDownloadsUsesExistingEmbeddedTrack()
     {
         var inner = new FakePipeline();
@@ -588,6 +601,16 @@ public sealed class SubtitleAcquisitionPipelineTests : IDisposable
             Calls.Add(language);
             return Task.FromResult(get(language));
         }
+    }
+    private sealed class ProviderNoResultsDownloader : ISubtitleDownloader, ISubtitleDownloadResultProvider
+    {
+        public Task<DownloadedSubtitles?> DownloadAsync(string videoPath, SubtitleLanguage language,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult<DownloadedSubtitles?>(null);
+
+        public Task<SubtitleDownloadResult> DownloadWithResultAsync(string videoPath, SubtitleLanguage language,
+            IProgress<string>? status = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(SubtitleDownloadResult.NoSubtitlesFound());
     }
     private sealed class FakePipeline : IVideoSubtitleTranslationPipeline
     {

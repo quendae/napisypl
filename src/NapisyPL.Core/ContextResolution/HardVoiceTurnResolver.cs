@@ -13,6 +13,9 @@ public sealed record HardVoiceTurnResolution(
 
 public static class HardVoiceTurnResolver
 {
+    private const double MinimumCueGenderConfidence = 0.82;
+    private const double MinimumCueCombinedEvidence = 0.03;
+    private const double MinimumCueDurationSeconds = 0.75;
     private static readonly TimeSpan MaximumTurnGap = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan MaximumOverlap = TimeSpan.FromMilliseconds(350);
 
@@ -117,22 +120,13 @@ public static class HardVoiceTurnResolver
         if (!cueGenderEvidence.TryGetValue(cueId, out var evidence))
             return false;
 
-        if (evidence.Gender != SpeakerVoiceGender.Unknown)
+        if (evidence.Gender != SpeakerVoiceGender.Unknown &&
+            evidence.Confidence >= MinimumCueGenderConfidence &&
+            evidence.CombinedEvidence >= MinimumCueCombinedEvidence &&
+            evidence.DurationSeconds >= MinimumCueDurationSeconds)
         {
             gender = evidence.Gender;
             confidence = evidence.Confidence;
-            return true;
-        }
-
-        // Experimental hard mode deliberately ignores the normal evidence gates.
-        // If the audio classifier got any usable directional signal, force it to
-        // Male or Female so we can measure how a pure binary voice strategy behaves.
-        if (evidence.DirectionalGender != SpeakerVoiceGender.Unknown &&
-            evidence.DirectionalConfidence > 0 &&
-            evidence.CombinedEvidence > 0)
-        {
-            gender = evidence.DirectionalGender;
-            confidence = evidence.DirectionalConfidence;
             return true;
         }
 

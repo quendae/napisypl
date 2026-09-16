@@ -13,6 +13,7 @@ public sealed class AppLogger : IAppLogger
         "windowIndex", "windowCount", "cueCount", "promptChars", "promptTokens", "completionTokens",
         "responseChars", "speakerCount", "uniqueSpeakerCount", "knownGenderCount", "genderEvidenceCount", "knownGenderEvidenceCount", "topK",
         "knownCueGenderCount", "localTurnResolvedCount", "resolvedAddresseeCount",
+        "directionalCueGenderCount", "hardVoiceResolvedCount", "hardVoiceChangedCount", "hardVoiceMode", "reviewMode",
         "knownSpeakerCandidateCount", "knownAddresseeCandidateCount", "knownSpeakerCandidateIds", "knownAddresseeCandidateIds",
         "eligibleSpeakerCandidateCount", "eligibleSpeakerCandidateIds", "speakerCandidateEvidence",
         "genderSampleCount", "maleTagSampleCount", "femaleTagSampleCount", "anyGenderTagSampleCount",
@@ -24,7 +25,10 @@ public sealed class AppLogger : IAppLogger
         "dropApplyCueMismatch", "dropApplyConfidence", "dropApplyFragment", "dropApplyUnchanged",
         "dropApplyInflection", "dropApplyFindMissing", "dropApplyFindAmbiguous",
         "cue", "resolver", "targetGender", "confidencePermille", "gate", "candidate", "matchedWord", "replacement", "changed",
+        "speakerGender", "speakerConfidencePermille", "speakerSampleCount",
+        "cueGender", "cueDirectionalGender", "cueDirectionalConfidencePermille", "forcedCueGender", "forcedCueConfidencePermille",
         "nextCue", "nextSpeaker", "nextCueGender", "nextCueConfidencePermille", "nextCueCombinedPermille", "nextCueDurationMs",
+        "nextCueDirectionalGender", "nextCueDirectionalConfidencePermille", "nextForcedCueGender", "nextForcedCueConfidencePermille",
         "nextSpeakerGender", "nextSpeakerConfidencePermille", "nextSpeakerSampleCount"
     };
 

@@ -11,7 +11,7 @@ public delegate Task<QnapiProcessResult> QnapiProcessInvoker(
     ProcessStartInfo startInfo,
     CancellationToken cancellationToken);
 
-public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveSubtitleDownloader
+public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, ISubtitleDownloadResultProvider, IInteractiveSubtitleDownloader
 {
     private const int SubtitlesNotFoundExitCode = 6;
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
@@ -35,21 +35,28 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
             throw new ArgumentOutOfRangeException(nameof(processTimeout));
     }
 
-    public Task<DownloadedSubtitles?> DownloadAsync(
+    public async Task<DownloadedSubtitles?> DownloadAsync(
         string videoPath,
         SubtitleLanguage language,
         IProgress<string>? status = null,
-        CancellationToken cancellationToken = default)
-        => DownloadCoreAsync(videoPath, language, interactive: false, status, cancellationToken);
+        CancellationToken cancellationToken = default) =>
+        (await DownloadWithResultAsync(videoPath, language, status, cancellationToken)).Subtitles;
 
-    public Task<DownloadedSubtitles?> DownloadInteractiveAsync(
+    public Task<SubtitleDownloadResult> DownloadWithResultAsync(
+        string videoPath,
+        SubtitleLanguage language,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default) =>
+        DownloadCoreAsync(videoPath, language, interactive: false, status, cancellationToken);
+
+    public Task<SubtitleDownloadResult> DownloadInteractiveAsync(
         string videoPath,
         SubtitleLanguage language,
         IProgress<string>? status = null,
         CancellationToken cancellationToken = default) =>
         DownloadCoreAsync(videoPath, language, interactive: true, status, cancellationToken);
 
-    private async Task<DownloadedSubtitles?> DownloadCoreAsync(
+    private async Task<SubtitleDownloadResult> DownloadCoreAsync(
         string videoPath,
         SubtitleLanguage language,
         bool interactive,
@@ -95,7 +102,7 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
                     status?.Report(language == SubtitleLanguage.Polish
                         ? "QNapi nie znalazło polskich napisów (kod 6 — brak wyników)."
                         : "QNapi nie znalazło angielskich napisów (kod 6 — brak wyników).");
-                    return null;
+                    return SubtitleDownloadResult.NoSubtitlesFound();
                 }
 
                 if (processResult.ExitCode != 0)
@@ -106,7 +113,7 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
                         : $"QNapi zakończył pracę z kodem {processResult.ExitCode}: {detail}");
                 }
 
-                return null;
+                return SubtitleDownloadResult.NoSelection();
             }
 
             var content = await File.ReadAllTextAsync(outputPath, Utf8WithoutBom, cancellationToken);
@@ -114,7 +121,7 @@ public sealed class QnapiSubtitleDownloader : ISubtitleDownloader, IInteractiveS
             if (cues.Count == 0 || cues.Any(cue => cue.Start < TimeSpan.Zero || cue.End <= cue.Start))
                 throw new InvalidDataException("QNapi zwrócił nieprawidłowy plik napisów.");
 
-            return new DownloadedSubtitles(language, "QNapi", cues);
+            return SubtitleDownloadResult.Found(new DownloadedSubtitles(language, "QNapi", cues));
         }
         finally
         {

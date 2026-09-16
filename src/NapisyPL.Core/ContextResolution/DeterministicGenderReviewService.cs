@@ -113,6 +113,29 @@ public sealed partial class DeterministicGenderReviewService
             var confidence = 0d;
             var gatePassed = false;
 
+            if (HasMultipleDialogueLines(sourceCue.Text) || HasMultipleDialogueLines(originalText))
+            {
+                if (diagnostics is not null && candidateWord is not null)
+                {
+                    diagnostics.Add(new DeterministicGenderCueDiagnostic(
+                        cue.Index,
+                        currentSpeaker,
+                        true,
+                        candidateWord,
+                        "none",
+                        "multiple_dialogue_lines",
+                        SpeakerVoiceGender.Unknown,
+                        0,
+                        false,
+                        null,
+                        null,
+                        false));
+                }
+
+                result.Add(cue);
+                continue;
+            }
+
             if (hardVoiceTurnOnly)
             {
                 resolver = "hard_voice_sequence";
@@ -124,9 +147,6 @@ public sealed partial class DeterministicGenderReviewService
                 var hasCurrentSelfGender = TryGetHardVoiceSpeakerSelfGenderSafely(
                     currentSpeaker,
                     speakerGenderEvidence,
-                    localCueGender,
-                    cue.Index,
-                    originalText,
                     out var currentSelfGender,
                     out var currentSelfConfidence);
 
@@ -147,7 +167,23 @@ public sealed partial class DeterministicGenderReviewService
 
                 if (hardVoiceTurn.IsResolved)
                 {
-                    if (ShouldPreserveStrongAddresseeGender(text, hardVoiceTurn.TargetGender))
+                    var stableTargetGender = SpeakerVoiceGender.Unknown;
+                    var hasStableTargetGender =
+                        !string.IsNullOrWhiteSpace(hardVoiceTurn.TargetSpeakerId) &&
+                        TryEligibleGender(
+                            hardVoiceTurn.TargetSpeakerId!,
+                            speakerGenderEvidence,
+                            out stableTargetGender) &&
+                        stableTargetGender == hardVoiceTurn.TargetGender;
+
+                    if (!hasStableTargetGender)
+                    {
+                        reasonCode = "target_speaker_gender_unconfirmed";
+                        targetGender = SpeakerVoiceGender.Unknown;
+                        confidence = hardVoiceTurn.Confidence;
+                        gatePassed = false;
+                    }
+                    else if (ShouldPreserveStrongAddresseeGender(text, stableTargetGender))
                     {
                         reasonCode = "intra_cue_addressee_gender_conflict";
                         targetGender = SpeakerVoiceGender.Unknown;
@@ -157,10 +193,10 @@ public sealed partial class DeterministicGenderReviewService
                     else
                     {
                         reasonCode = hardVoiceTurn.ReasonCode;
-                        targetGender = hardVoiceTurn.TargetGender;
+                        targetGender = stableTargetGender;
                         confidence = hardVoiceTurn.Confidence;
                         gatePassed = true;
-                        text = FixAddresseeAgreement(sourceCue.Text, text, hardVoiceTurn.TargetGender);
+                        text = FixAddresseeAgreement(sourceCue.Text, text, stableTargetGender);
                     }
                 }
                 else
@@ -484,6 +520,9 @@ public sealed partial class DeterministicGenderReviewService
         return null;
     }
 
+    private static bool HasMultipleDialogueLines(string text) =>
+        DialogueLineRegex().Matches(text).Count >= 2;
+
     private static (string? From, string? To) FindFirstChangedWordPair(string before, string after)
     {
         var beforeWords = WordRegex().Matches(before).Select(match => match.Value).ToArray();
@@ -514,6 +553,9 @@ public sealed partial class DeterministicGenderReviewService
 
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex WordRegex();
+
+    [GeneratedRegex(@"(?m)^[ \t]*(?:(?:<[^>\r\n]+>|\{[^}\r\n]+\})[ \t]*)*[-–—][ \t]*")]
+    private static partial Regex DialogueLineRegex();
 
     [GeneratedRegex(@"\bI\s*(?:['’]m|am)\b[^.!?]{0,100}\b\p{L}+ing\b", RegexOptions.IgnoreCase)]
     private static partial Regex EnglishFirstPersonPresentProgressiveRegex();

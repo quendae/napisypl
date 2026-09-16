@@ -83,6 +83,36 @@ public sealed class HardVoiceTurnResolverTests
     }
 
     [Fact]
+    public void Resolve_ExplicitGenderBelowNormalEvidenceGate_DoesNotResolve()
+    {
+        var cues = new[]
+        {
+            Cue(1, 0, 1, "Did you do it?"),
+            Cue(2, 1, 2, "Yes.")
+        };
+        var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = new(
+                SpeakerVoiceGender.Male,
+                0.99,
+                0.01,
+                1.0,
+                SpeakerVoiceGender.Male,
+                0.99),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.95)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(
+            cues,
+            new Dictionary<int, string?>(),
+            cueGender,
+            1);
+
+        Assert.False(result.IsResolved);
+        Assert.Equal("current_gender_unknown", result.ReasonCode);
+    }
+
+    [Fact]
     public void Resolve_WhenConsecutiveCuesHaveSameGender_DoesNotResolve()
     {
         var cues = new[]
@@ -197,6 +227,15 @@ public sealed class HardVoiceTurnResolverTests
             Cue(1, 0, 1, "Co zrobiłeś?"),
             Cue(2, 1, 2, "Nic.")
         };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_M",
+            [2] = "SPEAKER_F"
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_F"] = new(SpeakerVoiceGender.Female, 0.98, 3)
+        };
         var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
         {
             [1] = Accepted(SpeakerVoiceGender.Male, 0.91),
@@ -207,8 +246,8 @@ public sealed class HardVoiceTurnResolverTests
         var result = new DeterministicGenderReviewService().Review(
             source,
             translated,
-            new Dictionary<int, string?>(),
-            new Dictionary<string, SpeakerGenderEvidence>(),
+            speakers,
+            speakerGender,
             cueGender,
             diagnostics,
             hardVoiceTurnOnly: true);
@@ -234,6 +273,15 @@ public sealed class HardVoiceTurnResolverTests
             Cue(1, 0, 1, "Co zrobiłaś?"),
             Cue(2, 1, 2, "Nic.")
         };
+        var speakers = new Dictionary<int, string?>
+        {
+            [1] = "SPEAKER_F",
+            [2] = "SPEAKER_M"
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_M"] = new(SpeakerVoiceGender.Male, 0.98, 3)
+        };
         var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
         {
             [1] = Accepted(SpeakerVoiceGender.Female, 0.94),
@@ -243,8 +291,8 @@ public sealed class HardVoiceTurnResolverTests
         var result = new DeterministicGenderReviewService().Review(
             source,
             translated,
-            new Dictionary<int, string?>(),
-            new Dictionary<string, SpeakerGenderEvidence>(),
+            speakers,
+            speakerGender,
             cueGender,
             hardVoiceTurnOnly: true);
 
@@ -252,7 +300,7 @@ public sealed class HardVoiceTurnResolverTests
     }
 
     [Fact]
-    public void Review_CurrentMaleCue_FixesSpeakerSelfFormEvenWithoutOppositeNextCue()
+    public void Review_CurrentMaleCueWithoutStableSpeaker_DoesNotFixSpeakerSelfForm()
     {
         var source = new[]
         {
@@ -280,14 +328,81 @@ public sealed class HardVoiceTurnResolverTests
             diagnostics,
             hardVoiceTurnOnly: true);
 
-        Assert.Equal("Nie zachorowałem, bo czytałem o tobie w gazecie.", result[0].Text);
-        Assert.Equal("Zachorowałem, bo wyszedłem z domu po gazetę.", result[1].Text);
-        Assert.Contains(diagnostics, item =>
-            item.CueId == 451 &&
-            item.Resolver == "hard_voice_sequence" &&
-            item.ReasonCode == "current_cue_gender" &&
-            item.TargetGender == SpeakerVoiceGender.Male &&
-            item.Changed);
+        Assert.Equal("Nie zachorowałam, bo czytałam o tobie w gazecie.", result[0].Text);
+        Assert.Equal("Zachorowałam, bo wyszłam z domu po gazetę.", result[1].Text);
+        Assert.DoesNotContain(diagnostics, item => item.Changed);
+    }
+
+    [Fact]
+    public void Review_TargetCueGenderConflictsWithStableTargetSpeaker_DoesNotRewriteAddressee()
+    {
+        var source = new[]
+        {
+            Cue(542, 0, 1, "What did you hear?"),
+            Cue(543, 1.1, 2, "Nothing.")
+        };
+        var translated = new[]
+        {
+            Cue(542, 0, 1, "Co słyszałeś?"),
+            Cue(543, 1.1, 2, "Nic.")
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [542] = "SPEAKER_02",
+            [543] = "SPEAKER_17"
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_17"] = new(SpeakerVoiceGender.Male, 0.98, 3)
+        };
+        var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [542] = Accepted(SpeakerVoiceGender.Male, 0.98),
+            [543] = Accepted(SpeakerVoiceGender.Female, 0.99)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender,
+            cueGender,
+            hardVoiceTurnOnly: true);
+
+        Assert.Equal("Co słyszałeś?", result[0].Text);
+    }
+
+    [Theory]
+    [InlineData("- I was ready.\n- I was happy.", "- Byłam gotowa.\n- Byłam szczęśliwa.")]
+    [InlineData("-I was ready.\n-I was happy.", "-Byłam gotowa.\n-Byłam szczęśliwa.")]
+    [InlineData("<i>-I was ready.</i>\n<i>-I was happy.</i>", "<i>-Byłam gotowa.</i>\n<i>-Byłam szczęśliwa.</i>")]
+    public void Review_TwoDialogueLinesInOneCue_SkipsAllGenderEdits(string sourceText, string translatedText)
+    {
+        var source = new[]
+        {
+            Cue(551, 0, 2, sourceText)
+        };
+        var translated = new[]
+        {
+            Cue(551, 0, 2, translatedText)
+        };
+        var speakers = new Dictionary<int, string?>
+        {
+            [551] = "SPEAKER_02"
+        };
+        var speakerGender = new Dictionary<string, SpeakerGenderEvidence>
+        {
+            ["SPEAKER_02"] = new(SpeakerVoiceGender.Male, 0.99, 3)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            speakerGender,
+            hardVoiceTurnOnly: true);
+
+        Assert.Equal(translatedText, result[0].Text);
     }
 
     [Fact]

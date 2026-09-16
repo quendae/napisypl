@@ -120,9 +120,9 @@
               <TextBlock Text="Po tłumaczeniu SubFlow lokalnie rozpoznaje rozmówców i ich głosy, a następnie deterministycznie poprawia tylko bezpieczne formy rodzaju (np. zrobiłeś → zrobiłaś), gdy resolver ma mocny dowód kto jest adresatem."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
               <CheckBox x:Name="HardVoiceCheckBox"
-                        Content="Eksperyment: wymuś M/K z każdej wykrywalnej wypowiedzi"
+                        Content="Eksperyment: M/K tylko z potwierdzonego audio"
                         IsCheckedChanged="OnHardVoiceCheckChanged" />
-              <TextBlock Text="Test kontrolny: ignoruje normalne progi pewności klasyfikacji głosu. Jeśli audio daje kierunek, wypowiedź jest traktowana jako męska albo żeńska; forma mówiącego jest poprawiana według bieżącego głosu, a przy zmianie M↔K forma adresata według następnej wypowiedzi. Pozostałe resolvery rodzaju są w tym trybie wyłączone."
+              <TextBlock Text="Test kontrolny: używa tylko zaakceptowanej klasyfikacji głosu dla cue. Forma mówiącego jest poprawiana wyłącznie ze stabilnego profilu rozmówcy, a forma adresata tylko wtedy, gdy profil następnego rozmówcy potwierdza klasyfikację cue. Pozostałe resolvery rodzaju są w tym trybie wyłączone."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
               <TextBlock Text="Bez dodatkowego LLM i bez swobodnego przepisywania zdań. Enhanced wymaga filmu z audio; dla samych plików napisów używany jest tryb Standard."
                          Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />

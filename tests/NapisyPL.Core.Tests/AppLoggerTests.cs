@@ -243,4 +243,60 @@ public sealed class AppLoggerTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Logger_KeepsPrivacySafeEnhancedGenderDecisionMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var logger = new AppLogger(root);
+            logger.Info(
+                "enhanced_gender_cue",
+                ("hardVoiceMode", "stable_evidence"),
+                ("reviewMode", "hard_voice_stable_evidence"),
+                ("directionalCueGenderCount", 104),
+                ("hardVoiceResolvedCount", 7),
+                ("hardVoiceChangedCount", 5),
+                ("speakerGender", "male"),
+                ("speakerConfidencePermille", 984),
+                ("speakerSampleCount", 3),
+                ("cueGender", "female"),
+                ("cueDirectionalGender", "female"),
+                ("cueDirectionalConfidencePermille", 997),
+                ("forcedCueGender", "female"),
+                ("forcedCueConfidencePermille", 997),
+                ("nextCueDirectionalGender", "male"),
+                ("nextCueDirectionalConfidencePermille", 986),
+                ("nextForcedCueGender", "male"),
+                ("nextForcedCueConfidencePermille", 986));
+
+            var log = File.ReadAllText(logger.LogPath);
+
+            Assert.Contains("hardVoiceMode=stable_evidence", log);
+            Assert.Contains("reviewMode=hard_voice_stable_evidence", log);
+            Assert.Contains("directionalCueGenderCount=104", log);
+            Assert.Contains("hardVoiceResolvedCount=7", log);
+            Assert.Contains("hardVoiceChangedCount=5", log);
+            Assert.Contains("speakerGender=male", log);
+            Assert.Contains("speakerConfidencePermille=984", log);
+            Assert.Contains("speakerSampleCount=3", log);
+            Assert.Contains("cueGender=female", log);
+            Assert.Contains("cueDirectionalGender=female", log);
+            Assert.Contains("cueDirectionalConfidencePermille=997", log);
+            Assert.Contains("forcedCueGender=female", log);
+            Assert.Contains("forcedCueConfidencePermille=997", log);
+            Assert.Contains("nextCueDirectionalGender=male", log);
+            Assert.Contains("nextCueDirectionalConfidencePermille=986", log);
+            Assert.Contains("nextForcedCueGender=male", log);
+            Assert.Contains("nextForcedCueConfidencePermille=986", log);
+            Assert.DoesNotContain("[REDACTED]", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }

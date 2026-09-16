@@ -18,7 +18,8 @@ public sealed record SubtitleFallbackRequest(
     DownloadedSubtitles? PolishCandidate,
     SubtitleTimingAnalysis? TimingAnalysis,
     bool HasEmbeddedTextTrack,
-    bool HasAutomaticallyTranslatableEmbeddedEnglish);
+    bool HasAutomaticallyTranslatableEmbeddedEnglish,
+    bool PolishSearchReportedNoSubtitles = false);
 
 /// <summary>
 /// A selection from the single-file fallback UI. Interactive QNapi supplies its parsed Polish candidate here so
