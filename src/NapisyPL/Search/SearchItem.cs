@@ -24,6 +24,7 @@ public sealed class SearchItem : INotifyPropertyChanged
     private string _detail = "W kolejce";
     private bool _isSelected = true;
     private bool _canSelect;
+    private bool _canSyncPolish;
 
     public SearchItem(string videoPath)
     {
@@ -47,6 +48,12 @@ public sealed class SearchItem : INotifyPropertyChanged
     public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
 
     public bool CanSelect { get => _canSelect; set => Set(ref _canSelect, value); }
+
+    /// <summary>Polish fitted from another release during this session.</summary>
+    public bool HasSyncedPolish { get; set; }
+
+    /// <summary>No Polish yet: offer fitting Polish subtitles from another release.</summary>
+    public bool CanSyncPolish { get => _canSyncPolish; set => Set(ref _canSyncPolish, value); }
 
     public Geometry PolishIcon => Badges.Icon(Polish);
     public IBrush PolishBrush => Badges.Foreground(Polish);

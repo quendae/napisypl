@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NapisyPL.Sources.SubtitleSourcesWindow"
+        Title="SubFlow · źródła napisów"
+        Icon="/Assets/subflow.ico"
+        Width="620" SizeToContent="Height"
+        MinWidth="480"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,1,0,0" Padding="24,14">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+        <TextBlock x:Name="StatusText" Classes="hint" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Text="Klucze są szyfrowane dla Twojego konta Windows." />
+        <Button x:Name="TestButton" Grid.Column="1" Classes="quiet" Content="Sprawdź klucze" Click="OnTestClick" />
+        <Button Grid.Column="2" Classes="quiet" Content="Anuluj" Click="OnCancelClick" IsCancel="True" />
+        <Button x:Name="SaveButton" Grid.Column="3" Classes="primary" Content="Zapisz" Click="OnSaveClick" IsDefault="True" />
+      </Grid>
+    </Border>
+
+    <StackPanel Margin="24,20" Spacing="16">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Podobne napisy z internetu" FontSize="22" FontWeight="SemiBold" />
+        <TextBlock Classes="hint" TextWrapping="Wrap" LineHeight="20"
+                   Text="Gdy QNapi nie ma polskich napisów do Twojego pliku, SubFlow poszuka ich tutaj — także do innych wydań — i dopasuje czas do filmu. Obie usługi są opcjonalne i wymagają Twojego darmowego klucza API." />
+      </StackPanel>
+
+      <Border Classes="card">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <TextBlock Classes="title" Text="SubDL" />
+              <TextBlock Classes="hint" TextWrapping="Wrap" Text="Duża baza, także polskie. Klucz w panelu konta: subdl.com → API." />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="quiet" Content="Zdobądź klucz" VerticalAlignment="Top"
+                    Click="OnGetSubDlKeyClick" AutomationProperties.Name="Zdobądź klucz SubDL" />
+          </Grid>
+          <TextBox x:Name="SubDlKeyBox" PasswordChar="●" PlaceholderText="Klucz API SubDL (puste = wyłączone)"
+                   AutomationProperties.Name="Klucz API SubDL" />
+          <TextBlock x:Name="SubDlStatus" Classes="hint" TextWrapping="Wrap" IsVisible="False" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <TextBlock Classes="title" Text="OpenSubtitles.com" />
+              <TextBlock Classes="hint" TextWrapping="Wrap" Text="Największa baza polskich napisów. Bez logowania kilka pobrań dziennie." />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="quiet" Content="Zdobądź klucz" VerticalAlignment="Top"
+                    Click="OnGetOpenSubtitlesKeyClick" AutomationProperties.Name="Zdobądź klucz OpenSubtitles" />
+          </Grid>
+          <TextBox x:Name="OpenSubtitlesKeyBox" PasswordChar="●" PlaceholderText="Klucz API OpenSubtitles (puste = wyłączone)"
+                   AutomationProperties.Name="Klucz API OpenSubtitles" />
+          <TextBlock x:Name="OpenSubtitlesStatus" Classes="hint" TextWrapping="Wrap" IsVisible="False" />
+        </StackPanel>
+      </Border>
+
+      <CheckBox x:Name="RevealCheckBox" Content="Pokaż klucze" IsCheckedChanged="OnRevealChanged" />
+    </StackPanel>
+  </DockPanel>
+</Window>

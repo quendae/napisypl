@@ -23,6 +23,22 @@ public sealed class SpeakerDiarizationAssetManager(
         }
     }
 
+    public const string SileroVadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
+
+    public string SileroVadModelPath => Path.Combine(options.BaseDirectory, "silero_vad.onnx");
+
+    /// <summary>The speech detector used to time subtitles of another release (~0.6 MB).</summary>
+    public async Task<string> EnsureSileroVadAsync(IProgress<string>? status = null, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(options.BaseDirectory);
+        if (!File.Exists(SileroVadModelPath))
+        {
+            status?.Report("Pobieram model wykrywania mowy (~1 MB)…");
+            await DownloadAtomicAsync(SileroVadUrl, SileroVadModelPath, cancellationToken);
+        }
+        return SileroVadModelPath;
+    }
+
     private async Task DownloadAtomicAsync(string url, string destination, CancellationToken cancellationToken)
     {
         var partial = destination + ".partial";

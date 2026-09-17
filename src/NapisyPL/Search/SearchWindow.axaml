@@ -88,7 +88,7 @@
               <DataTemplate x:DataType="search:SearchItem">
                 <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrushApp}"
                         BorderThickness="1" CornerRadius="14" Padding="14,12">
-                  <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="12">
+                  <Grid ColumnDefinitions="28,*,Auto,Auto,Auto" ColumnSpacing="12">
                     <CheckBox IsChecked="{Binding IsSelected}" IsVisible="{Binding CanSelect}" Width="28"
                               VerticalAlignment="Center" MinWidth="0" Padding="0"
                               AutomationProperties.Name="{Binding FileName, StringFormat='Tłumacz {0}'}"
@@ -97,13 +97,19 @@
                       <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                       <TextBlock Text="{Binding Detail}" Classes="hint" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Border Grid.Column="2" Classes="chip" Background="{Binding PolishBackground}" VerticalAlignment="Center">
+                    <Button Grid.Column="2" Classes="quiet" Click="OnSyncOtherReleaseClick"
+                            IsVisible="{Binding CanSyncPolish}" VerticalAlignment="Center"
+                            AutomationProperties.Name="{Binding FileName, StringFormat='Dopasuj polskie napisy z innej wersji do {0}'}"
+                            ToolTip.Tip="Masz polskie napisy do innego wydania? Dopasujemy ich czas do tego filmu według angielskich napisów.">
+                      <TextBlock Text="Dopasuj PL…" FontSize="12" />
+                    </Button>
+                    <Border Grid.Column="3" Classes="chip" Background="{Binding PolishBackground}" VerticalAlignment="Center">
                       <StackPanel Orientation="Horizontal" Spacing="6">
                         <Path Classes="icon" Data="{Binding PolishIcon}" Stroke="{Binding PolishBrush}" Width="14" Height="14" />
                         <TextBlock Text="{Binding PolishText}" Foreground="{Binding PolishBrush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
                       </StackPanel>
                     </Border>
-                    <Border Grid.Column="3" Classes="chip" Background="{Binding MachineBackground}" VerticalAlignment="Center">
+                    <Border Grid.Column="4" Classes="chip" Background="{Binding MachineBackground}" VerticalAlignment="Center">
                       <StackPanel Orientation="Horizontal" Spacing="6">
                         <Path Classes="icon" Data="{Binding MachineIcon}" Stroke="{Binding MachineBrush}" Width="14" Height="14" />
                         <TextBlock Text="{Binding MachineText}" Foreground="{Binding MachineBrush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />

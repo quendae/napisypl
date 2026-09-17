@@ -32,6 +32,7 @@ public sealed partial class DeterministicGenderReviewService
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["mógłbym"] = "mogłabym",
+            ["powinienem"] = "powinnam",
             ["poszedłem"] = "poszłam",
             ["wyszedłem"] = "wyszłam",
             ["przyszedłem"] = "przyszłam",
@@ -67,6 +68,7 @@ public sealed partial class DeterministicGenderReviewService
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["mógłbyś"] = "mogłabyś",
+            ["powinieneś"] = "powinnaś",
             ["poszedłeś"] = "poszłaś",
             ["wyszedłeś"] = "wyszłaś",
             ["przyszedłeś"] = "przyszłaś",
@@ -99,7 +101,8 @@ public sealed partial class DeterministicGenderReviewService
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
         IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cueGenderEvidence = null,
         ICollection<DeterministicGenderCueDiagnostic>? diagnostics = null,
-        bool hardVoiceTurnOnly = false)
+        bool hardVoiceTurnOnly = false,
+        IReadOnlyDictionary<int, SpeakerVoiceGender>? labeledCueGender = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(translated);
@@ -163,11 +166,21 @@ public sealed partial class DeterministicGenderReviewService
                 // A stable diarized speaker profile rewrites the speaker's own forms.
                 // Per-cue audio alone never does; it only confirms a weaker profile
                 // or vetoes one it contradicts.
+                // An SDH speaker label ("JACLYN:") names the speaker outright and beats audio.
+                var labeled = labeledCueGender is not null &&
+                              labeledCueGender.TryGetValue(cue.Index, out var labelGender) &&
+                              labelGender != SpeakerVoiceGender.Unknown;
                 var hasCurrentSelfGender = TryGetHardVoiceSpeakerSelfGenderSafely(
                     currentSpeaker,
                     speakerGenderEvidence,
                     out var currentSelfGender,
                     out var currentSelfConfidence);
+                if (labeled)
+                {
+                    hasCurrentSelfGender = true;
+                    currentSelfGender = labeledCueGender![cue.Index];
+                    currentSelfConfidence = 0.99;
+                }
 
                 // A weaker profile is still enough when this very cue confidently
                 // agrees with it. Pitch alone is not: boys and falsetto read as female.
@@ -185,7 +198,7 @@ public sealed partial class DeterministicGenderReviewService
                 // A cluster can merge two voices. When the cue itself, or the same
                 // label's continuation, sounds like the other gender, the profile is
                 // not describing this line.
-                var selfContradicted = hasCurrentSelfGender &&
+                var selfContradicted = hasCurrentSelfGender && !labeled &&
                     SelfGenderContradictedByCuePitch(source, cueSpeakers, localCueGender, cue.Index, currentSelfGender);
                 if (selfContradicted)
                     hasCurrentSelfGender = false;
@@ -290,6 +303,8 @@ public sealed partial class DeterministicGenderReviewService
                     var speakerSelfChanged = !string.Equals(text, originalText, StringComparison.Ordinal);
                     reasonCode = runSelfChanged
                         ? "speaker_from_same_speaker_run"
+                        : speakerSelfChanged && labeled
+                            ? "speaker_label"
                         : speakerSelfChanged && hasCurrentSelfGender
                             ? "current_cue_gender"
                             : selfContradicted && candidateWord is not null
@@ -322,17 +337,22 @@ public sealed partial class DeterministicGenderReviewService
             }
             else
             {
-                if (!string.IsNullOrWhiteSpace(currentSpeaker) &&
-                    TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out var speakerGender))
+                var speakerGender = SpeakerVoiceGender.Unknown;
+                var labeledSpeaker = labeledCueGender is not null &&
+                                     labeledCueGender.TryGetValue(cue.Index, out speakerGender) &&
+                                     speakerGender != SpeakerVoiceGender.Unknown;
+                if (labeledSpeaker ||
+                    (!string.IsNullOrWhiteSpace(currentSpeaker) &&
+                     TryEligibleGender(currentSpeaker!, speakerGenderEvidence, out speakerGender)))
                 {
                     text = FixSpeakerAgreement(sourceCue.Text, text, speakerGender);
                     text = FixFirstPersonPredicateAgreement(sourceCue.Text, text, speakerGender);
                     if (!string.Equals(text, originalText, StringComparison.Ordinal))
                     {
                         resolver = "speaker_self";
-                        reasonCode = "current_speaker_gender";
+                        reasonCode = labeledSpeaker ? "speaker_label" : "current_speaker_gender";
                         targetGender = speakerGender;
-                        confidence = speakerGenderEvidence[currentSpeaker!].Confidence;
+                        confidence = labeledSpeaker ? 0.99 : speakerGenderEvidence[currentSpeaker!].Confidence;
                         gatePassed = true;
                     }
                 }

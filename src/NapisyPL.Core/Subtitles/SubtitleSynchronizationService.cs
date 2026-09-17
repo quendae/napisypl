@@ -23,7 +23,7 @@ public sealed record SubtitleTimingAnalysis(
     TimeSpan P90Residual);
 
 /// <summary>Analyzes cue timing independently from cue numbering and text.</summary>
-public sealed class SubtitleSynchronizationService
+public sealed partial class SubtitleSynchronizationService
 {
     private static readonly double[] CandidateScales = [1, 24d / 25d, 23.976d / 25d, 25d / 24d, 25d / 23.976d];
     private static readonly TimeSpan InitialResidualWindow = TimeSpan.FromSeconds(1);

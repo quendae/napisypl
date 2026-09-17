@@ -34,6 +34,7 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => OnExit();
             CreateTray();
+            _ = AppServices.Shared.RefreshOnlineSourcesAsync();
 
             Program.Instance?.Listen(arguments =>
                 Dispatcher.UIThread.Post(() => Handle(CommandLineOptions.Parse(arguments))));

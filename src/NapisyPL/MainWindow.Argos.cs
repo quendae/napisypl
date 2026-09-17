@@ -33,6 +33,7 @@ public partial class MainWindow
     private bool _loadingSecretUi;
 
     private bool _providerListInitialized;
+    private readonly List<MenuItem> _providerMenuItems = [];
 
     private void OnArgosWindowOpened(object? sender, EventArgs e)
     {
@@ -42,15 +43,10 @@ public partial class MainWindow
             return;
         _providerListInitialized = true;
 
-        var items = LocalMtProviderNames
-            .Concat(ProviderNames)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        ProviderComboBox.ItemsSource = items;
+        BuildProviderMenu();
 
         if (!_modernUiHooked)
         {
-            ProviderComboBox.SelectionChanged += OnModernProviderSelectionChanged;
             TranslateButton.Click += OnRememberApiKeyOnTranslate;
             _modernUiHooked = true;
         }
@@ -62,8 +58,9 @@ public partial class MainWindow
                                    RetiredLocalProviderNames.Contains(settings.Provider, StringComparer.Ordinal)
                 ? MadladQualityProviderName
                 : settings.Provider;
-            if (items.Contains(restoredProvider, StringComparer.Ordinal))
-                ProviderComboBox.SelectedItem = restoredProvider;
+            _selectedProvider = AllProviderNames.Contains(restoredProvider, StringComparer.Ordinal)
+                ? restoredProvider
+                : MadladQualityProviderName;
 
             ApplyModernProviderUi();
             await LoadRememberedApiKeyAsync();
@@ -71,45 +68,106 @@ public partial class MainWindow
         }, DispatcherPriority.Background);
     }
 
-    private async void OnModernProviderSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_loadingSettings)
-            return;
+    private static IEnumerable<string> AllProviderNames => LocalMtProviderNames
+        .Concat(ProviderNames)
+        .Distinct(StringComparer.Ordinal);
 
+    /// <summary>Options → Tłumacz: local translators first, cloud ones after a separator.</summary>
+    private void BuildProviderMenu()
+    {
+        var entries = new List<object>();
+        foreach (var name in LocalMtProviderNames)
+            entries.Add(CreateProviderMenuItem(name));
+        entries.Add(new Separator());
+        foreach (var name in ProviderNames)
+            entries.Add(CreateProviderMenuItem(name));
+        ProviderMenuItem.ItemsSource = entries;
+    }
+
+    private MenuItem CreateProviderMenuItem(string name)
+    {
+        var item = new MenuItem
+        {
+            ToggleType = MenuItemToggleType.Radio,
+            GroupName = "SubFlowProvider",
+            Tag = name,
+            StaysOpenOnClick = false,
+            Header = new StackPanel
+            {
+                Spacing = 2,
+                MaxWidth = 320,
+                Children =
+                {
+                    new TextBlock { Text = name, FontWeight = Avalonia.Media.FontWeight.SemiBold },
+                    new TextBlock { Text = ProviderDescription(name), Classes = { "hint" }, TextWrapping = Avalonia.Media.TextWrapping.Wrap }
+                }
+            }
+        };
+        Avalonia.Automation.AutomationProperties.SetName(item, name);
+        item.Click += async (_, _) => await SelectProviderAsync(name);
+        _providerMenuItems.Add(item);
+        return item;
+    }
+
+    private async Task SelectProviderAsync(string provider)
+    {
+        if (_busy || _loadingSettings)
+        {
+            ApplyModernProviderUi();
+            return;
+        }
+        if (provider == _selectedProvider)
+        {
+            ApplyModernProviderUi();
+            return;
+        }
+
+        _selectedProvider = provider;
         // Switching quality profiles must release the previous model before the
         // next one is loaded, otherwise multiple multi-GB models can remain in VRAM.
         await NllbRuntimeRegistry.DisposeAsync();
+        ApplyProviderUi(useDefaults: true);
         ApplyModernProviderUi();
         await LoadRememberedApiKeyAsync();
         await SaveSettingsAsync();
+        RefreshReadyState();
+        SetStatus("Tłumacz: " + provider + ".", StatusKind.Normal);
     }
+
+    private static string ProviderDescription(string provider) => provider switch
+    {
+        MadladQualityProviderName => "Zalecany. Działa lokalnie na karcie graficznej, bez internetu.",
+        NllbFastProviderName => "Lokalny i najszybszy, ale słabszy. Licencja niekomercyjna.",
+        NllbBalancedProviderName => "Lokalny, średnia jakość i szybkość. Licencja niekomercyjna.",
+        NllbQualityTestProviderName => "Lokalny, duży (ok. 18 GB). Do testów, licencja niekomercyjna.",
+        "DeepL" => "Szybki tłumacz w chmurze. Wymaga klucza API.",
+        "Gemini" or "Claude" => "Model językowy w chmurze. Wymaga klucza API.",
+        _ => "OpenAI, Ollama lub LM Studio. Lokalny serwer nie potrzebuje klucza."
+    };
 
     private void ApplyModernProviderUi()
     {
-        var provider = ProviderComboBox.SelectedItem as string ?? "Gemini";
+        var provider = _selectedProvider;
         var profile = ProviderUiProfile.For(provider);
 
         ModelPanel.IsVisible = profile.ShowModel;
         ApiKeyPanel.IsVisible = profile.ShowApiKey;
         BaseUrlPanel.IsVisible = profile.ShowBaseUrl;
         RememberKeyCheckBox.IsVisible = profile.CanRememberApiKey;
+        ProviderSettingsCard.IsVisible = profile.ShowModel || profile.ShowApiKey || profile.ShowBaseUrl;
+        ProviderSettingsTitle.Text = "Tłumacz: " + provider;
 
-        ProviderHintText.Text = provider switch
-        {
-            MadladQualityProviderName => "Zalecany. Działa lokalnie na karcie graficznej, bez internetu.",
-            NllbFastProviderName => "Lokalny i najszybszy, ale słabszy. Licencja niekomercyjna.",
-            NllbBalancedProviderName => "Lokalny, średnia jakość i szybkość. Licencja niekomercyjna.",
-            NllbQualityTestProviderName => "Lokalny, duży (ok. 18 GB). Do testów, licencja niekomercyjna.",
-            "DeepL" => "Szybki tłumacz w chmurze. Wymaga klucza API.",
-            "Gemini" or "Claude" => "Model językowy w chmurze. Wymaga klucza API.",
-            _ => "OpenAI, Ollama lub LM Studio. Lokalny serwer nie potrzebuje klucza."
-        };
+        foreach (var item in _providerMenuItems)
+            item.IsChecked = (string?)item.Tag == provider;
+
+        ProviderHintText.Text = ProviderDescription(provider);
+        ProviderMenuHintText.Text = provider;
         ProviderBadgeText.Text = "Tłumacz: " + provider;
     }
 
     private async Task LoadRememberedApiKeyAsync()
     {
-        var provider = ProviderComboBox.SelectedItem as string ?? string.Empty;
+        var provider = _selectedProvider;
         var profile = ProviderUiProfile.For(provider);
         _loadingSecretUi = true;
         try
@@ -138,7 +196,7 @@ public partial class MainWindow
         if (_loadingSecretUi || _loadingSettings)
             return;
 
-        var provider = ProviderComboBox.SelectedItem as string ?? string.Empty;
+        var provider = _selectedProvider;
         if (!ProviderUiProfile.For(provider).CanRememberApiKey)
             return;
 
@@ -155,7 +213,7 @@ public partial class MainWindow
 
     private async void OnRememberApiKeyOnTranslate(object? sender, RoutedEventArgs e)
     {
-        var provider = ProviderComboBox.SelectedItem as string ?? string.Empty;
+        var provider = _selectedProvider;
         if (!ProviderUiProfile.For(provider).CanRememberApiKey)
             return;
 

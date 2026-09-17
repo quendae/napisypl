@@ -31,7 +31,11 @@ SubFlow działa w tle z ikoną w obszarze powiadomień: prawy klik daje **Szukaj
 - **Zapisz też plik TXT** — dodatkowo `nazwa.pl.txt`.
 - **Korekta rodzaju z głosu** (domyślnie włączona) — poprawia formy typu zrobiłeś → zrobiłaś na podstawie głosów w filmie.
 - **Tylko pewne rozpoznanie** (domyślnie włączone) — formy zmieniane tylko przy wyraźnym głosie.
+- **Tłumacz** — lokalny MADLAD/NLLB albo tłumacz w chmurze; karta z kluczem API pojawia się w oknie tylko dla chmury.
+- **Źródła napisów…** — opcjonalne SubDL i OpenSubtitles.com z własnym, darmowym kluczem API (patrz niżej).
 - **Menu Eksploratora**, **Otwórz log**.
+
+Korekta rodzaju czyta też podpisy mówców z angielskich napisów dla niesłyszących („JACLYN:”, „Man:”). Podpis z imieniem albo rolą wygrywa z analizą głosu, a grupa głosów z diaryzacji, w której podpisy pokazują dwie osoby różnej płci, nie jest używana. Płeć imion pochodzi z amerykańskiej listy imion SSA (domena publiczna).
 
 ## Obsługiwane wejścia
 
@@ -46,6 +50,15 @@ Aplikacja **nie transkrybuje dźwięku**. Film bez osadzonych napisów może zos
 Przy pierwszym wyszukiwaniu aplikacja pobiera oficjalny pakiet QNapi 0.2.3 (~18 MB), sprawdza jego sumę SHA-256 i instaluje prywatnie w `%LocalAppData%\NapisyPL\qnapi\0.2.3\`. Istniejący plik `nazwa.pl.srt` jest zachowywany. Wyszukiwanie można wyłączyć, aby zawsze korzystać z dotychczasowego trybu tłumaczenia.
 
 Integracja używa baz NapiProjekt i Napisy24. Wyszukiwanie angielskich napisów jest obecnie rozwiązaniem awaryjnym opartym na NapiProjekt; stary silnik OpenSubtitles w QNapi został wyłączony po zamknięciu używanego przez niego API. Szczegóły działania, prywatności i licencji opisuje [`docs/QNAPI.md`](docs/QNAPI.md).
+
+### Podobne napisy do innych wydań
+
+Gdy QNapi nie ma polskich napisów do pliku, SubFlow może zapytać SubDL i OpenSubtitles.com (**Opcje → Źródła napisów…**, klucze są szyfrowane DPAPI). Napisy do dokładnie tego pliku (hash OpenSubtitles) są używane od razu. Napisy do innego wydania są pobierane (najwyżej 3 na film, bo usługi mają dzienne limity) i zapisywane tylko wtedy, gdy ich czas da się bezpiecznie dopasować do filmu:
+
+1. do angielskich napisów **tego samego wydania** — z filmu, z QNapi albo z OpenSubtitles po hashu; dopasowanie działa odcinkami, więc radzi sobie z innym fps, dłuższym intro, rekapem i scenami, których w filmie nie ma,
+2. a gdy takich nie ma — do momentów, w których w filmie zaczyna się mowa (zapisana diaryzacja albo Silero VAD, ~1 MB pobierane przy pierwszym użyciu).
+
+Ten sam mechanizm obsługuje ręczny przycisk **Dopasuj PL z innej wersji…**.
 
 ASS/SSA/VTT są normalizowane do SRT. Zaawansowane style ASS nie są przenoszone — priorytetem jest tekst i timing.
 

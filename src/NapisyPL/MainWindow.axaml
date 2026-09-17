@@ -27,6 +27,18 @@
           </StackPanel>
           <Button.Flyout>
             <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem x:Name="ProviderMenuItem">
+                <MenuItem.Icon>
+                  <Path Classes="icon" Data="{StaticResource IconLanguages}" Width="16" Height="16" />
+                </MenuItem.Icon>
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Tłumacz" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ProviderMenuHintText" Classes="hint" TextWrapping="Wrap" />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <Separator />
               <MenuItem x:Name="ExportTxtMenuItem" ToggleType="CheckBox">
                 <MenuItem.Header>
                   <StackPanel Spacing="2" MaxWidth="300">
@@ -58,6 +70,14 @@
                   <StackPanel Spacing="2" MaxWidth="300">
                     <TextBlock Text="Menu Eksploratora" FontWeight="SemiBold" />
                     <TextBlock Classes="hint" Text="„Szukaj napisów z SubFlow” po kliknięciu prawym na film lub folder." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <MenuItem x:Name="SubtitleSourcesMenuItem" Click="OnSubtitleSourcesClick">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Źródła napisów…" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="SubDL i OpenSubtitles z własnym kluczem: podobne napisy do innych wydań." />
                   </StackPanel>
                 </MenuItem.Header>
               </MenuItem>
@@ -150,9 +170,19 @@
               <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" HorizontalAlignment="Stretch" />
               <TextBlock x:Name="TrackHintText" Classes="hint"
                          Text="Angielską ścieżkę tekstową wybieramy automatycznie." />
-              <Button x:Name="ExtractOriginalSubtitleButton" Classes="quiet"
-                      Content="Zapisz oryginalne napisy z filmu"
-                      Click="OnExtractOriginalSubtitleClick" HorizontalAlignment="Left" />
+              <WrapPanel ItemSpacing="10" LineSpacing="10">
+                <Button x:Name="SyncOtherReleaseButton" Classes="quiet"
+                        Click="OnSyncOtherReleaseClick"
+                        ToolTip.Tip="Masz polskie napisy do innego wydania? Dopasujemy ich czas do tego filmu według angielskich napisów.">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Path Classes="icon" Data="{StaticResource IconSubtitles}" />
+                    <TextBlock Text="Dopasuj PL z innej wersji…" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button x:Name="ExtractOriginalSubtitleButton" Classes="quiet"
+                        Content="Zapisz oryginalne napisy z filmu"
+                        Click="OnExtractOriginalSubtitleClick" />
+              </WrapPanel>
             </StackPanel>
           </Border>
         </Grid>
@@ -173,15 +203,13 @@
             </Grid>
           </Border>
 
-          <Border Classes="card">
+          <!-- Only cloud translators need settings; local ones are chosen in Options. -->
+          <Border x:Name="ProviderSettingsCard" Classes="card">
             <StackPanel Spacing="14">
               <StackPanel Spacing="4">
-                <TextBlock Classes="title" Text="Tłumacz" />
-                <TextBlock Classes="hint" Text="Używany, gdy nie ma polskich napisów." />
+                <TextBlock x:Name="ProviderSettingsTitle" Classes="title" Text="Tłumacz" />
+                <TextBlock x:Name="ProviderHintText" Classes="hint" TextWrapping="Wrap" />
               </StackPanel>
-              <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged"
-                        HorizontalAlignment="Stretch" AutomationProperties.Name="Tłumacz" />
-              <TextBlock x:Name="ProviderHintText" Classes="hint" />
 
               <StackPanel x:Name="ModelPanel" Spacing="6">
                 <TextBlock Text="Model" FontWeight="SemiBold" />

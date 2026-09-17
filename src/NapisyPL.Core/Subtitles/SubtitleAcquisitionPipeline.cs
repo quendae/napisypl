@@ -6,7 +6,7 @@ using NapisyPL.Core.Translation;
 namespace NapisyPL.Core.Subtitles;
 
 /// <summary>Resolves Polish subtitles before invoking any translation provider.</summary>
-public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
+public sealed partial class SubtitleAcquisitionPipeline : ITranslationPipeline
 {
     private readonly IVideoSubtitleTranslationPipeline _translationPipeline;
     private readonly ISubtitleDownloader _downloader;
@@ -103,6 +103,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             }
         }
 
+        var clock = new VideoClock(this, inputPath, embeddedCues, failures, status, cancellationToken);
         DownloadedSubtitles? automaticPolish = null;
         SubtitleTimingAnalysis? automaticAnalysis = null;
         var polishDownload = await TryDownloadAsync(inputPath, SubtitleLanguage.Polish, failures, status, cancellationToken);
@@ -119,6 +120,13 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             }
 
             ReportWithheldCandidate(downloadedPolish, automaticAnalysis, status);
+        }
+
+        var online = await TryOnlinePolishAsync(inputPath, clock, failures, status, cancellationToken);
+        if (online is not null)
+        {
+            status?.Report(online.Detail);
+            return await SavePolishAsync(output, online.Cues, exportTxt, writeSrt: true, cancellationToken);
         }
 
         if (fallbackInteraction is not null)
@@ -168,11 +176,13 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
                         {
                             var localCues = await _cueReader.ReadFileAsync(choice.LocalSrtPath, cancellationToken);
                             var localPolish = new DownloadedSubtitles(SubtitleLanguage.Polish, "lokalny plik", localCues);
-                            var preparedLocal = PreparePolish(localCues, embeddedCues);
+                            var preparedLocal = await PrepareAgainstVideoAsync(localCues, clock);
                             if (preparedLocal.Cues is not null)
                                 return await SavePolishAsync(output, preparedLocal.Cues, exportTxt, writeSrt: true, cancellationToken);
                             reviewCandidate = localPolish;
-                            reviewAnalysis = preparedLocal.Analysis;
+                            reviewAnalysis = await clock.GetTimingReferenceAsync() is { } localReference && _synchronization is not null
+                                ? _synchronization.Analyze(localReference, localCues)
+                                : null;
                             ReportWithheldCandidate(localPolish, reviewAnalysis, status);
                         }
                         catch (OperationCanceledException) { throw; }
@@ -219,7 +229,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
                 exportTxt, translationProgress, status, cancellationToken);
         }
 
-        var downloadedEnglish = (await TryDownloadAsync(inputPath, SubtitleLanguage.English, failures, status, cancellationToken)).Subtitles;
+        var downloadedEnglish = await clock.GetEnglishAsync();
         if (downloadedEnglish is not null)
         {
             status?.Report($"Znaleziono angielskie napisy ({downloadedEnglish.Provider}) — tłumaczę z zachowaniem audio filmu.");
@@ -281,6 +291,7 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             }
         }
 
+        var clock = new VideoClock(this, videoPath, embeddedCues, failures, status, cancellationToken);
         var polishState = PolishSubtitleState.Missing;
         string? polishProvider = null;
         var polish = (await TryDownloadAsync(videoPath, SubtitleLanguage.Polish, failures, status, cancellationToken)).Subtitles;
@@ -301,13 +312,23 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             ReportWithheldCandidate(polish, prepared.Analysis, status);
         }
 
+        var online = await TryOnlinePolishAsync(videoPath, clock, failures, status, cancellationToken);
+        if (online is not null)
+        {
+            await SavePolishAsync(output, online.Cues, exportTxt: false, writeSrt: true, cancellationToken);
+            status?.Report(online.Detail);
+            return new SubtitleAvailability(videoPath, PolishSubtitleState.Saved, online.Provider, output,
+                embeddedCues is null ? EnglishSubtitleSource.None : EnglishSubtitleSource.Embedded,
+                null, embeddedCues, failures);
+        }
+
         if (embeddedCues is not null)
         {
             return new SubtitleAvailability(videoPath, polishState, polishProvider, null,
                 EnglishSubtitleSource.Embedded, null, embeddedCues, failures);
         }
 
-        var english = (await TryDownloadAsync(videoPath, SubtitleLanguage.English, failures, status, cancellationToken)).Subtitles;
+        var english = await clock.GetEnglishAsync();
         return english is null
             ? new SubtitleAvailability(videoPath, polishState, polishProvider, null,
                 EnglishSubtitleSource.None, null, null, failures)
@@ -331,6 +352,68 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
 
         return _translationPipeline.TranslateVideoSubtitlesAsync(availability.VideoPath, availability.EnglishCues!,
             provider, exportTxt, translationProgress, status, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fits Polish subtitles made for another release of this video onto it, using English
+    /// subtitles that match the video (the scan's, else embedded, else QNapi) as the clock.
+    /// Saves <c>.pl.srt</c> only when the fit is safe; never overwrites an existing file.
+    /// </summary>
+    public async Task<PolishSyncOutcome> SynchronizeOtherReleaseAsync(
+        string videoPath,
+        string polishSubtitlePath,
+        IReadOnlyList<SubtitleCue>? englishReference,
+        SubtitleTrack? englishTrack,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(polishSubtitlePath);
+        if (_cueReader is null || _synchronization is null)
+            throw new InvalidOperationException("Synchronizacja napisów nie jest dostępna.");
+
+        var output = Path.Combine(Path.GetDirectoryName(videoPath) ?? Environment.CurrentDirectory,
+            Path.GetFileNameWithoutExtension(videoPath) + ".pl.srt");
+        if (File.Exists(output))
+            return new PolishSyncOutcome(SubtitleSyncDecision.Rejected, null, "Obok filmu są już polskie napisy — nie nadpisuję ich.");
+
+        status?.Report("Wczytuję polskie napisy…");
+        var polish = await _cueReader.ReadFileAsync(polishSubtitlePath, cancellationToken);
+        ValidateCues(polish);
+
+        var failures = new List<string>();
+        var reference = englishReference;
+        if (reference is null && englishTrack is { IsText: true } && IsEnglish(englishTrack))
+        {
+            try
+            {
+                status?.Report("Odczytuję angielskie napisy z filmu…");
+                reference = await _cueReader.ReadEmbeddedAsync(videoPath, englishTrack, status, cancellationToken);
+                ValidateCues(reference);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (IsHandledSubtitleException(ex))
+            {
+                reference = null;
+                failures.Add("embedded: " + ex.Message);
+            }
+        }
+        var clock = new VideoClock(this, videoPath, reference, failures, status, cancellationToken);
+        status?.Report("Dopasowuję czas do filmu…");
+        var prepared = await PrepareAgainstVideoAsync(polish, clock);
+        if (prepared.Cues is null)
+        {
+            return new PolishSyncOutcome(SubtitleSyncDecision.Rejected, null, prepared.Clock == "brak"
+                ? "Nie ma angielskich napisów tego wydania ani czytelnej mowy w audio, więc nie ma do czego dopasować czasu."
+                : $"Nie zapisano: te napisy pasują tylko w {prepared.Coverage:P0}. To może być inny odcinek albo zupełnie inaczej podzielony tekst.");
+        }
+
+        await SavePolishAsync(output, prepared.Cues, exportTxt: false, writeSrt: true, cancellationToken);
+        var detail = $"Zapisano {Path.GetFileName(output)} · dopasowano {prepared.Coverage:P0} kwestii " +
+                     (prepared.Clock == "mowa" ? "do mowy w filmie" : "do napisów tego wydania") +
+                     (prepared.Segments > 1 ? $" w {prepared.Segments} odcinkach czasu" : string.Empty) +
+                     (prepared.Dropped > 0 ? $", pominięto {prepared.Dropped} spoza filmu." : ".");
+        return new PolishSyncOutcome(SubtitleSyncDecision.SafeToSynchronize, output, detail);
     }
 
     private async Task<SubtitleDownloadResult> TryDownloadAsync(
@@ -382,12 +465,19 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             return new PreparedPolish(cues, null);
 
         var analysis = _synchronization.Analyze(reference, cues);
-        return analysis.Decision switch
+        switch (analysis.Decision)
         {
-            SubtitleSyncDecision.Aligned => new PreparedPolish(cues, analysis),
-            SubtitleSyncDecision.SafeToSynchronize => new PreparedPolish(_synchronization.Apply(cues, analysis.Transform), analysis),
-            _ => new PreparedPolish(null, analysis)
-        };
+            case SubtitleSyncDecision.Aligned:
+                return new PreparedPolish(cues, analysis);
+            case SubtitleSyncDecision.SafeToSynchronize:
+                return new PreparedPolish(_synchronization.Apply(cues, analysis.Transform), analysis);
+        }
+
+        // Another release of the same episode: one shift does not fit, but stretches do.
+        var piecewise = _synchronization.AnalyzePiecewise(reference, cues);
+        return piecewise.Decision is SubtitleSyncDecision.Aligned or SubtitleSyncDecision.SafeToSynchronize
+            ? new PreparedPolish(piecewise.Cues, analysis, piecewise)
+            : new PreparedPolish(null, analysis, piecewise);
     }
 
     private static void ReportWithheldCandidate(DownloadedSubtitles candidate, SubtitleTimingAnalysis? analysis, IProgress<string>? status)
@@ -445,5 +535,8 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             throw new InvalidDataException("Plik napisów jest pusty lub ma nieprawidłowe czasy/numery kwestii; istniejący plik nie zostanie nadpisany.");
     }
 
-    private sealed record PreparedPolish(IReadOnlyList<SubtitleCue>? Cues, SubtitleTimingAnalysis? Analysis);
+    private sealed record PreparedPolish(
+        IReadOnlyList<SubtitleCue>? Cues,
+        SubtitleTimingAnalysis? Analysis,
+        PiecewiseSubtitleSync? Piecewise = null);
 }

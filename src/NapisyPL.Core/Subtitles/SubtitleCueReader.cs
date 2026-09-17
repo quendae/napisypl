@@ -38,7 +38,7 @@ public sealed class SubtitleCueReader(ISubtitleCueExtractor extractionService, S
 
     private async Task<IReadOnlyList<SubtitleCue>> ReadAndValidateAsync(string path, CancellationToken cancellationToken)
     {
-        var cues = parser.Parse(await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken));
+        var cues = parser.Parse(await SubtitleTextDecoder.ReadFileAsync(path, cancellationToken));
         if (!AreValid(cues))
             throw new InvalidDataException("Plik napisów jest pusty lub ma nieprawidłowe czasy/numery kwestii.");
         return cues;
