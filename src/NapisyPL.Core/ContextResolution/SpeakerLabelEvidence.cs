@@ -46,6 +46,16 @@ public static partial class SpeakerLabelEvidence
         ["waitress"] = SpeakerVoiceGender.Female, ["actress"] = SpeakerVoiceGender.Female, ["nun"] = SpeakerVoiceGender.Female
     };
 
+    /// <summary>
+    /// Short forms the birth register calls male only because the full male name was common a
+    /// century ago. On screen "Sam" is as often Samantha, "Alex" Alexandra, "Jess" Jessica.
+    /// The voice decides for these instead of the list.
+    /// </summary>
+    private static readonly HashSet<string> AmbiguousNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sam", "sammy", "alex", "jess", "jesse", "sasha", "jean", "lou", "mel", "bo", "nico"
+    };
+
     /// <summary>Labels that look like "Word:" but name no speaker.</summary>
     private static readonly HashSet<string> NotSpeakers = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -167,7 +177,8 @@ public static partial class SpeakerLabelEvidence
                 return role;
         }
 
-        return FirstNames.Value.TryGetValue(words[0].ToLowerInvariant(), out var gender)
+        return !AmbiguousNames.Contains(words[0]) &&
+               FirstNames.Value.TryGetValue(words[0].ToLowerInvariant(), out var gender)
             ? gender
             : SpeakerVoiceGender.Unknown;
     }

@@ -313,6 +313,19 @@ public sealed partial class DeterministicGenderReviewService
                     gatePassed = hasCurrentSelfGender || gatePassed;
                 }
 
+                // The English line may name the person it speaks to. Nothing the audio can
+                // offer beats that: the addressee is silent while the line is spoken.
+                if (TryGetVocativeAddresseeGender(sourceCue.Text, text, out var vocativeGender))
+                {
+                    text = FixAddresseeAgreement(sourceCue.Text, text, vocativeGender);
+                    reasonCode = "addressee_vocative_name";
+                    targetGender = vocativeGender;
+                    confidence = VocativeAddresseeConfidence;
+                    gatePassed = true;
+                    addresseeResolved = true;
+                    resolvedAddresseeGender[cue.Index] = vocativeGender;
+                }
+
                 if (!addresseeResolved &&
                     EnglishSecondPersonPronounRegex().IsMatch(sourceCue.Text) &&
                     TryGetSameSpeakerRunAddresseeGender(
@@ -416,6 +429,16 @@ public sealed partial class DeterministicGenderReviewService
                             text = FixAddresseeAgreement(sourceCue.Text, text, addresseeGender);
                         }
                     }
+                }
+
+                if (TryGetVocativeAddresseeGender(sourceCue.Text, text, out var vocativeGender))
+                {
+                    text = FixAddresseeAgreement(sourceCue.Text, text, vocativeGender);
+                    resolver = "vocative_name";
+                    reasonCode = "addressee_vocative_name";
+                    targetGender = vocativeGender;
+                    confidence = VocativeAddresseeConfidence;
+                    gatePassed = true;
                 }
             }
 

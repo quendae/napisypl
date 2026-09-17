@@ -167,6 +167,11 @@ public sealed partial class DeterministicGenderReviewService
             {
                 anchor = resolved;
             }
+            else if (TryGetTranslatedText(translated, candidate.Index, out var namedText) &&
+                     TryGetVocativeAddresseeGender(candidate.Text, namedText, out var named))
+            {
+                anchor = named;
+            }
             else if (EnglishVocativeNameRegex().IsMatch(candidate.Text) &&
                      TryGetTranslatedText(translated, candidate.Index, out var translatedText))
             {
@@ -342,6 +347,37 @@ public sealed partial class DeterministicGenderReviewService
         }
 
         return (male, female);
+    }
+
+    /// <summary>A name in the cue outranks every other addressee signal we have.</summary>
+    private const double VocativeAddresseeConfidence = 0.99;
+
+    /// <summary>
+    /// The addressee's gender when the English line names them ("But you have, Jaclyn."), which
+    /// is where Chance S01E10 #580 wrote "Przeżyłeś" to a woman. The line has to address
+    /// somebody at all, so a name without a second-person pronoun proves nothing: "Mr. Schorr."
+    /// as the tail of a narrated sentence names a third person.
+    /// The MT writes masculine by default, so masculine forms never outrank the name; two or
+    /// more feminine forms are a decision it made from context, and a name list that disagrees
+    /// with them (Andrea, Nikita, Ashley are read differently in different languages) yields.
+    /// </summary>
+    private static bool TryGetVocativeAddresseeGender(
+        string sourceText,
+        string translatedText,
+        out SpeakerVoiceGender gender)
+    {
+        gender = SpeakerVoiceGender.Unknown;
+        if (!EnglishSecondPersonPronounRegex().IsMatch(sourceText))
+            return false;
+
+        var named = VocativeAddresseeEvidence.Resolve(sourceText);
+        if (named == SpeakerVoiceGender.Unknown)
+            return false;
+        if (named == SpeakerVoiceGender.Male && InferStrongAddresseeGender(translatedText) == SpeakerVoiceGender.Female)
+            return false;
+
+        gender = named;
+        return true;
     }
 
     /// <summary>A capitalised name addressed at the start or end of a line: "Paula, …" / "…, Paula?"</summary>
