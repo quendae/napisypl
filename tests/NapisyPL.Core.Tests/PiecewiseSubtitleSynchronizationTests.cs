@@ -60,6 +60,31 @@ public sealed class PiecewiseSubtitleSynchronizationTests
         Assert.NotEqual(SubtitleSyncDecision.Aligned, result.Decision);
     }
 
+    [Fact]
+    public void TranslatorRetimedFileIsPlacedByItsStarts()
+    {
+        // Chance S01E01 from opensubtitles.org: lines merged in pairs, stretched for reading,
+        // starts within a few hundred milliseconds of the English ones.
+        var reference = BuildReference(600, seed: 8);
+        var random = new Random(3);
+        var candidate = new List<SubtitleCue>();
+        for (var index = 0; index + 1 < reference.Length; index += random.Next(1, 3))
+        {
+            var last = reference[Math.Min(index + 1, reference.Length - 1)];
+            candidate.Add(new SubtitleCue(candidate.Count + 1,
+                reference[index].Start + TimeSpan.FromMilliseconds(random.Next(-150, 450)),
+                last.End + TimeSpan.FromMilliseconds(random.Next(300, 1200)),
+                "pl " + index));
+        }
+
+        var service = new SubtitleSynchronizationService();
+        var result = service.AnalyzeStartsAgainstReference(reference, candidate);
+        var unrelated = service.AnalyzeStartsAgainstReference(BuildReference(600, seed: 44), candidate);
+
+        Assert.Equal(SubtitleSyncDecision.SafeToSynchronize, result.Decision);
+        Assert.NotEqual(SubtitleSyncDecision.SafeToSynchronize, unrelated.Decision);
+    }
+
     private static SubtitleCue[] BuildReference(int count, int seed)
     {
         var random = new Random(seed);

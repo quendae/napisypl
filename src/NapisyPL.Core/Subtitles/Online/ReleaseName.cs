@@ -63,6 +63,10 @@ public sealed partial record ReleaseName(
         return new ReleaseName(title, year, season, episode, tokens);
     }
 
+    /// <summary>"The.Office.US" and "the office us" compare equal; punctuation and case do not matter.</summary>
+    public static string NormalizeTitle(string title) =>
+        string.Join(" ", TokenRegex().Matches(title.ToLowerInvariant()).Select(match => match.Value));
+
     public bool SameEpisodeAs(ReleaseName other) =>
         !IsEpisode || !other.IsEpisode || (Season == other.Season && Episode == other.Episode);
 

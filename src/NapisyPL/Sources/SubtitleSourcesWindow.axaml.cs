@@ -16,6 +16,7 @@ public partial class SubtitleSourcesWindow : Window
         Shell.DarkTitleBar.Apply(this);
         Opened += async (_, _) =>
         {
+            LegacyOpenSubtitlesSwitch.IsChecked = (await _services.Settings.LoadAsync()).LegacyOpenSubtitles;
             SubDlKeyBox.Text = await _services.ApiKeys.LoadAsync(SubDlSource.SourceName) ?? string.Empty;
             OpenSubtitlesKeyBox.Text = await _services.ApiKeys.LoadAsync(OpenSubtitlesComSource.SourceName) ?? string.Empty;
         };
@@ -27,6 +28,9 @@ public partial class SubtitleSourcesWindow : Window
         {
             await SaveKeyAsync(SubDlSource.SourceName, SubDlKeyBox.Text);
             await SaveKeyAsync(OpenSubtitlesComSource.SourceName, OpenSubtitlesKeyBox.Text);
+            var settings = await _services.Settings.LoadAsync();
+            settings.LegacyOpenSubtitles = LegacyOpenSubtitlesSwitch.IsChecked == true;
+            await _services.Settings.SaveAsync(settings);
             await _services.RefreshOnlineSourcesAsync();
             Close(true);
         }

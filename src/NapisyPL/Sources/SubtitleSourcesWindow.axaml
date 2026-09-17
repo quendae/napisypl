@@ -23,8 +23,20 @@
       <StackPanel Spacing="6">
         <TextBlock Text="Podobne napisy z internetu" FontSize="22" FontWeight="SemiBold" />
         <TextBlock Classes="hint" TextWrapping="Wrap" LineHeight="20"
-                   Text="Gdy QNapi nie ma polskich napisów do Twojego pliku, SubFlow poszuka ich tutaj — także do innych wydań — i dopasuje czas do filmu. Obie usługi są opcjonalne i wymagają Twojego darmowego klucza API." />
+                   Text="Gdy QNapi nie ma polskich napisów do Twojego pliku, SubFlow poszuka ich tutaj — także do innych wydań — i dopasuje czas do filmu. SubDL i OpenSubtitles.com wymagają Twojego darmowego klucza API." />
       </StackPanel>
+
+      <Border Classes="card">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+          <StackPanel Spacing="2">
+            <TextBlock Classes="title" Text="OpenSubtitles.org" />
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="Stare API, bez klucza. Serwis je wygasza — gdy przestanie odpowiadać, SubFlow po prostu je pominie." />
+          </StackPanel>
+          <ToggleSwitch x:Name="LegacyOpenSubtitlesSwitch" Grid.Column="1" OnContent="" OffContent="" VerticalAlignment="Center"
+                        AutomationProperties.Name="Szukaj w OpenSubtitles.org" />
+        </Grid>
+      </Border>
 
       <Border Classes="card">
         <StackPanel Spacing="10">
