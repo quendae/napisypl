@@ -14,4 +14,8 @@
     </PackageReference>
     <ProjectReference Include="../../src/NapisyPL.Core/NapisyPL.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- UI-free shell logic from the app, tested without pulling Avalonia in. -->
+    <Compile Include="../../src/NapisyPL/Shell/CommandLineOptions.cs" Link="Shell/CommandLineOptions.cs" />
+  </ItemGroup>
 </Project>

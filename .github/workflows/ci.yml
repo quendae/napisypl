@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, "feature/**" ]
+    branches: [ main, "feature/**", "codex/**", "fix/**" ]
   pull_request:
 
 jobs:
@@ -15,6 +15,16 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Test launcher bootstrap from .NET 8
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: ./tools/Test-RunSubFlowLauncher.ps1
+
+      - name: Validate one-click launcher
+        if: github.event_name == 'push'
+        shell: cmd
+        run: Run-SubFlow.bat --check
+
       - name: Restore
         run: dotnet restore NapisyPL.sln
 
@@ -22,18 +32,30 @@ jobs:
         run: dotnet test NapisyPL.sln -c Release --no-restore
 
       - name: Publish Windows x64
-        run: >-
-          dotnet publish src/NapisyPL/NapisyPL.csproj
-          -c Release
-          -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -o artifacts/win-x64
+        shell: pwsh
+        run: |
+          dotnet publish src/NapisyPL/NapisyPL.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o artifacts/win-x64
+
+      - name: Smoke test desktop startup
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath .\artifacts\win-x64\NapisyPL.exe -PassThru
+          Start-Sleep -Seconds 3
+          $process.Refresh()
+          if ($process.HasExited) {
+            throw "SubFlow exited during startup smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: NapisyPL-win-x64
+          name: SubFlow-win-x64
           path: artifacts/win-x64/
           if-no-files-found: error

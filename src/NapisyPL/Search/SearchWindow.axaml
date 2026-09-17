@@ -1,0 +1,121 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:search="using:NapisyPL.Search"
+        x:Class="NapisyPL.Search.SearchWindow"
+        x:DataType="search:SearchWindow"
+        Title="SubFlow · szukanie napisów"
+        Icon="/Assets/subflow.ico"
+        Width="820" Height="600"
+        MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterScreen">
+  <DockPanel>
+
+    <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,0,0,1" Padding="24,18">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+        <Image Source="/Assets/subflow-256.png" Width="40" Height="40"
+               RenderOptions.BitmapInterpolationMode="HighQuality" AutomationProperties.Name="SubFlow" />
+        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="Szukanie napisów" FontSize="22" FontWeight="SemiBold" />
+          <TextBlock x:Name="SummaryText" Classes="hint" FontSize="13" TextTrimming="CharacterEllipsis"
+                     TextWrapping="NoWrap" Text="Wybierz film lub folder." />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button x:Name="AddFileButton" Classes="quiet" Click="OnAddFileClick" ToolTip.Tip="Dodaj film"
+                  AutomationProperties.Name="Dodaj film">
+            <Path Classes="icon" Data="{StaticResource IconFile}" />
+          </Button>
+          <Button x:Name="AddFolderButton" Classes="quiet" Click="OnAddFolderClick" ToolTip.Tip="Dodaj folder"
+                  AutomationProperties.Name="Dodaj folder">
+            <Path Classes="icon" Data="{StaticResource IconFolder}" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,1,0,0" Padding="24,14">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
+        <StackPanel Spacing="8" VerticalAlignment="Center">
+          <TextBlock x:Name="StatusText" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"
+                     Text="Najpierw szukamy polskich, potem angielskich napisów do tłumaczenia." />
+          <ProgressBar x:Name="Progress" Height="4" Minimum="0" Maximum="100" IsVisible="False" />
+        </StackPanel>
+        <Button x:Name="OpenFolderButton" Grid.Column="1" Classes="quiet" Content="Otwórz folder"
+                Click="OnOpenFolderClick" IsEnabled="False" />
+        <Button x:Name="CancelButton" Grid.Column="2" Classes="quiet" Content="Anuluj"
+                Click="OnCancelClick" IsVisible="False" />
+        <Button x:Name="TranslateButton" Grid.Column="3" Classes="primary" Click="OnTranslateClick"
+                IsEnabled="False" MinWidth="220">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Path Classes="icon" Data="{StaticResource IconLanguages}" Stroke="{DynamicResource OnAccentBrush}" />
+            <TextBlock x:Name="TranslateButtonText" Text="Przetłumacz maszynowo" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+      </Grid>
+    </Border>
+
+    <Grid>
+      <!-- Empty state: owns the space and says what to do first. -->
+      <StackPanel x:Name="EmptyState" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440">
+        <Border Width="72" Height="72" CornerRadius="20" Background="{DynamicResource RaisedBrush}" HorizontalAlignment="Center">
+          <Path Classes="icon" Data="{StaticResource IconSearch}" Width="32" Height="32" Stroke="{DynamicResource SubtitleYellowBrush}" />
+        </Border>
+        <TextBlock Text="Znajdź napisy do filmów" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
+        <TextBlock Classes="hint" FontSize="14" LineHeight="21" TextAlignment="Center"
+                   Text="Dodaj film albo folder. Sprawdzimy polskie napisy w QNapi, a gdy ich nie ma, znajdziemy angielskie do przetłumaczenia." />
+        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+          <Button Classes="primary" Click="OnAddFileClick" Content="Wybierz film" />
+          <Button Classes="quiet" Click="OnAddFolderClick" Content="Wybierz folder" />
+        </StackPanel>
+      </StackPanel>
+
+      <ScrollViewer x:Name="ListScroller" IsVisible="False" Padding="24,16">
+        <StackPanel Spacing="10">
+          <!-- Legend: what the two badges mean. -->
+          <StackPanel Orientation="Horizontal" Spacing="18" Margin="4,0,0,4">
+            <TextBlock Classes="hint" Text="PL — gotowe polskie napisy obok filmu" />
+            <TextBlock Classes="hint" Text="Maszynowe — są angielskie napisy do tłumaczenia" />
+          </StackPanel>
+
+          <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="search:SearchItem">
+                <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrushApp}"
+                        BorderThickness="1" CornerRadius="14" Padding="14,12">
+                  <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="12">
+                    <CheckBox IsChecked="{Binding IsSelected}" IsVisible="{Binding CanSelect}" Width="28"
+                              VerticalAlignment="Center" MinWidth="0" Padding="0"
+                              AutomationProperties.Name="{Binding FileName, StringFormat='Tłumacz {0}'}"
+                              ToolTip.Tip="Uwzględnij w tłumaczeniu maszynowym" />
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Detail}" Classes="hint" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Border Grid.Column="2" Classes="chip" Background="{Binding PolishBackground}" VerticalAlignment="Center">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Path Classes="icon" Data="{Binding PolishIcon}" Stroke="{Binding PolishBrush}" Width="14" Height="14" />
+                        <TextBlock Text="{Binding PolishText}" Foreground="{Binding PolishBrush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Border>
+                    <Border Grid.Column="3" Classes="chip" Background="{Binding MachineBackground}" VerticalAlignment="Center">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Path Classes="icon" Data="{Binding MachineIcon}" Stroke="{Binding MachineBrush}" Width="14" Height="14" />
+                        <TextBlock Text="{Binding MachineText}" Foreground="{Binding MachineBrush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Border>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</Window>

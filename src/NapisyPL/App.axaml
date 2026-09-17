@@ -1,52 +1,201 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="NapisyPL.App"
-             RequestedThemeVariant="Light">
+             Name="SubFlow"
+             RequestedThemeVariant="Dark">
   <Application.Resources>
-    <SolidColorBrush x:Key="CanvasBrush" Color="#F4F5F7" />
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="InkBrush" Color="#161A22" />
-    <SolidColorBrush x:Key="MutedBrush" Color="#667085" />
-    <SolidColorBrush x:Key="BorderBrushApp" Color="#D8DDE5" />
-    <SolidColorBrush x:Key="SubtitleYellowBrush" Color="#F2C94C" />
-    <SolidColorBrush x:Key="ActionBrush" Color="#202A3A" />
-    <SolidColorBrush x:Key="SuccessBrush" Color="#18794E" />
-    <SolidColorBrush x:Key="ErrorBrush" Color="#B42318" />
+    <ResourceDictionary>
+      <!-- Palette, measured on SurfaceBrush (#141B2D): Ink 15.3:1, Muted 6.9:1, Success 9.2:1,
+           Warning 9.3:1, Error 6.2:1; dark text on the yellow accent 10.7:1. LineColor is for
+           decorative card edges only (1.4:1); control boundaries use StrongLineColor (3.6:1). -->
+      <Color x:Key="CanvasColor">#0B1020</Color>
+      <Color x:Key="SurfaceColor">#141B2D</Color>
+      <Color x:Key="RaisedColor">#1B2439</Color>
+      <Color x:Key="LineColor">#28334D</Color>
+      <Color x:Key="StrongLineColor">#62739A</Color>
+      <Color x:Key="InkColor">#EEF2F8</Color>
+      <Color x:Key="MutedColor">#9AA5B8</Color>
+      <Color x:Key="AccentColor">#F5C451</Color>
+      <Color x:Key="AccentHoverColor">#FFD470</Color>
+      <Color x:Key="AccentPressedColor">#DDAA36</Color>
+      <Color x:Key="OnAccentColor">#141A26</Color>
+      <Color x:Key="FlowColor">#4FD1C5</Color>
+      <Color x:Key="WarningColor">#FDB022</Color>
+      <Color x:Key="ErrorColor">#F97066</Color>
+
+      <SolidColorBrush x:Key="CanvasBrush" Color="{StaticResource CanvasColor}" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
+      <SolidColorBrush x:Key="RaisedBrush" Color="{StaticResource RaisedColor}" />
+      <SolidColorBrush x:Key="BorderBrushApp" Color="{StaticResource LineColor}" />
+      <SolidColorBrush x:Key="StrongBorderBrush" Color="{StaticResource StrongLineColor}" />
+      <SolidColorBrush x:Key="InkBrush" Color="{StaticResource InkColor}" />
+      <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
+      <SolidColorBrush x:Key="SubtitleYellowBrush" Color="{StaticResource AccentColor}" />
+      <SolidColorBrush x:Key="ActionBrush" Color="{StaticResource AccentColor}" />
+      <SolidColorBrush x:Key="OnAccentBrush" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="FlowBrush" Color="{StaticResource FlowColor}" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource FlowColor}" />
+      <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+      <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />
+      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#1A4FD1C5" />
+      <SolidColorBrush x:Key="WarningSoftBrush" Color="#1FFDB022" />
+      <SolidColorBrush x:Key="NeutralSoftBrush" Color="#14FFFFFF" />
+
+      <!-- Line icons on a 24 unit grid, drawn with a 2 unit round stroke (lucide style). -->
+      <StreamGeometry x:Key="IconCheck">M20 6 9 17 4 12</StreamGeometry>
+      <StreamGeometry x:Key="IconX">M18 6 6 18 M6 6 18 18</StreamGeometry>
+      <StreamGeometry x:Key="IconMinus">M5 12 19 12</StreamGeometry>
+      <StreamGeometry x:Key="IconAlert">M12 8 12 13 M12 16.5 12 16.6 M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z</StreamGeometry>
+      <StreamGeometry x:Key="IconFolder">M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z</StreamGeometry>
+      <StreamGeometry x:Key="IconFile">M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2 14 8 20 8</StreamGeometry>
+      <StreamGeometry x:Key="IconUpload">M12 15 12 3 M7 8 12 3 17 8 M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4</StreamGeometry>
+      <StreamGeometry x:Key="IconSliders">M21 4 14 4 M10 4 3 4 M21 12 12 12 M8 12 3 12 M21 20 16 20 M12 20 3 20 M14 2 14 6 M8 10 8 14 M16 18 16 22</StreamGeometry>
+      <StreamGeometry x:Key="IconSearch">M11 3a8 8 0 1 0 0 16a8 8 0 1 0 0-16Z M21 21 16.7 16.7</StreamGeometry>
+      <StreamGeometry x:Key="IconLanguages">M5 8 11 14 M4 14 10 8 12 5 M2 5 14 5 M7 2 8 2 M22 22 17 12 12 22 M14 18 20 18</StreamGeometry>
+      <StreamGeometry x:Key="IconSubtitles">M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z M6 13 12 13 M15 13 18 13 M6 16 9 16 M12 16 18 16</StreamGeometry>
+      <StreamGeometry x:Key="IconExternal">M15 3 21 3 21 9 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6</StreamGeometry>
+
+      <!-- Fluent draws the check glyph with the "text on accent" colour; on yellow it must be dark. -->
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="{StaticResource OnAccentColor}" />
+      <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPressed" Color="{StaticResource OnAccentColor}" />
+    </ResourceDictionary>
   </Application.Resources>
+
   <Application.Styles>
-    <FluentTheme />
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark"
+                               Accent="{StaticResource AccentColor}"
+                               AltHigh="{StaticResource CanvasColor}"
+                               RegionColor="{StaticResource CanvasColor}"
+                               ChromeMediumLow="{StaticResource SurfaceColor}"
+                               ChromeMedium="{StaticResource RaisedColor}"
+                               BaseHigh="{StaticResource InkColor}" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+
     <Style Selector="Window">
-      <Setter Property="FontFamily" Value="Segoe UI" />
+      <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+      <Setter Property="Background" Value="{DynamicResource CanvasBrush}" />
     </Style>
+
+    <Style Selector="TextBlock.display">
+      <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
+      <Setter Property="FontSize" Value="36" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LineHeight" Value="44" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="0.8" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="LineHeight" Value="18" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushApp}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="20" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="24" />
     </Style>
+
     <Style Selector="Border.dropzone">
-      <Setter Property="Background" Value="#FAFBFC" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushApp}" />
       <Setter Property="BorderThickness" Value="1.5" />
-      <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="26" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="28" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.15" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
     </Style>
+
+    <Style Selector="Border.chip">
+      <Setter Property="CornerRadius" Value="999" />
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Background" Value="{DynamicResource NeutralSoftBrush}" />
+    </Style>
+
+    <Style Selector="PathIcon">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+    </Style>
+
+    <!-- Stroke icons: Path with the 24-unit geometry scaled into its box. -->
+    <Style Selector="Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="16,8" />
+    </Style>
+
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{DynamicResource ActionBrush}" />
-      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="MinHeight" Value="44" />
-      <Setter Property="Padding" Value="20,10" />
-      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="MinHeight" Value="46" />
+      <Setter Property="Padding" Value="22,10" />
     </Style>
-    <Style Selector="TextBox">
-      <Setter Property="MinHeight" Value="38" />
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentHoverColor}" />
+      <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
     </Style>
-    <Style Selector="ComboBox">
-      <Setter Property="MinHeight" Value="38" />
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource AccentPressedColor}" />
+      <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource StrongBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="TextBox, ComboBox">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <Style Selector="ProgressBar">
+      <Setter Property="Foreground" Value="{DynamicResource FlowBrush}" />
+      <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+
+    <Style Selector="MenuItem">
+      <Setter Property="Padding" Value="12,8" />
     </Style>
   </Application.Styles>
 </Application>

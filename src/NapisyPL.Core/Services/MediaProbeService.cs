@@ -2,7 +2,7 @@ using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.Services;
 
-public sealed class MediaProbeService(FfmpegManager ffmpegManager, ProcessRunner processRunner)
+public sealed class MediaProbeService(FfmpegManager ffmpegManager, ProcessRunner processRunner) : IMediaProbeService
 {
     public async Task<IReadOnlyList<SubtitleTrack>> ProbeAsync(string mediaPath, IProgress<string>? status = null, CancellationToken cancellationToken = default)
     {

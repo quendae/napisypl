@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "get-married",
+      "category": "gendered_phrase",
+      "sourcePatterns": [
+        "get married",
+        "gets married",
+        "got married",
+        "getting married"
+      ],
+      "male": {
+        "replace": "ożeniłeś się",
+        "translatedPatterns": [
+          "wyszłaś za mąż",
+          "wyszedłeś za mąż",
+          "ożeniłaś się"
+        ]
+      },
+      "female": {
+        "replace": "wyszłaś za mąż",
+        "translatedPatterns": [
+          "ożeniłeś się",
+          "ożeniłaś się",
+          "wyszedłeś za mąż"
+        ]
+      },
+      "priority": 100,
+      "source": "SubFlow built-in",
+      "license": "project"
+    }
+  ]
+}

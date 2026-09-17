@@ -1,0 +1,44 @@
+name: Publish Offline MT GPU Profiles Test Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/offline-mt-gpu-profiles
+    paths:
+      - '.github/workflows/publish-nllb-release.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified phrase lexicon artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '10346810496'
+          EXPECTED_SHA256: 'efbb3a676e3930317d291e19a213a5b6c7d467720054cf295483e024c372375e'
+          ASSET_NAME: 'SubFlow-win-x64-phrase-lexicon-ae8cfa5.zip'
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            -o "$ASSET_NAME"
+          echo "${EXPECTED_SHA256}  ${ASSET_NAME}" | sha256sum -c -
+
+      - name: Upload asset to existing GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: subflow-offline-mt-gpu-profiles-008dd36
+          ASSET_NAME: 'SubFlow-win-x64-phrase-lexicon-ae8cfa5.zip'
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$ASSET_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
