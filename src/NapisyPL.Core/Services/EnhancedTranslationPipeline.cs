@@ -179,7 +179,11 @@ public sealed class EnhancedTranslationPipeline(
                 ("result", "success"));
 
             // SDH speaker labels ("JACLYN:") are read from the English text and outrank audio.
-            var speakerLabels = SpeakerLabelEvidence.Analyze(sourceCues, speakers.CueGenderEvidence);
+            var speakerLabels = SpeakerLabelEvidence.Continue(
+                SpeakerLabelEvidence.Analyze(sourceCues, speakers.CueGenderEvidence),
+                sourceCues,
+                speakers.CueSpeakers,
+                speakers.CueGenderEvidence);
             var (labeledCueEvidence, labeledSpeakerEvidence) = SpeakerLabelEvidence.Apply(
                 speakerLabels, sourceCues, speakers.CueSpeakers, speakers.SpeakerGenderEvidence, speakers.CueGenderEvidence);
             speakers = speakers with
@@ -193,6 +197,7 @@ public sealed class EnhancedTranslationPipeline(
                 ("stage", "speaker_labels"),
                 ("labelCount", speakerLabels.CueLabel.Count),
                 ("genderedLabelCount", speakerLabels.CueGender.Count),
+                ("continuedLabelCount", speakerLabels.ContinuedGender?.Count ?? 0),
                 ("result", "success"));
 
             status?.Report(HardVoiceTurnOnly
@@ -208,7 +213,7 @@ public sealed class EnhancedTranslationPipeline(
                 speakers.CueGenderEvidence,
                 genderDiagnostics,
                 hardVoiceTurnOnly: HardVoiceTurnOnly,
-                labeledCueGender: speakerLabels.CueGender);
+                labeledCueGender: speakerLabels.AllCueGender);
 
             cancellationToken.ThrowIfCancellationRequested();
             status?.Report("Enhanced: końcowy Quality Pass EN↔PL — sprawdzam powtórki i artefakty…");
@@ -262,7 +267,7 @@ public sealed class EnhancedTranslationPipeline(
                     speakers.CueGenderEvidence,
                     genderDiagnostics,
                     hardVoiceTurnOnly: HardVoiceTurnOnly,
-                    labeledCueGender: speakerLabels.CueGender);
+                    labeledCueGender: speakerLabels.AllCueGender);
             }
 
             var finalQualityIssues = FinalTranslationQualityGate.Evaluate(sourceCues, reviewed);
