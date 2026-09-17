@@ -19,17 +19,24 @@ public sealed class SpeakerGenderSamplePlannerTests
 
         var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
 
-        Assert.Equal(3, selected[0].Count);
+        Assert.Equal(4, selected[0].Count);
         Assert.DoesNotContain(selected[0], segment => segment.EndSeconds - segment.StartSeconds < 0.75);
         Assert.Equal(1, selected[1].Count);
         Assert.Equal(4.0, selected[1][0].EndSeconds - selected[1][0].StartSeconds, 3);
     }
 
     [Fact]
-    public void CreateDefault_RequestsEnoughAudioTagsForGenderEvidence()
+    public void SelectSegments_SkipsSpeakersWithTooLittleSpeechToEverQualify()
     {
-        var options = SpeakerVoiceGenderOptions.CreateDefault();
+        SpeakerSegment[] segments =
+        [
+            new(0, 3.0, 0),
+            new(5, 6.0, 1)
+        ];
 
-        Assert.True(options.TopK >= 50);
+        var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
+
+        Assert.True(selected.ContainsKey(0));
+        Assert.False(selected.ContainsKey(1));
     }
 }

@@ -18,15 +18,16 @@ public partial class MainWindow : Window
 {
     private static readonly string[] ProviderNames = ["Gemini", "DeepL", "OpenAI / Ollama", "Claude"];
 
-    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(15) };
-    private readonly AppLogger _appLogger = new();
-    private readonly FolderQueuePlanner _folderQueuePlanner = new();
+    private readonly AppServices _services = AppServices.Shared;
+    private readonly HttpClient _httpClient;
+    private readonly AppLogger _appLogger;
+    private readonly FolderQueuePlanner _folderQueuePlanner;
     private readonly MediaProbeService _mediaProbe;
     private readonly TranslationPipeline _pipeline;
     private readonly SubtitleAcquisitionPipeline _subtitlePipeline;
     private readonly ISubtitleFallbackInteraction _subtitleFallbackInteraction;
     private readonly FolderBatchService _folderBatch;
-    private readonly SettingsStore _settingsStore = new();
+    private readonly SettingsStore _settingsStore;
     private readonly DispatcherTimer _elapsedTimer;
 
     private CancellationTokenSource? _operationCancellation;
@@ -40,31 +41,29 @@ public partial class MainWindow : Window
     private bool _loadingSettings = true;
     private TranslationProgress? _activeTranslationProgress;
 
-    private readonly IBrush _normalDropBrush = new SolidColorBrush(Color.Parse("#D8DDE5"));
-    private readonly IBrush _activeDropBrush = new SolidColorBrush(Color.Parse("#202A3A"));
-    private readonly IBrush _mutedBrush = new SolidColorBrush(Color.Parse("#667085"));
-    private readonly IBrush _errorBrush = new SolidColorBrush(Color.Parse("#B42318"));
-    private readonly IBrush _successBrush = new SolidColorBrush(Color.Parse("#18794E"));
+    // Mirrors the palette in App.axaml.
+    private readonly IBrush _normalDropBrush = new SolidColorBrush(Color.Parse("#28334D"));
+    private readonly IBrush _activeDropBrush = new SolidColorBrush(Color.Parse("#F5C451"));
+    private readonly IBrush _mutedBrush = new SolidColorBrush(Color.Parse("#9AA5B8"));
+    private readonly IBrush _errorBrush = new SolidColorBrush(Color.Parse("#F97066"));
+    private readonly IBrush _successBrush = new SolidColorBrush(Color.Parse("#4FD1C5"));
 
     public MainWindow()
     {
+        _httpClient = _services.HttpClient;
+        _appLogger = _services.Logger;
+        _folderQueuePlanner = _services.FolderQueuePlanner;
+        _settingsStore = _services.Settings;
+        _mediaProbe = _services.MediaProbe;
+        _pipeline = _services.Pipeline;
+        _subtitlePipeline = _services.SubtitlePipeline;
+        _folderBatch = _services.FolderBatch;
+
         InitializeComponent();
         CompleteEnhancedControlInitialization();
+        Shell.DarkTitleBar.Apply(this);
 
-        var processRunner = new ProcessRunner();
-        var ffmpegManager = new FfmpegManager(_httpClient);
-        _mediaProbe = new MediaProbeService(ffmpegManager, processRunner);
-        var extraction = new SubtitleExtractionService(ffmpegManager, processRunner);
-        var parser = new SrtParser();
-        var writer = new SubtitleWriter();
-        var coordinator = new TranslationCoordinator();
-        _pipeline = new TranslationPipeline(parser, writer, extraction, coordinator);
-        var qnapi = new QnapiSubtitleDownloader(new QnapiRuntimeManager(_httpClient), parser);
-        var cueReader = new SubtitleCueReader(extraction, parser);
-        var synchronization = new SubtitleSynchronizationService();
-        _subtitlePipeline = new SubtitleAcquisitionPipeline(_pipeline, qnapi, cueReader, synchronization);
-        _subtitleFallbackInteraction = new SubtitleAlternativeSelector(this, qnapi, () => _inputPath);
-        _folderBatch = new FolderBatchService(_folderQueuePlanner, _mediaProbe, _subtitlePipeline, _appLogger);
+        _subtitleFallbackInteraction = new SubtitleAlternativeSelector(this, _services.Qnapi, () => _inputPath);
 
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _elapsedTimer.Tick += (_, _) => RefreshElapsedText();
@@ -76,18 +75,22 @@ public partial class MainWindow : Window
             _elapsedTimer.Stop();
             _operationCancellation?.Cancel();
             _operationCancellation?.Dispose();
-            _httpClient.Dispose();
         };
     }
 
     private async void OnOpened(object? sender, EventArgs e)
     {
+        if (!_loadingSettings)
+            return;
         var settings = await _settingsStore.LoadAsync();
-        ProviderComboBox.SelectedItem = ProviderNames.Contains(settings.Provider) ? settings.Provider : "Gemini";
+        ProviderComboBox.SelectedItem = settings.Provider;
         ModelTextBox.Text = settings.Model;
         BaseUrlTextBox.Text = settings.BaseUrl;
-        ExportTxtCheckBox.IsChecked = settings.ExportTxt;
+        ExportTxtMenuItem.IsChecked = settings.ExportTxt;
         SearchSubtitlesCheckBox.IsChecked = settings.SearchSubtitles;
+        EnhancedMenuItem.IsChecked = settings.GenderCorrection;
+        HardVoiceMenuItem.IsChecked = settings.StrictVoiceEvidence;
+        ApplyGenderCorrectionOptions();
         _loadingSettings = false;
         ApplyProviderUi(useDefaults: false);
         RefreshReadyState();
@@ -183,7 +186,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var queue = _folderQueuePlanner.Plan(path, ExportTxtCheckBox.IsChecked == true);
+            var queue = _folderQueuePlanner.Plan(path, ExportTxtMenuItem.IsChecked);
             _inputFolder = path;
             _folderItemCount = queue.Count;
             SelectedFileText.Text = $"{Path.GetFileName(path)} · {queue.Count} plików w kolejce";
@@ -379,9 +382,18 @@ public partial class MainWindow : Window
         await SaveSettingsAsync();
         ResetOperationProgress();
         BeginOperation("Przygotowuję napisy…", indeterminate: false);
+        ApplyGenderCorrectionOptions();
 
+        var acquired = false;
         try
         {
+            if (!await _services.TranslationGate.WaitAsync(0))
+            {
+                SetStatus("Czekam, aż skończy się tłumaczenie w oknie wyszukiwania…", StatusKind.Normal);
+                await _services.TranslationGate.WaitAsync(_operationCancellation!.Token);
+            }
+            acquired = true;
+
             if (_inputFolder is not null)
                 await TranslateFolderAsync(provider);
             else
@@ -397,9 +409,25 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (acquired)
+                _services.TranslationGate.Release();
             EndOperation(keepProgress: _lastOutputPath is not null || _lastOutputFolder is not null);
             RefreshReadyState();
         }
+    }
+
+    /// <summary>True while the window runs a job; the tray asks before quitting.</summary>
+    public bool IsBusy => _busy;
+
+    /// <summary>Loads a file or folder handed over from the tray or a second launch.</summary>
+    public async Task OpenPathAsync(string path)
+    {
+        if (_busy)
+            return;
+        if (Directory.Exists(path))
+            LoadFolder(path);
+        else
+            await LoadInputAsync(path);
     }
 
     private async Task TranslateSingleFileAsync(ITranslationProvider provider)
@@ -419,7 +447,7 @@ public partial class MainWindow : Window
             selectedTrack,
             _subtitleFallbackInteraction,
             provider,
-            ExportTxtCheckBox.IsChecked == true,
+            ExportTxtMenuItem.IsChecked,
             translationProgress,
             statusProgress,
             _operationCancellation!.Token);
@@ -451,7 +479,7 @@ public partial class MainWindow : Window
         var result = await _folderBatch.TranslateFolderAsync(
             folder,
             provider,
-            ExportTxtCheckBox.IsChecked == true,
+            ExportTxtMenuItem.IsChecked,
             folderProgress,
             _operationCancellation!.Token);
 
@@ -611,7 +639,7 @@ public partial class MainWindow : Window
         ApiKeyTextBox.IsEnabled = false;
         BaseUrlTextBox.IsEnabled = false;
         RevealKeyCheckBox.IsEnabled = false;
-        ExportTxtCheckBox.IsEnabled = false;
+        ExportTxtMenuItem.IsEnabled = false;
         SearchSubtitlesCheckBox.IsEnabled = false;
         TrackComboBox.IsEnabled = false;
         TranslateButton.IsEnabled = false;
@@ -633,7 +661,7 @@ public partial class MainWindow : Window
         ApiKeyTextBox.IsEnabled = true;
         BaseUrlTextBox.IsEnabled = true;
         RevealKeyCheckBox.IsEnabled = true;
-        ExportTxtCheckBox.IsEnabled = true;
+        ExportTxtMenuItem.IsEnabled = true;
         SearchSubtitlesCheckBox.IsEnabled = true;
         TrackComboBox.IsEnabled = true;
         ProgressBar.IsIndeterminate = false;
@@ -684,7 +712,9 @@ public partial class MainWindow : Window
             Model = ModelTextBox.Text ?? string.Empty,
             BaseUrl = BaseUrlTextBox.Text ?? string.Empty,
             SearchSubtitles = SearchSubtitlesCheckBox.IsChecked == true,
-            ExportTxt = ExportTxtCheckBox.IsChecked == true
+            GenderCorrection = EnhancedMenuItem.IsChecked,
+            StrictVoiceEvidence = HardVoiceMenuItem.IsChecked,
+            ExportTxt = ExportTxtMenuItem.IsChecked
         };
         await _settingsStore.SaveAsync(settings);
     }

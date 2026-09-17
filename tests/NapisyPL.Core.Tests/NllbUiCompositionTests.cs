@@ -12,10 +12,9 @@ public sealed class NllbUiCompositionTests
         Assert.Contains("NLLB 1.3B — Balanced", source, StringComparison.Ordinal);
         Assert.Contains("NLLB 3.3B — Quality Test", source, StringComparison.Ordinal);
         Assert.Contains("MADLAD-400 3B — Quality", source, StringComparison.Ordinal);
-        Assert.Contains("CC-BY-NC-4.0", source, StringComparison.Ordinal);
-        Assert.Contains("Apache-2.0", source, StringComparison.Ordinal);
-        Assert.Contains("Auto GPU/CPU", source, StringComparison.Ordinal);
-        Assert.Contains("Model pozostaje w pamięci podczas całej kolejki folderu", source, StringComparison.Ordinal);
+        // Short hints: NLLB's non-commercial licence stays visible, MADLAD is the recommended local model.
+        Assert.Contains("Licencja niekomercyjna", source, StringComparison.Ordinal);
+        Assert.Contains("Zalecany", source, StringComparison.Ordinal);
     }
 
     [Fact]

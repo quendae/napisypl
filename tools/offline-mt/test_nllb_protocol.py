@@ -130,11 +130,77 @@ class NllbProtocolTests(unittest.TestCase):
         first = module.generation_kwargs(None, "A short subtitle.", retry=False)
         retry = module.generation_kwargs(None, "A short subtitle.", retry=True)
 
-        self.assertEqual(256, first["max_new_tokens"])
         self.assertEqual(4, first["num_beams"])
+        self.assertLessEqual(first["max_new_tokens"], 256)
+        self.assertGreaterEqual(first["max_new_tokens"], 48)
         self.assertLess(retry["max_new_tokens"], first["max_new_tokens"])
         self.assertEqual(3, retry["no_repeat_ngram_size"])
         self.assertGreater(retry["repetition_penalty"], 1.0)
+        # The retry escalates to search; repeating a greedy pass would just loop again.
+        self.assertEqual(4, retry["num_beams"])
+
+    def test_long_source_gets_a_larger_but_still_bounded_token_budget(self):
+        module = self.load_helper_module()
+
+        short = module.generation_kwargs(None, "Hi.", retry=False)
+        long_source = module.generation_kwargs(None, " ".join(["word"] * 200), retry=False)
+
+        self.assertLess(short["max_new_tokens"], long_source["max_new_tokens"])
+        self.assertEqual(256, long_source["max_new_tokens"])
+
+    def test_beam_count_is_overridable_from_the_environment(self):
+        import os
+
+        module = self.load_helper_module()
+        os.environ["SUBFLOW_MT_BEAMS"] = "1"
+        try:
+            self.assertEqual(1, module.generation_kwargs(None, "Hi.", retry=False)["num_beams"])
+        finally:
+            del os.environ["SUBFLOW_MT_BEAMS"]
+
+
+class LengthBatchingTests(unittest.TestCase):
+    def load_helper_module(self):
+        helper = pathlib.Path(__file__).parent / "nllb_helper.py"
+        spec = importlib.util.spec_from_file_location("subflow_nllb_batching_test", helper)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_sorting_then_restoring_is_the_identity(self):
+        module = self.load_helper_module()
+        texts = ["dddd", "a", "ccc", "bb", "eeeee", "a"]
+
+        order = module.length_batching_order(texts)
+        sorted_texts = [texts[index] for index in order]
+
+        self.assertEqual(sorted(texts, key=len), sorted_texts)
+        self.assertEqual(texts, module.restore_original_order(sorted_texts, order))
+
+    def test_restoring_maps_translations_back_to_their_own_source(self):
+        module = self.load_helper_module()
+        texts = ["a long source line here", "hi", "medium length"]
+
+        order = module.length_batching_order(texts)
+        # Translation of each text, produced in sorted order.
+        outputs = ["PL:" + texts[index] for index in order]
+
+        restored = module.restore_original_order(outputs, order)
+
+        self.assertEqual(["PL:" + text for text in texts], restored)
+
+    def test_single_and_empty_inputs_round_trip(self):
+        module = self.load_helper_module()
+
+        self.assertEqual([], module.restore_original_order([], module.length_batching_order([])))
+        self.assertEqual(["x"], module.restore_original_order(["x"], module.length_batching_order(["only"])))
+
+    def test_mismatched_batch_is_rejected(self):
+        module = self.load_helper_module()
+
+        with self.assertRaises(RuntimeError):
+            module.restore_original_order(["a"], [0, 1])
 
 
 if __name__ == "__main__":

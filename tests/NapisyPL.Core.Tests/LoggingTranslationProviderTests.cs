@@ -23,6 +23,7 @@ public sealed class LoggingTranslationProviderTests
             };
 
             var result = await provider.TranslateAsync(segments);
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Equal("SECRET TRANSLATION 1", result[1]);
@@ -56,6 +57,7 @@ public sealed class LoggingTranslationProviderTests
             await Assert.ThrowsAsync<HttpRequestException>(() =>
                 provider.TranslateAsync([new TranslationSegment(1, "PRIVATE") ]));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
             Assert.Contains("event=translation_request_error", log);
             Assert.Contains("category=HttpRequestException", log);

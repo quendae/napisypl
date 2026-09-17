@@ -8,8 +8,11 @@ public sealed class EnhancedDeterministicCompositionTests
         var root = FindRepositoryRoot();
         var xaml = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml"));
 
-        Assert.Contains("Enhanced — popraw kontekst i rodzaj z audio", xaml, StringComparison.Ordinal);
-        Assert.Contains("deterministycz", xaml, StringComparison.OrdinalIgnoreCase);
+        // Both switches live in the Options menu under short names.
+        Assert.Contains("x:Name=\"EnhancedMenuItem\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Korekta rodzaju z głosu", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HardVoiceMenuItem\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Tylko pewne rozpoznanie", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("EnhancedModelComboBox", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("EnhancedBackendComboBox", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Model korektora", xaml, StringComparison.Ordinal);

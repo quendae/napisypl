@@ -126,6 +126,14 @@ public static class SpeakerGenderEvidenceAggregator
         if (valid.Length == 0)
             return Unknown(SpeakerGenderUnknownReason.InvalidSamples, 0);
 
+        // A sample with no voiced speech at all (music, effects, silence) carries no
+        // direction. Counting it towards the two-thirds consistency quorum made a
+        // speaker with one clear sample and seven silent ones "inconsistent".
+        var voiced = valid.Where(item => item.MaleProbability + item.FemaleProbability > 0).ToArray();
+        if (voiced.Length == 0)
+            return Unknown(SpeakerGenderUnknownReason.LowCombinedEvidence, valid.Length);
+        valid = voiced;
+
         var totalDuration = valid.Sum(item => item.DurationSeconds);
         if (totalDuration < MinimumTotalDurationSeconds)
             return Unknown(SpeakerGenderUnknownReason.TooShort, valid.Length);

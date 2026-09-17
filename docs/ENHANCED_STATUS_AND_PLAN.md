@@ -2,6 +2,43 @@
 
 Aktualizacja: 2026-09-12, po wdrożeniu fundamentu SubFlow 3.2 **addressee-first**.
 
+## Aktualizacja 2026-09-16 — pomiary na Vice Principals S01E08
+
+Wszystkie liczby z pełnego przebiegu pipeline'u (MADLAD-400 3B na RX 6950 XT, tryb Test M/K, 641 cue).
+
+### Tłumaczenie lokalne
+
+| | przed | po |
+|---|---|---|
+| czas tłumaczenia | 26,6 min (E05, 754 cue) | 1,6–2,1 min |
+| cue z pętlami / po angielsku | większość (E08) | 0 pętli, 1 opis dźwięku bez tłumaczenia |
+| wielozdaniowe cue z kompletem zdań | 3/180 | 159/180 (test na 180 cue) |
+
+Przyczyny: znak nowej linii wysyłany do modelu (echo angielskiego i pętle) oraz tłumaczenie całego
+cue naraz (model gubi zdania). `MachineTranslationTextPreprocessor` wysyła teraz jedno zdanie na część,
+bez łamań linii, z osobną linią na mówcę w dialogu. `num_beams` = 4 (greedy nie był lepszy).
+
+### Sygnał płci i diaryzacja
+
+- Wysokość głosu (YIN, `FundamentalFrequencyEstimator`) zamiast dwóch klas audio-taggera AudioSet.
+- Kanał centralny 5.1 zamiast uśredniania: cue z pewną płcią 179 → 253, udział mowy dźwięcznej 0,14 → 0,21.
+- Embedding WeSpeaker ResNet34 (próg 0,70) zamiast CAM++ (0,65). Zmierzone względem wysokości głosu:
+
+| diaryzacja | mówców | cue płci „mniejszościowej” w klastrze | zmiany M↔K z tą samą etykietą |
+|---|---|---|---|
+| CAM++ 0,65 | 64 | 36% | 9/20 |
+| pyannote Community-1 (referencja, 11 min CPU) | 12 | 13% | 0/20 |
+| **ResNet34 0,70** | **12** | **8%** | 1/20 |
+
+### Korekty rodzaju
+
+- Słownik form z SGJP (`gender_forms.sgjp.tsv.gz`, BSD-2, generator w `tools/gender-lexicon`):
+  58 tys. par 1. os., 58 tys. par 2. os., 89 tys. przymiotników/imiesłowów; formy dwuznaczne usunięte.
+- Test M/K: pewna wysokość głosu (≥ 0,90) wygrywa z etykietą diaryzacji; przeskakiwanie do 2 cue
+  kontynuacji tego samego mówcy; przymiotnik po „byłem/byłam/będę”.
+- S01E08: 81 kandydatów, 27 rozstrzygniętych, 8 zmian — ręcznie sprawdzone, żadna w złym kierunku.
+  Największa pozostała blokada: `current_gender_unknown` (29) — brak pewnej wysokości głosu dla cue.
+
 ## Stan repo / punkt wznowienia
 
 - Repo: `quendae/napisypl`
@@ -281,17 +318,27 @@ Dopiero po ustabilizowaniu correctness. Cache powinien uwzględniać plik/audio,
 
 ## Ważne pliki
 
-- `src/NapisyPL.Core/ContextResolution/DialogueAddresseeResolver.cs`
-- `src/NapisyPL.Core/ContextResolution/TargetedGenderReviewProtocol.cs`
-- `src/NapisyPL.Core/ContextResolution/LocalTargetedGenderReviewService.cs`
-- `src/NapisyPL.Core/ContextResolution/SurgicalGenderEditProtocol.cs`
-- `src/NapisyPL.Core/ContextResolution/SpeakerGenderEvidence.cs`
+Stan po audycie 2026-09-16 (pliki zweryfikowane, że istnieją):
+
+- `src/NapisyPL.Core/ContextResolution/FundamentalFrequencyEstimator.cs` — estymacja F0 (YIN)
+- `src/NapisyPL.Core/ContextResolution/VoiceGenderPitchMapper.cs` — F0 → dowód płci
 - `src/NapisyPL.Core/ContextResolution/SpeakerVoiceGenderService.cs`
-- `src/NapisyPL.Core/ContextResolution/GenderReviewCandidateSelector.cs`
-- `src/NapisyPL.Core/ContextResolution/GenderReviewCoverageDiagnostics.cs`
+- `src/NapisyPL.Core/ContextResolution/CueVoiceGenderService.cs`
+- `src/NapisyPL.Core/ContextResolution/DialogueAddresseeResolver.cs`
+- `src/NapisyPL.Core/ContextResolution/HardVoiceTurnResolver.cs`
+- `src/NapisyPL.Core/ContextResolution/LocalTurnGenderResolver.cs`
+- `src/NapisyPL.Core/ContextResolution/DeterministicGenderReviewService.cs` (+ `.Consistency.cs`)
+- `src/NapisyPL.Core/ContextResolution/SpeakerGenderEvidence.cs`
 - `src/NapisyPL.Core/Services/EnhancedTranslationPipeline.cs`
-- `src/NapisyPL.Core/Services/EnhancedTranslationCache.cs`
 - `src/NapisyPL.Core/Diagnostics/AppLogger.cs`
+- `tools/offline-mt/nllb_helper.py` — lokalny MT (NLLB / MADLAD)
+
+> Wcześniejsza wersja tej listy wskazywała `TargetedGenderReviewProtocol`,
+> `LocalTargetedGenderReviewService`, `SurgicalGenderEditProtocol`,
+> `GenderReviewCandidateSelector` i `GenderReviewCoverageDiagnostics`.
+> Żaden z tych plików nie istnieje w repo — pochodziły z architektury
+> z reviewerem Qwen, która została usunięta. Sekcje powyżej opisujące
+> Argos jako baseline i Qwen3.5-9B jako reviewera również są historyczne.
 
 ## Kluczowe milestone commits
 

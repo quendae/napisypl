@@ -161,6 +161,7 @@ public sealed class EnhancedGenderSafetyRegressionTests
                 ("nextSpeakerConfidencePermille", 939),
                 ("nextSpeakerSampleCount", 3));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("uniqueSpeakerCount=23", log);

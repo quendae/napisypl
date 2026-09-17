@@ -1,128 +1,101 @@
-using Avalonia.Interactivity;
-using NapisyPL.Core.ContextResolution;
-using NapisyPL.Core.Services;
-using NapisyPL.Core.Translation;
+using Avalonia.Controls;
+using NapisyPL.Shell;
 
 namespace NapisyPL;
 
 public partial class MainWindow
 {
-    private HttpClient? _enhancedAudioHttpClient;
-    private EnhancedTranslationPipeline? _enhancedPipeline;
-    private bool _enhancedConfigured;
-    private bool _enhancedCloseHooked;
-
-    private void OnEnhancedChanged(object? sender, RoutedEventArgs e)
+    /// <summary>Wires the Options menu toggles; they flip themselves (ToggleType="CheckBox").</summary>
+    private void CompleteEnhancedControlInitialization()
     {
-        if (_pipeline is null)
-            return;
-
-        if (EnhancedCheckBox.IsChecked == true)
+        EnhancedMenuItem.PropertyChanged += async (_, change) =>
         {
-            EnsureEnhancedConfigured();
-            _pipeline.UseEnhanced = true;
-            if (_enhancedPipeline is not null)
-                _enhancedPipeline.HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true;
+            if (change.Property != MenuItem.IsCheckedProperty || _loadingSettings)
+                return;
 
-            SetStatus(
-                HardVoiceCheckBox.IsChecked == true
-                    ? "Enhanced test M/K włączony — korekty wymagają zaakceptowanej klasyfikacji cue i stabilnego profilu rozmówcy."
-                    : "Enhanced włączony — audio i kolejność rozmówców będą użyte tylko do deterministycznej korekty rodzaju.",
+            // Strict mode only makes sense on top of the correction itself.
+            if (!EnhancedMenuItem.IsChecked && HardVoiceMenuItem.IsChecked)
+                HardVoiceMenuItem.IsChecked = false;
+
+            ApplyGenderCorrectionOptions();
+            SetStatus(EnhancedMenuItem.IsChecked
+                    ? "Korekta rodzaju z głosu włączona."
+                    : "Korekta rodzaju z głosu wyłączona — zostaje wynik tłumacza.",
                 StatusKind.Normal);
+            await SaveSettingsAsync();
+        };
+
+        HardVoiceMenuItem.PropertyChanged += async (_, change) =>
+        {
+            if (change.Property != MenuItem.IsCheckedProperty || _loadingSettings)
+                return;
+
+            if (HardVoiceMenuItem.IsChecked && !EnhancedMenuItem.IsChecked)
+                EnhancedMenuItem.IsChecked = true;
+
+            ApplyGenderCorrectionOptions();
+            SetStatus(HardVoiceMenuItem.IsChecked
+                    ? "Tylko pewne rozpoznanie: formy zmieniamy wyłącznie przy wyraźnym głosie."
+                    : "Korekta rodzaju używa też słabszych wskazówek.",
+                StatusKind.Normal);
+            await SaveSettingsAsync();
+        };
+
+        ExportTxtMenuItem.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == MenuItem.IsCheckedProperty && _inputFolder is not null)
+                LoadFolder(_inputFolder);
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            ExplorerMenuItem.IsChecked = ExplorerContextMenu.IsRegistered();
+            RefreshExplorerTip();
+            ExplorerMenuItem.PropertyChanged += (_, change) =>
+            {
+                if (change.Property != MenuItem.IsCheckedProperty)
+                    return;
+
+                try
+                {
+                    if (ExplorerMenuItem.IsChecked)
+                    {
+                        ExplorerContextMenu.Register();
+                        SetStatus("Dodano „Szukaj napisów z SubFlow” do menu Eksploratora. W Windows 11 jest pod „Pokaż więcej opcji”.", StatusKind.Success);
+                    }
+                    else
+                    {
+                        ExplorerContextMenu.Unregister();
+                        SetStatus("Usunięto SubFlow z menu Eksploratora.", StatusKind.Normal);
+                    }
+                }
+                catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+                {
+                    SetStatus("Nie udało się zmienić menu Eksploratora: " + exception.Message, StatusKind.Error);
+                }
+
+                RefreshExplorerTip();
+            };
         }
         else
         {
-            _pipeline.UseEnhanced = false;
-            SetStatus("Enhanced wyłączony — używany jest wynik tłumacza bazowego bez korekty audio.", StatusKind.Normal);
-        }
-
-        RefreshReadyState();
-    }
-
-    private void OnHardVoiceCheckChanged(object? sender, RoutedEventArgs e)
-    {
-        if (_pipeline is null)
-            return;
-
-        if (HardVoiceCheckBox.IsChecked == true && EnhancedCheckBox.IsChecked != true)
-            EnhancedCheckBox.IsChecked = true;
-
-        EnsureEnhancedConfigured();
-        if (_enhancedPipeline is not null)
-            _enhancedPipeline.HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true;
-
-        if (EnhancedCheckBox.IsChecked == true)
-        {
-            SetStatus(
-                HardVoiceCheckBox.IsChecked == true
-                    ? "Test M/K aktywny — używam tylko zaakceptowanej klasyfikacji cue; korekta mówiącego i adresata wymaga stabilnego profilu rozmówcy."
-                    : "Test M/K wyłączony — Enhanced używa standardowych bezpiecznych resolverów.",
-                StatusKind.Normal);
-        }
-
-        RefreshReadyState();
-    }
-
-    private void CompleteEnhancedControlInitialization()
-    {
-        // Kept as the constructor hook so older window initialization remains stable.
-        // Enhanced has no reviewer model/backend controls to initialize.
-    }
-
-    private void EnsureEnhancedConfigured()
-    {
-        if (_enhancedConfigured)
-            return;
-
-        _enhancedAudioHttpClient ??= new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-
-        var processRunner = new ProcessRunner();
-        var ffmpegManager = new FfmpegManager(_httpClient);
-        var subtitleExtraction = new SubtitleExtractionService(ffmpegManager, processRunner);
-        var audioExtraction = new AudioContextExtractionService(ffmpegManager, processRunner);
-
-        var diarizationOptions = SpeakerDiarizationOptions.CreateDefault();
-        var diarizationAssets = new SpeakerDiarizationAssetManager(_enhancedAudioHttpClient, diarizationOptions);
-        var diarization = new SpeakerDiarizationService(diarizationAssets, diarizationOptions);
-        var diarizationCache = SpeakerDiarizationCache.CreateDefault(diarizationOptions);
-
-        var genderOptions = SpeakerVoiceGenderOptions.CreateDefault();
-        var genderAssets = new SpeakerVoiceGenderAssetManager(_enhancedAudioHttpClient, genderOptions);
-        var voiceGender = new SpeakerVoiceGenderService(genderAssets, genderOptions, _appLogger);
-        var cueVoiceGender = new CueVoiceGenderService(genderAssets, genderOptions, _appLogger);
-
-        var speakerAnalysis = new SpeakerDiarizationAnalysisService(
-            audioExtraction,
-            diarization,
-            _appLogger,
-            diarizationCache,
-            voiceGender,
-            cueVoiceGender);
-
-        _enhancedPipeline = new EnhancedTranslationPipeline(
-            _pipeline,
-            subtitleExtraction,
-            new SrtParser(),
-            new SubtitleWriter(),
-            new TranslationCoordinator(),
-            speakerAnalysis,
-            new DeterministicGenderReviewService(),
-            _appLogger)
-        {
-            HardVoiceTurnOnly = HardVoiceCheckBox.IsChecked == true
-        };
-
-        _pipeline.EnhancedPipeline = _enhancedPipeline;
-        _enhancedConfigured = true;
-
-        if (!_enhancedCloseHooked)
-        {
-            _enhancedCloseHooked = true;
-            Closed += (_, _) =>
-            {
-                _enhancedAudioHttpClient?.Dispose();
-                _enhancedAudioHttpClient = null;
-            };
+            ExplorerMenuItem.IsVisible = false;
+            ExplorerTipCard.IsVisible = false;
         }
     }
+
+    private void OnEnableExplorerMenuClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ExplorerMenuItem.IsChecked = true;
+
+    private void RefreshExplorerTip()
+    {
+        var registered = OperatingSystem.IsWindows() && ExplorerContextMenu.IsRegistered();
+        EnableExplorerMenuButton.IsVisible = !registered;
+        ExplorerTipText.Text = registered
+            ? "Włączone: kliknij prawym na film lub folder i wybierz „Szukaj napisów z SubFlow”. W Windows 11 jest pod „Pokaż więcej opcji”."
+            : "Kliknij prawym na film lub folder i wybierz „Szukaj napisów z SubFlow”. Ikona w obszarze powiadomień robi to samo.";
+    }
+
+    private void ApplyGenderCorrectionOptions() =>
+        _services.ApplyGenderCorrection(EnhancedMenuItem.IsChecked, HardVoiceMenuItem.IsChecked);
 }

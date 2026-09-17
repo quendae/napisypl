@@ -2,7 +2,6 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NapisyPL.Core.OfflineMt.Nllb;
-using NapisyPL.Core.Security;
 using NapisyPL.Core.Translation;
 
 namespace NapisyPL;
@@ -24,20 +23,27 @@ public partial class MainWindow
     ];
     private static readonly string[] LocalMtProviderNames =
     [
+        MadladQualityProviderName,
         NllbFastProviderName,
         NllbBalancedProviderName,
-        NllbQualityTestProviderName,
-        MadladQualityProviderName
+        NllbQualityTestProviderName
     ];
 
-    private readonly ApiKeyStore _apiKeyStore = new();
     private bool _modernUiHooked;
     private bool _loadingSecretUi;
 
+    private bool _providerListInitialized;
+
     private void OnArgosWindowOpened(object? sender, EventArgs e)
     {
-        var items = ProviderNames
-            .Concat(LocalMtProviderNames)
+        // Opened fires again when the window comes back from the tray; rebuilding the
+        // list then would count as a provider switch and unload the GPU model.
+        if (_providerListInitialized)
+            return;
+        _providerListInitialized = true;
+
+        var items = LocalMtProviderNames
+            .Concat(ProviderNames)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         ProviderComboBox.ItemsSource = items;
@@ -54,7 +60,7 @@ public partial class MainWindow
             var settings = await _settingsStore.LoadAsync();
             var restoredProvider = settings.Provider == LegacyNllbProviderName ||
                                    RetiredLocalProviderNames.Contains(settings.Provider, StringComparer.Ordinal)
-                ? NllbFastProviderName
+                ? MadladQualityProviderName
                 : settings.Provider;
             if (items.Contains(restoredProvider, StringComparer.Ordinal))
                 ProviderComboBox.SelectedItem = restoredProvider;
@@ -88,33 +94,17 @@ public partial class MainWindow
         BaseUrlPanel.IsVisible = profile.ShowBaseUrl;
         RememberKeyCheckBox.IsVisible = profile.CanRememberApiKey;
 
-        switch (provider)
+        ProviderHintText.Text = provider switch
         {
-            case NllbFastProviderName:
-                ProviderHintText.Text = "NLLB distilled 600M · Fast. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
-                break;
-            case NllbBalancedProviderName:
-                ProviderHintText.Text = "NLLB distilled 1.3B · Balanced. Auto GPU/CPU; GPU używa FP16. CC-BY-NC-4.0 · benchmark/non-commercial. Model pozostaje w pamięci podczas całej kolejki folderu.";
-                break;
-            case NllbQualityTestProviderName:
-                ProviderHintText.Text = "NLLB full 3.3B · Quality Test. Auto GPU/CPU; GPU używa FP16 i startuje od batch 4. CC-BY-NC-4.0 · benchmark/non-commercial. Duży model (~17.6 GB pobrania); GPU zdecydowanie zalecane. Model pozostaje w pamięci podczas całej kolejki folderu.";
-                break;
-            case MadladQualityProviderName:
-                ProviderHintText.Text = "MADLAD-400 3B · Quality. Auto GPU/CPU; GPU używa FP16. Apache-2.0. Model pozostaje w pamięci podczas całej kolejki folderu.";
-                break;
-            case "DeepL":
-                ProviderHintText.Text = "Szybki translator chmurowy. Enhanced może lokalnie skorygować pewne formy rodzaju na podstawie audio i kolejności rozmówców.";
-                break;
-            case "Gemini":
-                ProviderHintText.Text = "Tłumaczenie LLM przez Gemini; model i klucz API są konfigurowalne.";
-                break;
-            case "Claude":
-                ProviderHintText.Text = "Tłumaczenie LLM przez Claude; model i klucz API są konfigurowalne.";
-                break;
-            default:
-                ProviderHintText.Text = "OpenAI-compatible: OpenAI, Ollama lub LM Studio. Klucz może być pusty dla lokalnego serwera.";
-                break;
-        }
+            MadladQualityProviderName => "Zalecany. Działa lokalnie na karcie graficznej, bez internetu.",
+            NllbFastProviderName => "Lokalny i najszybszy, ale słabszy. Licencja niekomercyjna.",
+            NllbBalancedProviderName => "Lokalny, średnia jakość i szybkość. Licencja niekomercyjna.",
+            NllbQualityTestProviderName => "Lokalny, duży (ok. 18 GB). Do testów, licencja niekomercyjna.",
+            "DeepL" => "Szybki tłumacz w chmurze. Wymaga klucza API.",
+            "Gemini" or "Claude" => "Model językowy w chmurze. Wymaga klucza API.",
+            _ => "OpenAI, Ollama lub LM Studio. Lokalny serwer nie potrzebuje klucza."
+        };
+        ProviderBadgeText.Text = "Tłumacz: " + provider;
     }
 
     private async Task LoadRememberedApiKeyAsync()
@@ -130,7 +120,7 @@ public partial class MainWindow
                 return;
             }
 
-            var key = await _apiKeyStore.LoadAsync(provider);
+            var key = await _services.ApiKeys.LoadAsync(provider);
             RememberKeyCheckBox.IsChecked = !string.IsNullOrWhiteSpace(key);
             ApiKeyTextBox.Text = key ?? string.Empty;
             ApiKeyHintText.Text = string.IsNullOrWhiteSpace(key)
@@ -154,7 +144,7 @@ public partial class MainWindow
 
         if (RememberKeyCheckBox.IsChecked != true)
         {
-            await _apiKeyStore.RemoveAsync(provider);
+            await _services.ApiKeys.RemoveAsync(provider);
             ApiKeyHintText.Text = "Klucz będzie używany tylko w tej sesji.";
         }
         else
@@ -172,9 +162,9 @@ public partial class MainWindow
         try
         {
             if (RememberKeyCheckBox.IsChecked == true && !string.IsNullOrWhiteSpace(ApiKeyTextBox.Text))
-                await _apiKeyStore.SaveAsync(provider, ApiKeyTextBox.Text!);
+                await _services.ApiKeys.SaveAsync(provider, ApiKeyTextBox.Text!);
             else if (RememberKeyCheckBox.IsChecked != true)
-                await _apiKeyStore.RemoveAsync(provider);
+                await _services.ApiKeys.RemoveAsync(provider);
         }
         catch (Exception ex)
         {

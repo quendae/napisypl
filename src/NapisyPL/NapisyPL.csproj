@@ -6,7 +6,13 @@
     <Nullable>enable</Nullable>
     <AssemblyName>NapisyPL</AssemblyName>
     <RootNamespace>NapisyPL</RootNamespace>
+    <ApplicationIcon>Assets\subflow.ico</ApplicationIcon>
+    <Product>SubFlow</Product>
+    <AssemblyTitle>SubFlow</AssemblyTitle>
   </PropertyGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />

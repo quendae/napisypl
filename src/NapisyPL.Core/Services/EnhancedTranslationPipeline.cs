@@ -148,12 +148,14 @@ public sealed class EnhancedTranslationPipeline(
             cancellationToken.ThrowIfCancellationRequested();
             status?.Report("Enhanced: tłumaczenie gotowe — teraz analizuję głosy M/K w audio…");
             var audioTimer = Stopwatch.StartNew();
+            var relevantCueIds = DeterministicGenderReviewService.CollectRelevantCueIds(sourceCues, translated);
             var speakers = await speakerAnalysis.AnalyzeAsync(
                 inputPath,
                 sourceCues,
                 diarizationProgress: null,
                 status,
-                cancellationToken);
+                cancellationToken,
+                relevantCueIds);
             var knownGenderCount = speakers.SpeakerGenderEvidence.Count(pair =>
                 SpeakerGenderReviewEligibility.IsEligible(pair.Value));
             var knownCueGenderCount = speakers.CueGenderEvidence.Count(pair =>
@@ -173,6 +175,7 @@ public sealed class EnhancedTranslationPipeline(
                 ("knownGenderCount", knownGenderCount),
                 ("knownCueGenderCount", knownCueGenderCount),
                 ("directionalCueGenderCount", directionalCueGenderCount),
+                ("cueCount", relevantCueIds.Count),
                 ("result", "success"));
 
             status?.Report(HardVoiceTurnOnly
@@ -375,19 +378,14 @@ public sealed class EnhancedTranslationPipeline(
             var hardVoiceChangedCount = genderDiagnostics.Count(item =>
                 !qualityFallbackCueIds.Contains(item.CueId) &&
                 string.Equals(item.Resolver, "hard_voice_sequence", StringComparison.Ordinal) && item.Changed);
-            var localTurnResolvedCount = HardVoiceTurnOnly
-                ? 0
-                : sourceCues.Count(cue =>
-                    LocalTurnGenderResolver.Resolve(
-                        sourceCues,
-                        speakers.CueSpeakers,
-                        speakers.CueGenderEvidence,
-                        cue.Index,
-                        speakers.SpeakerGenderEvidence).IsResolved);
-            var resolvedAddresseeCount = HardVoiceTurnOnly
-                ? 0
-                : sourceCues.Count(cue =>
-                    DialogueAddresseeResolver.ResolveDetailed(sourceCues, speakers.CueSpeakers, cue.Index).IsResolved);
+            // These two counters used to re-run the whole resolver stack across every
+            // cue purely to log a number, doubling an already quadratic pass. The
+            // review loop already visited each candidate, so read them off its
+            // diagnostics instead.
+            var localTurnResolvedCount = genderDiagnostics.Count(item =>
+                string.Equals(item.Resolver, "local_turn", StringComparison.Ordinal));
+            var resolvedAddresseeCount = genderDiagnostics.Count(item =>
+                string.Equals(item.Resolver, "dialogue_addressee", StringComparison.Ordinal));
             logger?.Info(
                 "enhanced_phase",
                 ("file", file),

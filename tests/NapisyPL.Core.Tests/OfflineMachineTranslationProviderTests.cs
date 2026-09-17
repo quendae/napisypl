@@ -7,11 +7,14 @@ namespace NapisyPL.Core.Tests;
 public sealed class OfflineMachineTranslationProviderTests
 {
     [Fact]
-    public async Task TranslateAsync_SendsEachCueWithItsOriginalLineBreaks()
+    public async Task TranslateAsync_SendsSentencesWithoutLineBreaksAndReassemblesTheCue()
     {
+        // A raw line break made MADLAD echo English and loop; a whole
+        // multi-sentence cue made it drop sentences. The model sees neither.
         var client = new RecordingClient(texts => texts.Select(text => text switch
         {
-            "Do you think they're ever gonna\nforget today? Never." => "Myślisz, że kiedykolwiek\nzapomną tego dnia? Nigdy.",
+            "Do you think they're ever gonna forget today?" => "Myślisz, że kiedykolwiek zapomną ten dzień?",
+            "Never." => "Nigdy.",
             _ => throw new InvalidOperationException(text)
         }).ToArray());
         var provider = new OfflineMachineTranslationProvider(client);
@@ -21,20 +24,20 @@ public sealed class OfflineMachineTranslationProviderTests
         ]);
 
         Assert.Equal(
-            ["Do you think they're ever gonna\nforget today? Never."],
+            ["Do you think they're ever gonna forget today?", "Never."],
             client.LastTexts);
-        Assert.Equal("Myślisz, że kiedykolwiek\nzapomną tego dnia? Nigdy.", result[253]);
+        Assert.Equal("Myślisz, że kiedykolwiek zapomną ten dzień? Nigdy.", result[253]);
         Assert.Equal("Fixture Offline MT", provider.DisplayName);
         Assert.Equal(40, provider.BatchPolicy.MaxSegments);
     }
 
     [Fact]
-    public async Task TranslateAsync_KeepsTaggedDialogueTurnsInOneCue()
+    public async Task TranslateAsync_KeepsOneLinePerSpeakerInTaggedDialogue()
     {
         var client = new RecordingClient(texts => texts.Select(text => text switch
         {
-            "<i>- Yeah, sí, problema.</i>\n<i>- And now dos problemas.</i>" =>
-                "<i>- Tak, sí, problema.</i>\n<i>- A teraz dos problemas.</i>",
+            "<i>- Yeah, sí, problema.</i>" => "<i>- Tak, sí, problema.</i>",
+            "<i>- And now dos problemas.</i>" => "<i>- A teraz dos problemas.</i>",
             _ => throw new InvalidOperationException(text)
         }).ToArray());
         var provider = new OfflineMachineTranslationProvider(client);
@@ -44,7 +47,7 @@ public sealed class OfflineMachineTranslationProviderTests
         ]);
 
         Assert.Equal(
-            ["<i>- Yeah, sí, problema.</i>\n<i>- And now dos problemas.</i>"],
+            ["<i>- Yeah, sí, problema.</i>", "<i>- And now dos problemas.</i>"],
             client.LastTexts);
         Assert.Equal(
             "<i>- Tak, sí, problema.</i>\n<i>- A teraz dos problemas.</i>",

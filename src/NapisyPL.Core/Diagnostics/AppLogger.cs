@@ -3,7 +3,7 @@ using System.Text;
 
 namespace NapisyPL.Core.Diagnostics;
 
-public sealed class AppLogger : IAppLogger
+public sealed class AppLogger : IAppLogger, IDisposable
 {
     private static readonly HashSet<string> AllowedFields = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -33,7 +33,18 @@ public sealed class AppLogger : IAppLogger
         "nextSpeakerGender", "nextSpeakerConfidencePermille", "nextSpeakerSampleCount"
     };
 
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(2);
+    private const int FlushThresholdChars = 64 * 1024;
+
     private readonly object _writeGate = new();
+    private readonly StringBuilder _pending = new();
+    private DateTime _lastFlushUtc = DateTime.UtcNow;
+
+    // Without this the last lines of a run stay in memory until the next log
+    // event or until the window closes, which hides the review summary exactly
+    // when someone copies the log to inspect a finished run.
+    private readonly Timer _flushTimer;
 
     public AppLogger(string? logDirectory = null)
     {
@@ -44,6 +55,7 @@ public sealed class AppLogger : IAppLogger
 
         Directory.CreateDirectory(directory);
         LogPath = Path.Combine(directory, $"napisypl-{DateTime.Now:yyyy-MM-dd}.log");
+        _flushTimer = new Timer(_ => Flush(), null, FlushInterval, FlushInterval);
     }
 
     public string LogPath { get; }
@@ -69,7 +81,51 @@ public sealed class AppLogger : IAppLogger
 
         line.AppendLine();
         lock (_writeGate)
-            File.AppendAllText(LogPath, line.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        {
+            _pending.Append(line);
+            // Opening and closing the file per line put a synchronous round trip
+            // inside the per-cue analysis loops. Batch instead, and flush on a
+            // short interval so a crash still leaves recent context on disk.
+            if (_pending.Length >= FlushThresholdChars ||
+                DateTime.UtcNow - _lastFlushUtc >= FlushInterval)
+            {
+                FlushLocked();
+            }
+        }
+    }
+
+    /// <summary>Writes anything still buffered. Safe to call repeatedly.</summary>
+    public void Flush()
+    {
+        lock (_writeGate)
+            FlushLocked();
+    }
+
+    private void FlushLocked()
+    {
+        if (_pending.Length == 0)
+            return;
+
+        try
+        {
+            File.AppendAllText(LogPath, _pending.ToString(), Utf8NoBom);
+        }
+        catch (IOException)
+        {
+            // Diagnostics must never take the translation down with them.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        _pending.Clear();
+        _lastFlushUtc = DateTime.UtcNow;
+    }
+
+    public void Dispose()
+    {
+        _flushTimer.Dispose();
+        Flush();
     }
 
     private static string FormatValue(object? value) => value switch

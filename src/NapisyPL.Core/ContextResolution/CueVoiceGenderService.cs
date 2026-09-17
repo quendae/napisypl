@@ -1,89 +1,80 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using SherpaOnnx;
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.Models;
 
 namespace NapisyPL.Core.ContextResolution;
 
-public sealed class CueVoiceGenderService(
-    SpeakerVoiceGenderAssetManager assetManager,
-    SpeakerVoiceGenderOptions options,
-    IAppLogger? logger = null)
+public sealed class CueVoiceGenderService(IAppLogger? logger = null)
 {
-    private const int MaleSpeechLabelIndex = 1;
-    private const int FemaleSpeechLabelIndex = 2;
     private const double MaximumSampleSeconds = 8;
-    private const double DiagnosticMinimumCombinedEvidence = 0.03;
-    private const double DiagnosticMinimumNormalizedConfidence = 0.82;
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
 
+    /// <param name="relevantCueIds">
+    /// When supplied, only these cues are measured. Everything downstream treats a
+    /// missing entry exactly like an unknown one, so narrowing the set changes no
+    /// decision - it only avoids tracking pitch for cues whose translation has no
+    /// gendered form to correct, and whose neighbours have none either.
+    /// </param>
     public async Task<IReadOnlyDictionary<int, CueVoiceGenderEvidence>> AnalyzeAsync(
         string wavePath,
         IReadOnlyList<SubtitleCue> cues,
         IProgress<string>? status = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlySet<int>? relevantCueIds = null)
     {
         if (cues.Count == 0)
+            return new Dictionary<int, CueVoiceGenderEvidence>();
+
+        var targets = relevantCueIds is null
+            ? cues
+            : cues.Where(cue => relevantCueIds.Contains(cue.Index)).ToArray();
+        if (targets.Count == 0)
             return new Dictionary<int, CueVoiceGenderEvidence>();
 
         var timer = Stopwatch.StartNew();
         try
         {
-            await assetManager.EnsureAvailableAsync(status, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            status?.Report("Enhanced: klasyfikuję płeć lokalnie dla kolejnych wypowiedzi…");
-
+            status?.Report("Enhanced: mierzę wysokość głosu w kolejnych wypowiedziach…");
             var wave = await Task.Run(() => PcmWaveReader.ReadMono16(wavePath), cancellationToken);
-            var config = new AudioTaggingConfig();
-            config.Model.Zipformer.Model = options.ModelPath;
-            config.Model.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
-            config.Model.Provider = "cpu";
-            config.Labels = options.LabelsPath;
-            config.TopK = options.TopK;
+            cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await Task.Run<IReadOnlyDictionary<int, CueVoiceGenderEvidence>>(() =>
+            var evidence = new ConcurrentDictionary<int, CueVoiceGenderEvidence>();
+            await Task.Run(() =>
             {
-                using var tagger = new AudioTagging(config);
-                var evidence = new Dictionary<int, CueVoiceGenderEvidence>();
-
-                foreach (var cue in cues)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var samples = SliceSamples(wave, cue, out var durationSeconds);
-                    if (samples.Length == 0)
+                Parallel.ForEach(
+                    targets,
+                    new ParallelOptions
                     {
-                        evidence[cue.Index] = new CueVoiceGenderEvidence(
-                            SpeakerVoiceGender.Unknown, 0, 0, durationSeconds);
-                        continue;
-                    }
-
-                    using var stream = tagger.CreateStream();
-                    stream.AcceptWaveform(wave.SampleRate, samples);
-                    var events = tagger.Compute(stream);
-                    double male = 0;
-                    double female = 0;
-                    foreach (var audioEvent in events)
+                        CancellationToken = cancellationToken,
+                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)
+                    },
+                    cue =>
                     {
-                        if (audioEvent.Index == MaleSpeechLabelIndex)
-                            male = audioEvent.Prob;
-                        else if (audioEvent.Index == FemaleSpeechLabelIndex)
-                            female = audioEvent.Prob;
-                    }
+                        var samples = SliceSamples(wave, cue, out var durationSeconds);
+                        if (samples.Length == 0)
+                        {
+                            evidence[cue.Index] = new CueVoiceGenderEvidence(
+                                SpeakerVoiceGender.Unknown, 0, 0, durationSeconds);
+                            return;
+                        }
 
-                    var evaluated = CueGenderEvidenceEvaluator.Evaluate(male, female, durationSeconds);
-                    evidence[cue.Index] = evaluated;
-                    LogRejectedCueDirection(cue.Index, evaluated, male, female, durationSeconds);
-                }
+                        var track = FundamentalFrequencyEstimator.Analyze(samples, wave.SampleRate);
+                        var observation = VoiceGenderPitchMapper.ToObservation(track, durationSeconds);
+                        evidence[cue.Index] = CueGenderEvidenceEvaluator.Evaluate(
+                            observation.MaleProbability,
+                            observation.FemaleProbability,
+                            durationSeconds);
+                    });
+            }, cancellationToken);
 
-                return evidence;
-            }, CancellationToken.None);
-
+            var result = new Dictionary<int, CueVoiceGenderEvidence>(evidence);
             var known = result.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
             _logger.Info(
                 "enhanced_phase",
                 ("stage", "cue_gender"),
                 ("elapsedMs", timer.ElapsedMilliseconds),
-                ("cueCount", cues.Count),
+                ("cueCount", targets.Count),
                 ("knownCueGenderCount", known),
                 ("result", "success"));
             return result;
@@ -92,53 +83,16 @@ public sealed class CueVoiceGenderService(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger.Error(
                 "enhanced_failed",
                 ("stage", "cue_gender"),
                 ("category", ex.GetType().Name),
                 ("result", "fallback"));
-            status?.Report("Enhanced: lokalna klasyfikacja kolejnych wypowiedzi niedostępna — używam starszego resolvera rozmówców.");
+            status?.Report("Enhanced: pomiar głosu dla kolejnych wypowiedzi niedostępny — używam starszego resolvera rozmówców.");
             return new Dictionary<int, CueVoiceGenderEvidence>();
         }
-    }
-
-    private void LogRejectedCueDirection(
-        int cueId,
-        CueVoiceGenderEvidence evaluated,
-        double male,
-        double female,
-        double durationSeconds)
-    {
-        if (evaluated.Gender != SpeakerVoiceGender.Unknown || durationSeconds < 0.75)
-            return;
-
-        var combined = male + female;
-        if (!double.IsFinite(combined) || combined <= 0)
-            return;
-
-        var normalizedWinner = Math.Max(male, female) / combined;
-        var directionalGender = male >= female
-            ? SpeakerVoiceGender.Male
-            : SpeakerVoiceGender.Female;
-        var reasonCode = combined < DiagnosticMinimumCombinedEvidence
-            ? "LowCombinedEvidence"
-            : normalizedWinner < DiagnosticMinimumNormalizedConfidence
-                ? "LowNormalizedConfidence"
-                : "RejectedByCueGate";
-
-        _logger.Info(
-            "cue_gender_detail",
-            ("cue", cueId),
-            ("voiceGender", evaluated.Gender),
-            ("targetGender", directionalGender),
-            ("reasonCode", reasonCode),
-            ("maleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(male)),
-            ("femaleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(female)),
-            ("combinedMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(combined)),
-            ("normalizedWinnerPermille", SpeakerGenderObservationDiagnostics.ToPermille(normalizedWinner)),
-            ("nextCueDurationMs", (int)Math.Round(durationSeconds * 1000)));
     }
 
     private static float[] SliceSamples(PcmWaveData wave, SubtitleCue cue, out double durationSeconds)

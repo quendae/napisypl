@@ -9,10 +9,12 @@ public sealed class SubtitleSearchUiTests
         var xaml = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml"));
         var code = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml.cs"));
         var handler = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.SubtitleSearch.cs"));
+        var services = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "AppServices.cs"));
 
         Assert.Contains("x:Name=\"SearchSubtitlesCheckBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsCheckedChanged=\"OnSearchSubtitlesChanged\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("new SubtitleAcquisitionPipeline", code, StringComparison.Ordinal);
+        Assert.Contains("new SubtitleAcquisitionPipeline", services, StringComparison.Ordinal);
+        Assert.Contains("_services.SubtitlePipeline", code, StringComparison.Ordinal);
         Assert.Contains("_subtitlePipeline.TranslateInteractiveAsync", code, StringComparison.Ordinal);
         Assert.Contains("AllowMissingSubtitleTracks", handler, StringComparison.Ordinal);
     }
@@ -22,10 +24,12 @@ public sealed class SubtitleSearchUiTests
     {
         var root = FindRepositoryRoot();
         var code = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.axaml.cs"));
+        var services = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "AppServices.cs"));
         var selector = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "SubtitleAlternativeSelector.cs"));
 
-        Assert.Contains("new SubtitleCueReader", code, StringComparison.Ordinal);
-        Assert.Contains("new SubtitleSynchronizationService", code, StringComparison.Ordinal);
+        // The shared services compose timing checks; the window adds the interactive selector.
+        Assert.Contains("new SubtitleCueReader", services, StringComparison.Ordinal);
+        Assert.Contains("new SubtitleSynchronizationService", services, StringComparison.Ordinal);
         Assert.Contains("new SubtitleAlternativeSelector", code, StringComparison.Ordinal);
         Assert.Contains("TranslateInteractiveAsync", code, StringComparison.Ordinal);
         Assert.Contains("DownloadInteractiveAsync", selector, StringComparison.Ordinal);

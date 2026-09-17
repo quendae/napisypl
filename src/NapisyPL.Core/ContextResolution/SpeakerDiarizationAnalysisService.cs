@@ -23,7 +23,8 @@ public sealed class SpeakerDiarizationAnalysisService(
         IReadOnlyList<SubtitleCue> cues,
         IProgress<double>? diarizationProgress = null,
         IProgress<string>? status = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlySet<int>? relevantCueIds = null)
     {
         if (cues.Count == 0)
             throw new ArgumentException("Speaker analysis requires subtitle cues.", nameof(cues));
@@ -65,7 +66,8 @@ public sealed class SpeakerDiarizationAnalysisService(
                         }
 
                         if (cueVoiceGender is not null)
-                            cachedCueGender = await cueVoiceGender.AnalyzeAsync(temporaryWave, cues, status, cancellationToken);
+                            cachedCueGender = await cueVoiceGender.AnalyzeAsync(
+                                temporaryWave, cues, status, cancellationToken, relevantCueIds);
                     }
 
                     return new SpeakerDiarizationAnalysisResult(
@@ -118,7 +120,10 @@ public sealed class SpeakerDiarizationAnalysisService(
             IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence =
                 new Dictionary<int, CueVoiceGenderEvidence>();
             if (cueVoiceGender is not null)
-                cueGenderEvidence = await cueVoiceGender.AnalyzeAsync(temporaryWave, cues, status, cancellationToken);
+            {
+                cueGenderEvidence = await cueVoiceGender.AnalyzeAsync(
+                    temporaryWave, cues, status, cancellationToken, relevantCueIds);
+            }
 
             return new SpeakerDiarizationAnalysisResult(
                 SpeakerCueMapper.Map(cues, segments),

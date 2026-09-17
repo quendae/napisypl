@@ -110,16 +110,8 @@ public static class DialogueAddresseeResolver
             : DialogueAddresseeResolution.Unresolved("insufficient_turn_evidence");
     }
 
-    private static int FindPosition(IReadOnlyList<SubtitleCue> cues, int cueId)
-    {
-        for (var i = 0; i < cues.Count; i++)
-        {
-            if (cues[i].Index == cueId)
-                return i;
-        }
-
-        return -1;
-    }
+    private static int FindPosition(IReadOnlyList<SubtitleCue> cues, int cueId) =>
+        CuePositionIndex.Find(cues, cueId);
 
     private static DialogueAddresseeResolution ResolvePersistentPartner(
         IReadOnlyList<SubtitleCue> cues,

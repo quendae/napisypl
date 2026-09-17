@@ -7,3 +7,5 @@
 artifacts/
 .run/
 *.log
+__pycache__/
+installer/out/

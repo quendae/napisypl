@@ -23,6 +23,7 @@ public sealed class AppLoggerTests
                 ("prompt", "translate this private subtitle"),
                 ("subtitleText", "private dialogue"));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("event=translation_request", log);
@@ -52,6 +53,7 @@ public sealed class AppLoggerTests
             var logger = new AppLogger(root);
             logger.Error("translation_failed", ("category", "HttpRequestException"), ("subtitleText", "do not log me"));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("level=ERROR", log);
@@ -88,6 +90,7 @@ public sealed class AppLoggerTests
                 ("dropApplyFindMissing", 1),
                 ("dropApplyFindAmbiguous", 0));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("proposed=9", log);
@@ -125,6 +128,7 @@ public sealed class AppLoggerTests
                 ("model", "qwen3.5-9b"),
                 ("version", "b10809"));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("backend=vulkan", log);
@@ -175,6 +179,7 @@ public sealed class AppLoggerTests
                 ("oppositeCount", 0),
                 ("requiredWinnerCount", 2));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("speakerCount=12", log);
@@ -223,6 +228,7 @@ public sealed class AppLoggerTests
                 ("speakerCandidateEvidence", "12:SPEAKER_13:female:940:1:false;45:SPEAKER_28:male:988:3:true"),
                 ("subtitleText", "must remain private"));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("knownGenderEvidenceCount=5", log);
@@ -273,6 +279,7 @@ public sealed class AppLoggerTests
                 ("nextForcedCueGender", "male"),
                 ("nextForcedCueConfidencePermille", 986));
 
+            logger.Flush();
             var log = File.ReadAllText(logger.LogPath);
 
             Assert.Contains("hardVoiceMode=stable_evidence", log);
@@ -293,6 +300,39 @@ public sealed class AppLoggerTests
             Assert.Contains("nextForcedCueGender=male", log);
             Assert.Contains("nextForcedCueConfidencePermille=986", log);
             Assert.DoesNotContain("[REDACTED]", log);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Logger_FlushesTheTailOfARunWithoutWaitingForAnotherEvent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NapisyPL-logger-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            using var logger = new AppLogger(root);
+            logger.Info("enhanced_phase", ("stage", "deterministic_gender_review"));
+
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            var log = string.Empty;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(logger.LogPath))
+                {
+                    log = File.ReadAllText(logger.LogPath);
+                    if (log.Contains("deterministic_gender_review"))
+                        break;
+                }
+
+                await Task.Delay(200);
+            }
+
+            Assert.Contains("stage=deterministic_gender_review", log);
         }
         finally
         {

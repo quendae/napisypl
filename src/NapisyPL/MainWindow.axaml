@@ -2,87 +2,186 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NapisyPL.MainWindow"
         Title="SubFlow"
-        Width="1220" Height="780"
-        MinWidth="920" MinHeight="640"
-        Background="{DynamicResource CanvasBrush}"
+        Icon="/Assets/subflow.ico"
+        Width="1120" Height="760"
+        MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
         Opened="OnArgosWindowOpened"
         Closed="OnArgosWindowClosed">
-  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="28,22,28,26" Spacing="14">
-      <Border Background="#161A22" CornerRadius="7" Padding="12,8">
-        <Grid ColumnDefinitions="Auto,*,Auto">
-          <TextBlock Text="00:00:00,000" FontFamily="Consolas" FontSize="12" Foreground="#AEB6C3" VerticalAlignment="Center" />
-          <Border Grid.Column="1" Height="1" Margin="14,0" Background="#394150" VerticalAlignment="Center" />
-          <TextBlock Grid.Column="2" Text="EN  →  PL" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource SubtitleYellowBrush}" VerticalAlignment="Center" />
-        </Grid>
-      </Border>
+  <DockPanel>
 
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
-        <StackPanel Spacing="2">
-          <TextBlock Text="SubFlow" FontSize="27" FontWeight="SemiBold" />
-          <TextBlock Text="Pobierz polskie napisy lub przetłumacz angielskie. Film, plik napisów albo cały folder."
-                     Foreground="{DynamicResource MutedBrush}" FontSize="14" TextWrapping="Wrap" />
-        </StackPanel>
-        <TextBlock Grid.Column="1" Text="offline + cloud" Foreground="{DynamicResource MutedBrush}"
-                   FontSize="12" VerticalAlignment="Center" />
+    <!-- Header: brand on the left, options on the right. -->
+    <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,0,0,1" Padding="28,14">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+        <Image Source="/Assets/subflow-wordmark.png" Height="34" VerticalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality"
+               AutomationProperties.Name="SubFlow" />
+        <TextBlock Grid.Column="1" x:Name="ProviderBadgeText" Classes="hint" VerticalAlignment="Center"
+                   HorizontalAlignment="Right" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+        <Button Grid.Column="2" x:Name="OptionsButton" Classes="quiet"
+                AutomationProperties.Name="Opcje" ToolTip.Tip="Opcje">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Path Classes="icon" Data="{StaticResource IconSliders}" />
+            <TextBlock Text="Opcje" VerticalAlignment="Center" />
+          </StackPanel>
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem x:Name="ExportTxtMenuItem" ToggleType="CheckBox">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Zapisz też plik TXT" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" Text="Czysty tekst napisów obok pliku SRT." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <Separator />
+              <MenuItem x:Name="EnhancedMenuItem" ToggleType="CheckBox" IsChecked="True">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Korekta rodzaju z głosu" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" Text="Poprawia formy typu zrobiłeś → zrobiłaś, słuchając filmu." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <MenuItem x:Name="HardVoiceMenuItem" ToggleType="CheckBox" IsChecked="True">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Tylko pewne rozpoznanie" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" Text="Zmienia formę tylko, gdy głos jest wyraźny. Mniej poprawek, mniej pomyłek." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <Separator />
+              <MenuItem x:Name="ExplorerMenuItem" ToggleType="CheckBox">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Menu Eksploratora" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" Text="„Szukaj napisów z SubFlow” po kliknięciu prawym na film lub folder." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
+              <MenuItem x:Name="OpenLogMenuItem" Header="Otwórz log" Click="OnOpenLogClick">
+                <MenuItem.Icon>
+                  <Path Classes="icon" Data="{StaticResource IconFile}" Width="16" Height="16" />
+                </MenuItem.Icon>
+              </MenuItem>
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
       </Grid>
+    </Border>
 
-      <Grid ColumnDefinitions="1.05*,0.95*" ColumnSpacing="16">
-        <StackPanel Spacing="14">
-          <Border x:Name="DropZone" Classes="dropzone" MinHeight="235"
+    <!-- Action bar: always visible at the bottom. -->
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,1,0,0" Padding="28,16">
+      <StackPanel Spacing="12">
+        <Border x:Name="LiveProgressPanel" Background="{DynamicResource RaisedBrush}" CornerRadius="12"
+                Padding="14,10" IsVisible="False">
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+            <TextBlock x:Name="BatchTitleText" Classes="eyebrow" Text="TŁUMACZENIE" VerticalAlignment="Center" />
+            <TextBlock x:Name="BatchCurrentText" Grid.Column="1" FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <TextBlock x:Name="BatchDetailText" Grid.Column="2" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                       Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="12">
+          <Button x:Name="TranslateButton" Classes="primary" Content="Pobierz napisy / tłumacz"
+                  Click="OnTranslateClick" IsEnabled="False" MinWidth="210" />
+          <Button x:Name="CancelButton" Grid.Column="1" Classes="quiet" Content="Anuluj"
+                  Click="OnCancelClick" IsVisible="False" />
+          <StackPanel Grid.Column="2" Spacing="8" VerticalAlignment="Center">
+            <TextBlock x:Name="StatusText" Text="Wybierz film, napisy albo folder."
+                       Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+            <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="4" Value="0" />
+          </StackPanel>
+          <Button x:Name="OpenFolderButton" Grid.Column="3" Classes="quiet" Content="Pokaż plik"
+                  Click="OnOpenFolderClick" IsVisible="False" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- The drop zone fills the left column; only the settings column scrolls. -->
+    <Grid Margin="28,24,28,24" ColumnDefinitions="1.15*,1*" ColumnSpacing="20">
+
+        <!-- Lead: the drop zone. -->
+        <Grid RowDefinitions="*,Auto" RowSpacing="16">
+          <Border x:Name="DropZone" Classes="dropzone" MinHeight="300"
                   DragDrop.AllowDrop="True"
                   DragDrop.DragEnter="OnDragEnter"
                   DragDrop.DragLeave="OnDragLeave"
                   DragDrop.DragOver="OnDragOver"
                   DragDrop.Drop="OnDrop">
-            <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <TextBlock Text="Upuść film, napisy lub folder" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
-              <TextBlock x:Name="SelectedFileText"
-                         Text="MKV, MP4, MOV, AVI, WebM · SRT, ASS, SSA, VTT, TXT"
-                         Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" TextWrapping="Wrap"
-                         MaxWidth="500" />
-              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                <Button x:Name="ChooseFileButton" Content="Wybierz plik" Click="OnChooseFileClick" Padding="16,8" />
-                <Button x:Name="ChooseFolderButton" Content="Wybierz folder" Click="OnChooseFolderClick" Padding="16,8" />
+            <StackPanel Spacing="18" VerticalAlignment="Center">
+              <Border Width="64" Height="64" CornerRadius="18" Background="{DynamicResource RaisedBrush}"
+                      HorizontalAlignment="Left">
+                <Path Classes="icon" Data="{StaticResource IconSubtitles}" Width="30" Height="30"
+                      Stroke="{DynamicResource SubtitleYellowBrush}" />
+              </Border>
+              <StackPanel Spacing="8">
+                <TextBlock Classes="display" Text="Napisy po polsku." />
+                <TextBlock x:Name="SelectedFileText" Classes="hint" FontSize="14" LineHeight="21"
+                           Text="Upuść tu film, plik napisów albo cały folder. Najpierw szukamy gotowych polskich napisów, a gdy ich nie ma, tłumaczymy angielskie."
+                           MaxWidth="520" HorizontalAlignment="Left" />
               </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="ChooseFileButton" Click="OnChooseFileClick">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Path Classes="icon" Data="{StaticResource IconFile}" />
+                    <TextBlock Text="Wybierz plik" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button x:Name="ChooseFolderButton" Classes="quiet" Click="OnChooseFolderClick">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Path Classes="icon" Data="{StaticResource IconFolder}" />
+                    <TextBlock Text="Wybierz folder" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+              <TextBlock Classes="hint" Text="MKV · MP4 · MOV · AVI · WebM   ·   SRT · ASS · SSA · VTT · TXT" />
             </StackPanel>
+          </Border>
+
+          <Border x:Name="TrackPanel" Grid.Row="1" Classes="card" IsVisible="False">
+            <StackPanel Spacing="10">
+              <TextBlock Classes="title" Text="Ścieżka napisów w filmie" />
+              <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" HorizontalAlignment="Stretch" />
+              <TextBlock x:Name="TrackHintText" Classes="hint"
+                         Text="Angielską ścieżkę tekstową wybieramy automatycznie." />
+              <Button x:Name="ExtractOriginalSubtitleButton" Classes="quiet"
+                      Content="Zapisz oryginalne napisy z filmu"
+                      Click="OnExtractOriginalSubtitleClick" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+        </Grid>
+
+        <!-- Secondary: how to get Polish subtitles. -->
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="16">
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="title" Text="Najpierw gotowe polskie napisy" />
+                <TextBlock Classes="hint" Text="NapiProjekt i Napisy24 przez QNapi. Wymaga internetu." />
+              </StackPanel>
+              <ToggleSwitch x:Name="SearchSubtitlesCheckBox" Grid.Column="1" IsChecked="True"
+                            OnContent="" OffContent="" VerticalAlignment="Center"
+                            AutomationProperties.Name="Najpierw szukaj polskich napisów"
+                            IsCheckedChanged="OnSearchSubtitlesChanged" />
+            </Grid>
           </Border>
 
           <Border Classes="card">
-            <StackPanel Spacing="8">
-              <CheckBox x:Name="SearchSubtitlesCheckBox" Content="Najpierw szukaj polskich napisów (QNapi)"
-                        IsChecked="True" IsCheckedChanged="OnSearchSubtitlesChanged" FontWeight="SemiBold" />
-              <TextBlock Text="Dla filmu: pobierz PL i porównaj czasy z osadzoną angielską ścieżką. Bezpieczne korekty są automatyczne; potem możesz wybrać QNapi lub lokalny SRT, a tłumaczenie EN jest ostatnią opcją. Istniejący plik .pl.srt zostanie zachowany."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-              <TextBlock Text="Wyszukiwanie wymaga internetu. Przy pierwszym użyciu pobieramy QNapi (~18 MB). Tłumaczenie lokalnym modelem nadal działa offline po wyłączeniu wyszukiwania."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-
-          <Border x:Name="TrackPanel" Classes="card" IsVisible="False">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Ścieżka napisów" FontWeight="SemiBold" />
-              <ComboBox x:Name="TrackComboBox" SelectionChanged="OnTrackSelectionChanged" />
-              <Button x:Name="ExtractOriginalSubtitleButton"
-                      Content="Wyciągnij oryginalne napisy z pliku"
-                      Click="OnExtractOriginalSubtitleClick"
-                      HorizontalAlignment="Left" />
-              <TextBlock x:Name="TrackHintText"
-                         Text="Automatycznie wybieramy angielską ścieżkę tekstową, jeśli jest oznaczona w pliku."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-        </StackPanel>
-
-        <StackPanel Grid.Column="1" Spacing="14">
-          <Border Classes="card">
-            <StackPanel Spacing="11">
-              <StackPanel Spacing="6">
-                <TextBlock Text="Tłumacz bazowy" FontWeight="SemiBold" />
-                <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged" />
-                <TextBlock x:Name="ProviderHintText" Foreground="{DynamicResource MutedBrush}"
-                           FontSize="12" TextWrapping="Wrap" />
+            <StackPanel Spacing="14">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="title" Text="Tłumacz" />
+                <TextBlock Classes="hint" Text="Używany, gdy nie ma polskich napisów." />
               </StackPanel>
+              <ComboBox x:Name="ProviderComboBox" SelectionChanged="OnProviderSelectionChanged"
+                        HorizontalAlignment="Stretch" AutomationProperties.Name="Tłumacz" />
+              <TextBlock x:Name="ProviderHintText" Classes="hint" />
 
               <StackPanel x:Name="ModelPanel" Spacing="6">
                 <TextBlock Text="Model" FontWeight="SemiBold" />
@@ -92,77 +191,39 @@
               <StackPanel x:Name="ApiKeyPanel" Spacing="6">
                 <TextBlock Text="Klucz API" FontWeight="SemiBold" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                  <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Klucz API" />
+                  <TextBox x:Name="ApiKeyTextBox" PasswordChar="●" PlaceholderText="Wklej klucz" />
                   <CheckBox x:Name="RevealKeyCheckBox" Grid.Column="1" Content="Pokaż"
                             VerticalAlignment="Center" IsCheckedChanged="OnRevealKeyChanged" />
                 </Grid>
-                <CheckBox x:Name="RememberKeyCheckBox" Content="Zapamiętaj klucz na tym komputerze"
+                <CheckBox x:Name="RememberKeyCheckBox" Content="Zapamiętaj na tym komputerze"
                           IsCheckedChanged="OnRememberKeyChanged" />
-                <TextBlock x:Name="ApiKeyHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="ApiKeyHintText" Classes="hint" />
               </StackPanel>
 
               <StackPanel x:Name="BaseUrlPanel" Spacing="6">
-                <TextBlock Text="Base URL" FontWeight="SemiBold" />
+                <TextBlock Text="Adres API" FontWeight="SemiBold" />
                 <TextBox x:Name="BaseUrlTextBox" />
-                <TextBlock x:Name="BaseUrlHintText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="BaseUrlHintText" Classes="hint" />
               </StackPanel>
-
-              <CheckBox x:Name="ExportTxtCheckBox" Content="Zapisz dodatkowo plik TXT" />
             </StackPanel>
           </Border>
 
-          <Border Classes="card">
-            <StackPanel Spacing="8">
-              <CheckBox x:Name="EnhancedCheckBox"
-                        Content="Enhanced — popraw kontekst i rodzaj z audio"
-                        FontWeight="SemiBold"
-                        IsCheckedChanged="OnEnhancedChanged" />
-              <TextBlock Text="Po tłumaczeniu SubFlow lokalnie rozpoznaje rozmówców i ich głosy, a następnie deterministycznie poprawia tylko bezpieczne formy rodzaju (np. zrobiłeś → zrobiłaś), gdy resolver ma mocny dowód kto jest adresatem."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-              <CheckBox x:Name="HardVoiceCheckBox"
-                        Content="Eksperyment: M/K tylko z potwierdzonego audio"
-                        IsCheckedChanged="OnHardVoiceCheckChanged" />
-              <TextBlock Text="Test kontrolny: używa tylko zaakceptowanej klasyfikacji głosu dla cue. Forma mówiącego jest poprawiana wyłącznie ze stabilnego profilu rozmówcy, a forma adresata tylko wtedy, gdy profil następnego rozmówcy potwierdza klasyfikację cue. Pozostałe resolvery rodzaju są w tym trybie wyłączone."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-              <TextBlock Text="Bez dodatkowego LLM i bez swobodnego przepisywania zdań. Enhanced wymaga filmu z audio; dla samych plików napisów używany jest tryb Standard."
-                         Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-        </StackPanel>
-      </Grid>
-
-      <Border Classes="card">
-        <StackPanel Spacing="10">
-          <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
-            <Button x:Name="TranslateButton" Classes="primary" Content="Tłumacz na polski"
-                    Click="OnTranslateClick" IsEnabled="False" MinWidth="155" />
-            <Button x:Name="CancelButton" Grid.Column="1" Content="Anuluj" Click="OnCancelClick"
-                    IsVisible="False" MinWidth="88" />
-            <ProgressBar x:Name="ProgressBar" Grid.Column="2" Minimum="0" Maximum="100"
-                         Height="6" Value="0" VerticalAlignment="Center" />
-          </Grid>
-
-          <Border x:Name="LiveProgressPanel" Background="#F4F5F7" BorderBrush="#D8DDE5"
-                  BorderThickness="1" CornerRadius="6" Padding="12,9" IsVisible="False">
-            <Grid ColumnDefinitions="170,*,Auto" ColumnSpacing="14">
-              <TextBlock x:Name="BatchTitleText" Text="Tłumaczenie" FontSize="12" FontWeight="SemiBold"
-                         Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
-              <TextBlock x:Name="BatchCurrentText" Grid.Column="1" FontWeight="SemiBold"
-                         TextWrapping="Wrap" VerticalAlignment="Center" />
-              <TextBlock x:Name="BatchDetailText" Grid.Column="2" FontFamily="Consolas" FontSize="12"
-                         Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Border x:Name="ExplorerTipCard" Classes="card">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <Border Width="40" Height="40" CornerRadius="12" Background="{DynamicResource RaisedBrush}" VerticalAlignment="Top">
+                <Path Classes="icon" Data="{StaticResource IconSearch}" Stroke="{DynamicResource FlowBrush}" />
+              </Border>
+              <StackPanel Grid.Column="1" Spacing="8">
+                <TextBlock Classes="title" Text="Szybciej z Eksploratora" />
+                <TextBlock x:Name="ExplorerTipText" Classes="hint"
+                           Text="Kliknij prawym na film lub folder i wybierz „Szukaj napisów z SubFlow”. Ikona w obszarze powiadomień robi to samo." />
+                <Button x:Name="EnableExplorerMenuButton" Classes="quiet" Content="Dodaj do menu Eksploratora"
+                        Click="OnEnableExplorerMenuClick" HorizontalAlignment="Left" />
+              </StackPanel>
             </Grid>
           </Border>
-
-          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <TextBlock x:Name="StatusText" Text="Wybierz plik lub folder, aby rozpocząć."
-                       Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
-            <Button x:Name="OpenFolderButton" Grid.Column="1" Content="Pokaż plik"
-                    Click="OnOpenFolderClick" IsVisible="False" />
-            <Button x:Name="OpenLogButton" Grid.Column="2" Content="Otwórz log" Click="OnOpenLogClick" />
-          </Grid>
         </StackPanel>
-      </Border>
-    </StackPanel>
-  </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
+  </DockPanel>
 </Window>

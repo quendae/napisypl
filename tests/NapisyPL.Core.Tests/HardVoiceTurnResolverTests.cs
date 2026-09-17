@@ -160,8 +160,10 @@ public sealed class HardVoiceTurnResolverTests
     }
 
     [Fact]
-    public void Resolve_WhenCuesBelongToSameSpeaker_DoesNotResolve()
+    public void Resolve_SameDiarizedLabelButConfidentOppositePitch_TrustsThePitch()
     {
+        // Diarization merged two people; a confident male and a confident female
+        // voice cannot be one speaker.
         var cues = new[] { Cue(1, 0, 1, "Did you do it?"), Cue(2, 1.1, 2, "Yes.") };
         var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_00" };
         var genders = new Dictionary<int, CueVoiceGenderEvidence>
@@ -172,7 +174,49 @@ public sealed class HardVoiceTurnResolverTests
 
         var result = HardVoiceTurnResolver.Resolve(cues, speakers, genders, 1);
 
+        Assert.True(result.IsResolved);
+        Assert.Equal(SpeakerVoiceGender.Female, result.TargetGender);
+        Assert.Equal("next_cue_opposite_pitch_overrides_diarization", result.ReasonCode);
+    }
+
+    [Fact]
+    public void Resolve_SameDiarizedLabelAndOnlyModeratePitch_StillTrustsTheLabel()
+    {
+        var cues = new[] { Cue(1, 0, 1, "Did you do it?"), Cue(2, 1.1, 2, "Yes.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_00", [2] = "SPEAKER_00" };
+        var genders = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.97),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.85)
+        };
+
+        var result = HardVoiceTurnResolver.Resolve(cues, speakers, genders, 1);
+
         Assert.False(result.IsResolved);
+        Assert.Equal("same_speaker_turn", result.ReasonCode);
+    }
+
+    [Fact]
+    public void Review_ConfidentPitchTurnWithoutAnyTargetProfile_RewritesAddressee()
+    {
+        var source = new[] { Cue(1, 0, 1, "What did you do?"), Cue(2, 1, 2, "Nothing.") };
+        var translated = new[] { Cue(1, 0, 1, "Co zrobiłeś?"), Cue(2, 1, 2, "Nic.") };
+        var speakers = new Dictionary<int, string?> { [1] = "SPEAKER_04", [2] = "SPEAKER_04" };
+        var cueGender = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [1] = Accepted(SpeakerVoiceGender.Male, 0.95),
+            [2] = Accepted(SpeakerVoiceGender.Female, 0.98)
+        };
+
+        var result = new DeterministicGenderReviewService().Review(
+            source,
+            translated,
+            speakers,
+            new Dictionary<string, SpeakerGenderEvidence>(),
+            cueGender,
+            hardVoiceTurnOnly: true);
+
+        Assert.Equal("Co zrobiłaś?", result[0].Text);
     }
 
     [Fact]

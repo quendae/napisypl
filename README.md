@@ -12,6 +12,27 @@
 
 Wynik jest zapisywany obok pliku źródłowego jako `nazwa.pl.srt`. Można dodatkowo zaznaczyć eksport `nazwa.pl.txt`. Przycisk wyciągania oryginalnej ścieżki zapisuje ją jako `nazwa.srt`, czyli z tą samą nazwą bazową co film. Dla wejściowego TXT wynik jest tylko TXT.
 
+## Menu Eksploratora i ikona w obszarze powiadomień
+
+Kliknij prawym na film albo folder i wybierz **Szukaj napisów z SubFlow** (w Windows 11 pod „Pokaż więcej opcji”). Dla każdego filmu SubFlow sam, bez pytań:
+
+1. szuka polskich napisów w QNapi i zapisuje je, gdy czasy pasują do filmu,
+2. gdy ich nie ma, sprawdza angielską ścieżkę tekstową w filmie,
+3. gdy i jej nie ma, szuka angielskich napisów w QNapi.
+
+Okno wyszukiwania pokazuje przy każdym filmie dwa znaczniki: **PL** (gotowe polskie napisy) i **Maszynowe** (są angielskie napisy do tłumaczenia). Przycisk **Przetłumacz maszynowo** tłumaczy zaznaczone filmy tłumaczem wybranym w oknie głównym, z korektą rodzaju z głosu.
+
+Menu włącza instalator albo **Opcje → Menu Eksploratora** (wpis tylko dla bieżącego użytkownika). Ta sama akcja jest dostępna z wiersza poleceń: `NapisyPL.exe --search "ścieżka"`, a `--register-shell` / `--unregister-shell` dodaje i usuwa wpis.
+
+SubFlow działa w tle z ikoną w obszarze powiadomień: prawy klik daje **Szukaj napisów dla pliku…**, **Wskaż folder…**, **Otwórz SubFlow** i **Zamknij**. Zamknięcie okna chowa je do ikony; lokalny model tłumaczenia jest wtedy zwalniany z pamięci karty graficznej. Kolejne uruchomienia (np. kilka filmów zaznaczonych w Eksploratorze) trafiają do już działającej kopii.
+
+## Opcje
+
+- **Zapisz też plik TXT** — dodatkowo `nazwa.pl.txt`.
+- **Korekta rodzaju z głosu** (domyślnie włączona) — poprawia formy typu zrobiłeś → zrobiłaś na podstawie głosów w filmie.
+- **Tylko pewne rozpoznanie** (domyślnie włączone) — formy zmieniane tylko przy wyraźnym głosie.
+- **Menu Eksploratora**, **Otwórz log**.
+
 ## Obsługiwane wejścia
 
 - filmy: MKV, MP4, MOV, AVI, WebM, M4V, TS/MTS/M2TS,
@@ -83,6 +104,14 @@ dotnet publish src/NapisyPL/NapisyPL.csproj -c Release -r win-x64 --self-contain
 ```
 
 GitHub Actions uruchamia testy i tworzy artefakt `NapisyPL-win-x64`.
+
+Instalator (Inno Setup 6, `winget install JRSoftware.InnoSetup`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File installeruild-installer.ps1 -Version 1.0.0
+```
+
+Instaluje bez uprawnień administratora (opcjonalnie dla wszystkich użytkowników), dodaje menu Eksploratora, opcjonalnie autostart w tle i pobranie lokalnego tłumacza MADLAD dla kart AMD. Logo i ikonę generuje `dotnet run --project tools/brand -- src/NapisyPL/Assets`.
 
 ## Co można dodać później
 

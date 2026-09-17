@@ -239,6 +239,100 @@ public sealed class SubtitleAcquisitionPipeline : ITranslationPipeline
             "Wczytaj pasujący plik SRT lub spróbuj ponownie później." + reason);
     }
 
+    /// <summary>
+    /// The automatic search behind the Explorer context menu, without translating:
+    /// keep an existing <c>.pl.srt</c> or download Polish from QNapi; when there is
+    /// none, look for English first inside the video and then on QNapi. The English
+    /// cues are returned so machine translation can start later without searching again.
+    /// </summary>
+    public async Task<SubtitleAvailability> ScanAsync(
+        string videoPath,
+        SubtitleTrack? englishTrack,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(videoPath);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var failures = new List<string>();
+        var output = Path.Combine(Path.GetDirectoryName(videoPath) ?? Environment.CurrentDirectory,
+            Path.GetFileNameWithoutExtension(videoPath) + ".pl.srt");
+
+        if (File.Exists(output))
+        {
+            status?.Report("Polskie napisy już są obok filmu.");
+            return new SubtitleAvailability(videoPath, PolishSubtitleState.Existing, null, output,
+                EnglishSubtitleSource.None, null, null, failures);
+        }
+
+        IReadOnlyList<SubtitleCue>? embeddedCues = null;
+        if (englishTrack is { IsText: true } && IsEnglish(englishTrack) && _cueReader is not null)
+        {
+            try
+            {
+                embeddedCues = await _cueReader.ReadEmbeddedAsync(videoPath, englishTrack, status, cancellationToken);
+                ValidateCues(embeddedCues);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (IsHandledSubtitleException(ex))
+            {
+                embeddedCues = null;
+                failures.Add("embedded: " + ex.Message);
+            }
+        }
+
+        var polishState = PolishSubtitleState.Missing;
+        string? polishProvider = null;
+        var polish = (await TryDownloadAsync(videoPath, SubtitleLanguage.Polish, failures, status, cancellationToken)).Subtitles;
+        if (polish is not null)
+        {
+            polishProvider = polish.Provider;
+            var prepared = PreparePolish(polish.Cues, embeddedCues);
+            if (prepared.Cues is not null)
+            {
+                await SavePolishAsync(output, prepared.Cues, exportTxt: false, writeSrt: true, cancellationToken);
+                status?.Report($"Zapisano polskie napisy ({polish.Provider}).");
+                return new SubtitleAvailability(videoPath, PolishSubtitleState.Saved, polish.Provider, output,
+                    embeddedCues is null ? EnglishSubtitleSource.None : EnglishSubtitleSource.Embedded,
+                    null, embeddedCues, failures);
+            }
+
+            polishState = PolishSubtitleState.NeedsReview;
+            ReportWithheldCandidate(polish, prepared.Analysis, status);
+        }
+
+        if (embeddedCues is not null)
+        {
+            return new SubtitleAvailability(videoPath, polishState, polishProvider, null,
+                EnglishSubtitleSource.Embedded, null, embeddedCues, failures);
+        }
+
+        var english = (await TryDownloadAsync(videoPath, SubtitleLanguage.English, failures, status, cancellationToken)).Subtitles;
+        return english is null
+            ? new SubtitleAvailability(videoPath, polishState, polishProvider, null,
+                EnglishSubtitleSource.None, null, null, failures)
+            : new SubtitleAvailability(videoPath, polishState, polishProvider, null,
+                EnglishSubtitleSource.Downloaded, english.Provider, english.Cues, failures);
+    }
+
+    /// <summary>Machine-translates the English source a scan found.</summary>
+    public Task<TranslationResult> TranslateScannedAsync(
+        SubtitleAvailability availability,
+        ITranslationProvider provider,
+        bool exportTxt,
+        IProgress<TranslationProgress>? translationProgress = null,
+        IProgress<string>? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(availability);
+        ArgumentNullException.ThrowIfNull(provider);
+        if (!availability.CanTranslate)
+            throw new InvalidOperationException("Dla tego filmu nie znaleziono angielskich napisów do tłumaczenia.");
+
+        return _translationPipeline.TranslateVideoSubtitlesAsync(availability.VideoPath, availability.EnglishCues!,
+            provider, exportTxt, translationProgress, status, cancellationToken);
+    }
+
     private async Task<SubtitleDownloadResult> TryDownloadAsync(
         string inputPath,
         SubtitleLanguage language,

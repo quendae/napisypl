@@ -1,79 +1,25 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using SherpaOnnx;
 using NapisyPL.Core.Diagnostics;
 
 namespace NapisyPL.Core.ContextResolution;
 
-public sealed record SpeakerVoiceGenderOptions(
-    string BaseDirectory,
-    string ModelUrl,
-    string LabelsUrl,
-    int TopK)
-{
-    public string ModelPath => Path.Combine(BaseDirectory, "audio-tagging-gender.int8.onnx");
-    public string LabelsPath => Path.Combine(BaseDirectory, "audio-tagging-labels.csv");
-
-    public static SpeakerVoiceGenderOptions CreateDefault()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        const string revision = "e4247f89ed94da978e043b3d98a409a32bcbbd34";
-        const string root = "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-small-audio-tagging-2024-04-15/resolve/" + revision + "/";
-        return new SpeakerVoiceGenderOptions(
-            Path.Combine(localAppData, "SubFlow", "speaker-gender"),
-            root + "model.int8.onnx?download=true",
-            root + "class_labels_indices.csv?download=true",
-            TopK: 50);
-    }
-}
-
-public sealed class SpeakerVoiceGenderAssetManager(
-    HttpClient httpClient,
-    SpeakerVoiceGenderOptions options)
-{
-    public async Task EnsureAvailableAsync(
-        IProgress<string>? status = null,
-        CancellationToken cancellationToken = default)
-    {
-        Directory.CreateDirectory(options.BaseDirectory);
-        if (!File.Exists(options.ModelPath))
-        {
-            status?.Report("Enhanced: pobieram mały model klasyfikacji głosu (~27 MB)…");
-            await DownloadAtomicAsync(options.ModelUrl, options.ModelPath, cancellationToken);
-        }
-
-        if (!File.Exists(options.LabelsPath))
-            await DownloadAtomicAsync(options.LabelsUrl, options.LabelsPath, cancellationToken);
-    }
-
-    private async Task DownloadAtomicAsync(string url, string destination, CancellationToken cancellationToken)
-    {
-        var partial = destination + ".partial";
-        try
-        {
-            using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using (var output = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 128, useAsync: true))
-            {
-                await input.CopyToAsync(output, cancellationToken);
-                await output.FlushAsync(cancellationToken);
-            }
-            File.Move(partial, destination, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(partial))
-            {
-                try { File.Delete(partial); } catch { }
-            }
-        }
-    }
-}
-
 public static class SpeakerGenderSamplePlanner
 {
     private const double MinimumSegmentSeconds = 0.75;
-    private const int MaximumSegmentsPerSpeaker = 3;
+
+    /// <summary>
+    /// Pitch tracking costs a fraction of a neural forward pass, so we can afford
+    /// a much wider sample than the three the audio-tagging classifier allowed.
+    /// More samples directly improve the aggregator's consistency check.
+    /// </summary>
+    private const int MaximumSegmentsPerSpeaker = 8;
+
+    /// <summary>
+    /// Clusters below the aggregator's own minimum total duration can never
+    /// produce eligible evidence, so analysing them is pure waste.
+    /// </summary>
+    private const double MinimumSpeakerSpeechSeconds = 1.5;
 
     public static IReadOnlyDictionary<int, IReadOnlyList<SpeakerSegment>> SelectSegments(
         IReadOnlyList<SpeakerSegment> segments)
@@ -81,6 +27,7 @@ public static class SpeakerGenderSamplePlanner
         return segments
             .Where(segment => segment.Speaker >= 0 && segment.EndSeconds - segment.StartSeconds >= MinimumSegmentSeconds)
             .GroupBy(segment => segment.Speaker)
+            .Where(group => group.Sum(segment => segment.EndSeconds - segment.StartSeconds) >= MinimumSpeakerSpeechSeconds)
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<SpeakerSegment>)group
@@ -90,13 +37,8 @@ public static class SpeakerGenderSamplePlanner
     }
 }
 
-public sealed class SpeakerVoiceGenderService(
-    SpeakerVoiceGenderAssetManager assetManager,
-    SpeakerVoiceGenderOptions options,
-    IAppLogger? logger = null)
+public sealed class SpeakerVoiceGenderService(IAppLogger? logger = null)
 {
-    private const int MaleSpeechLabelIndex = 1;
-    private const int FemaleSpeechLabelIndex = 2;
     private const double MaximumSampleSeconds = 8;
     private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
 
@@ -112,130 +54,115 @@ public sealed class SpeakerVoiceGenderService(
         var timer = Stopwatch.StartNew();
         try
         {
-            await assetManager.EnsureAvailableAsync(status, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            status?.Report("Enhanced: klasyfikuję głosy rozmówców…");
-
+            status?.Report("Enhanced: mierzę wysokość głosu rozmówców…");
             var wave = await Task.Run(() => PcmWaveReader.ReadMono16(wavePath), cancellationToken);
-            var config = new AudioTaggingConfig();
-            config.Model.Zipformer.Model = options.ModelPath;
-            config.Model.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
-            config.Model.Provider = "cpu";
-            config.Labels = options.LabelsPath;
-            config.TopK = options.TopK;
+            cancellationToken.ThrowIfCancellationRequested();
 
             var selected = SpeakerGenderSamplePlanner.SelectSegments(segments);
-            var allObservations = new List<SpeakerGenderObservation>();
-            var evaluations = new Dictionary<string, SpeakerGenderEvaluation>(StringComparer.Ordinal);
-            var result = await Task.Run<IReadOnlyDictionary<string, SpeakerGenderEvidence>>(() =>
+            var evaluations = new ConcurrentDictionary<string, SpeakerGenderEvaluation>(StringComparer.Ordinal);
+            var allObservations = new ConcurrentBag<SpeakerGenderObservation>();
+
+            await Task.Run(() =>
             {
-                using var tagger = new AudioTagging(config);
-                var evidence = new Dictionary<string, SpeakerGenderEvidence>(StringComparer.Ordinal);
-
-                foreach (var pair in selected)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var observations = new List<SpeakerGenderObservation>();
-                    foreach (var segment in pair.Value)
+                Parallel.ForEach(
+                    selected,
+                    new ParallelOptions
                     {
-                        var samples = SliceSamples(wave, segment);
-                        if (samples.Length == 0)
-                            continue;
-
-                        using var stream = tagger.CreateStream();
-                        stream.AcceptWaveform(wave.SampleRate, samples);
-                        var events = tagger.Compute(stream);
-                        double male = 0;
-                        double female = 0;
-                        foreach (var audioEvent in events)
+                        CancellationToken = cancellationToken,
+                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)
+                    },
+                    pair =>
+                    {
+                        var observations = new List<SpeakerGenderObservation>();
+                        foreach (var segment in pair.Value)
                         {
-                            if (audioEvent.Index == MaleSpeechLabelIndex)
-                                male = audioEvent.Prob;
-                            else if (audioEvent.Index == FemaleSpeechLabelIndex)
-                                female = audioEvent.Prob;
+                            var samples = SliceSamples(wave, segment, out var durationSeconds);
+                            if (samples.Length == 0)
+                                continue;
+
+                            var track = FundamentalFrequencyEstimator.Analyze(samples, wave.SampleRate);
+                            var observation = VoiceGenderPitchMapper.ToObservation(track, durationSeconds);
+                            observations.Add(observation);
+                            allObservations.Add(observation);
                         }
 
-                        observations.Add(new SpeakerGenderObservation(
-                            male,
-                            female,
-                            (double)samples.Length / wave.SampleRate));
-                    }
+                        evaluations[$"SPEAKER_{pair.Key:00}"] =
+                            SpeakerGenderEvidenceAggregator.Evaluate(observations);
+                    });
+            }, cancellationToken);
 
-                    allObservations.AddRange(observations);
-                    var speaker = $"SPEAKER_{pair.Key:00}";
-                    var evaluation = SpeakerGenderEvidenceAggregator.Evaluate(observations);
-                    evaluations[speaker] = evaluation;
-                    evidence[speaker] = evaluation.Evidence;
-                }
+            var evidence = evaluations.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.Evidence,
+                StringComparer.Ordinal);
 
-                return evidence;
-            }, CancellationToken.None);
+            LogSpeakerDetails(evaluations);
 
-            foreach (var pair in evaluations.OrderBy(item => item.Key, StringComparer.Ordinal))
-            {
-                var evaluation = pair.Value;
-                _logger.Info(
-                    "speaker_gender_detail",
-                    ("speaker", pair.Key),
-                    ("sampleCount", evaluation.Evidence.SampleCount),
-                    ("voiceGender", evaluation.Evidence.Gender.ToString().ToLowerInvariant()),
-                    ("reasonCode", evaluation.UnknownReason.ToString()),
-                    ("maleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.MaleEvidence)),
-                    ("femaleMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.FemaleEvidence)),
-                    ("combinedMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.CombinedEvidence)),
-                    ("normalizedWinnerPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.NormalizedWinnerConfidence)),
-                    ("winnerCount", evaluation.DirectionalWinnerCount),
-                    ("oppositeCount", evaluation.DirectionalOppositeCount),
-                    ("requiredWinnerCount", evaluation.DirectionalRequiredCount));
-            }
-
-            var known = result.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
-            var diagnostics = SpeakerGenderObservationDiagnostics.Summarize(allObservations);
+            var known = evidence.Count(pair => pair.Value.Gender != SpeakerVoiceGender.Unknown);
+            var diagnostics = SpeakerGenderObservationDiagnostics.Summarize(allObservations.ToArray());
             _logger.Info(
                 "enhanced_phase",
                 ("stage", "speaker_gender"),
                 ("elapsedMs", timer.ElapsedMilliseconds),
-                ("speakerCount", result.Count),
+                ("speakerCount", evidence.Count),
                 ("knownGenderCount", known),
-                ("topK", options.TopK),
                 ("genderSampleCount", diagnostics.SampleCount),
-                ("maleTagSampleCount", diagnostics.MaleTagSampleCount),
-                ("femaleTagSampleCount", diagnostics.FemaleTagSampleCount),
                 ("anyGenderTagSampleCount", diagnostics.AnyGenderTagSampleCount),
-                ("maleScoreMaxPermille", diagnostics.MaleScoreMaxPermille),
-                ("femaleScoreMaxPermille", diagnostics.FemaleScoreMaxPermille),
                 ("combinedScoreMeanPermille", diagnostics.CombinedScoreMeanPermille),
                 ("combinedScoreMaxPermille", diagnostics.CombinedScoreMaxPermille),
                 ("result", "success"));
-            return result;
+            return evidence;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger.Error(
                 "enhanced_failed",
                 ("stage", "speaker_gender"),
                 ("category", ex.GetType().Name),
                 ("result", "fallback"));
-            status?.Report("Enhanced: klasyfikacja głosów niedostępna — kontynuuję bez tej wskazówki.");
+            status?.Report("Enhanced: pomiar głosów niedostępny — kontynuuję bez tej wskazówki.");
             return new Dictionary<string, SpeakerGenderEvidence>();
         }
     }
 
-    private static float[] SliceSamples(PcmWaveData wave, SpeakerSegment segment)
+    private void LogSpeakerDetails(IReadOnlyDictionary<string, SpeakerGenderEvaluation> evaluations)
+    {
+        foreach (var pair in evaluations.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            var evaluation = pair.Value;
+            _logger.Info(
+                "speaker_gender_detail",
+                ("speaker", pair.Key),
+                ("sampleCount", evaluation.Evidence.SampleCount),
+                ("voiceGender", evaluation.Evidence.Gender.ToString().ToLowerInvariant()),
+                ("reasonCode", evaluation.UnknownReason.ToString()),
+                ("combinedMeanPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.CombinedEvidence)),
+                ("normalizedWinnerPermille", SpeakerGenderObservationDiagnostics.ToPermille(evaluation.NormalizedWinnerConfidence)),
+                ("winnerCount", evaluation.DirectionalWinnerCount),
+                ("oppositeCount", evaluation.DirectionalOppositeCount),
+                ("requiredWinnerCount", evaluation.DirectionalRequiredCount));
+        }
+    }
+
+    private static float[] SliceSamples(PcmWaveData wave, SpeakerSegment segment, out double durationSeconds)
     {
         var start = Math.Clamp((int)Math.Floor(segment.StartSeconds * wave.SampleRate), 0, wave.Samples.Length);
         var end = Math.Clamp((int)Math.Ceiling(segment.EndSeconds * wave.SampleRate), start, wave.Samples.Length);
         var available = end - start;
         if (available <= 0)
+        {
+            durationSeconds = 0;
             return [];
+        }
 
         var maxSamples = (int)Math.Round(MaximumSampleSeconds * wave.SampleRate);
         var length = Math.Min(available, maxSamples);
         var centeredStart = start + Math.Max(0, (available - length) / 2);
+        durationSeconds = (double)length / wave.SampleRate;
         return wave.Samples.AsSpan(centeredStart, length).ToArray();
     }
 }
