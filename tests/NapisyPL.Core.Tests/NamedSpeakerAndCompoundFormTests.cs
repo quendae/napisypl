@@ -116,4 +116,100 @@ public sealed class NamedSpeakerAndCompoundFormTests
     [Fact]
     public void APossessivePronounIsNotAComparative() =>
         Assert.Equal("To jest nasza.", ReviewSelf("It is ours.", "To jest nasza.", SpeakerVoiceGender.Male));
+
+    private static SpeakerLabelAnalysis Continued(
+        IReadOnlyList<SubtitleCue> source,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence>? cuePitch = null)
+    {
+        var pitch = cuePitch ?? new Dictionary<int, CueVoiceGenderEvidence>();
+        return SpeakerLabelEvidence.Continue(
+            SpeakerLabelEvidence.Analyze(source, pitch), source, cueSpeakers, pitch);
+    }
+
+    private static Dictionary<int, string?> OneVoice(params int[] cueIds) =>
+        cueIds.ToDictionary(id => id, _ => (string?)"SPEAKER_01");
+
+    [Fact]
+    public void ALabelOwnsTheLinesThatFollowIt()
+    {
+        // Chance S01E10 #9-#11: "Nicole:" names one cue and speaks for three.
+        var source = new[]
+        {
+            Cue(1, "Nicole: They drove me someplace"),
+            Cue(2, "and locked me in this gross room."),
+            Cue(3, "And I was so scared!")
+        };
+
+        var labels = Continued(source, OneVoice(1, 2, 3));
+
+        Assert.Equal(SpeakerVoiceGender.Female, labels.ContinuedGender![2]);
+        Assert.Equal(SpeakerVoiceGender.Female, labels.ContinuedGender[3]);
+        Assert.Equal(3, labels.AllCueGender.Count);
+    }
+
+    [Fact]
+    public void ANewLabelTakesOverFromTheOldOne()
+    {
+        var source = new[] { Cue(1, "JACLYN: I was there."), Cue(2, "CARL: And I drove."), Cue(3, "Nothing happened.") };
+
+        var labels = Continued(source, OneVoice(1, 2, 3));
+
+        Assert.False(labels.ContinuedGender!.ContainsKey(2));
+        Assert.Equal(SpeakerVoiceGender.Male, labels.ContinuedGender[3]);
+    }
+
+    [Fact]
+    public void ADashHandsTheLineToTheOtherSpeaker()
+    {
+        var source = new[] { Cue(1, "JACLYN: I was there."), Cue(2, "- And I drove."), Cue(3, "Nothing happened.") };
+
+        var labels = Continued(source, OneVoice(1, 2, 3));
+
+        Assert.Empty(labels.ContinuedGender!);
+    }
+
+    [Fact]
+    public void APauseEndsTheLabel()
+    {
+        var source = new[]
+        {
+            new SubtitleCue(1, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(12), "JACLYN: I was there."),
+            new SubtitleCue(2, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(22), "Nothing happened.")
+        };
+
+        var labels = Continued(source, OneVoice(1, 2));
+
+        Assert.Empty(labels.ContinuedGender!);
+    }
+
+    [Fact]
+    public void AVoiceOfTheOtherGenderEndsTheLabel()
+    {
+        var source = new[] { Cue(1, "JACLYN: I was there."), Cue(2, "Nothing happened."), Cue(3, "Not a thing.") };
+        var pitch = new Dictionary<int, CueVoiceGenderEvidence>
+        {
+            [2] = new(SpeakerVoiceGender.Male, 0.96, 0.6, 3, SpeakerVoiceGender.Male, 0.96)
+        };
+
+        var labels = Continued(source, OneVoice(1, 2, 3), pitch);
+
+        Assert.Empty(labels.ContinuedGender!);
+    }
+
+    [Fact]
+    public void ContinuedLinesDoNotVoteOnWhoTheVoiceIs()
+    {
+        var source = new[] { Cue(1, "JACLYN: I was there."), Cue(2, "Nothing happened."), Cue(3, "Not a thing.") };
+        var cueSpeakers = OneVoice(1, 2, 3);
+        var labels = Continued(source, cueSpeakers);
+
+        var (_, speakers) = SpeakerLabelEvidence.Apply(
+            labels, source, cueSpeakers,
+            new Dictionary<string, SpeakerGenderEvidence>(),
+            new Dictionary<int, CueVoiceGenderEvidence>());
+
+        // One name plus the lines under it is still one name.
+        Assert.False(speakers.ContainsKey("SPEAKER_01"));
+    }
 }

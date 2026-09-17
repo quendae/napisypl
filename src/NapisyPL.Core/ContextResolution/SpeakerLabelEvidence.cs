@@ -8,11 +8,19 @@ namespace NapisyPL.Core.ContextResolution;
 /// <summary>What the speaker labels in SDH subtitles ("JACLYN:", "Man:") say about each cue.</summary>
 public sealed record SpeakerLabelAnalysis(
     IReadOnlyDictionary<int, SpeakerVoiceGender> CueGender,
-    IReadOnlyDictionary<int, string> CueLabel)
+    IReadOnlyDictionary<int, string> CueLabel,
+    IReadOnlyDictionary<int, SpeakerVoiceGender>? ContinuedGender = null)
 {
     public static SpeakerLabelAnalysis Empty { get; } = new(
         new Dictionary<int, SpeakerVoiceGender>(),
         new Dictionary<int, string>());
+
+    /// <summary>The labelled cues and the lines that carry on from them, as one lookup.</summary>
+    public IReadOnlyDictionary<int, SpeakerVoiceGender> AllCueGender =>
+        ContinuedGender is not { Count: > 0 }
+            ? CueGender
+            : CueGender.Concat(ContinuedGender.Where(pair => !CueGender.ContainsKey(pair.Key)))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
 }
 
 /// <summary>
@@ -31,6 +39,9 @@ public static partial class SpeakerLabelEvidence
 
     /// <summary>A named cluster is as certain as the label itself.</summary>
     private const double LabelledProfileConfidence = 0.99;
+
+    /// <summary>A line inheriting the label above it, rather than carrying one.</summary>
+    private const double ContinuedLabelConfidence = 0.95;
 
     private static readonly Lazy<IReadOnlyDictionary<string, SpeakerVoiceGender>> FirstNames = new(LoadFirstNames);
 
@@ -129,6 +140,67 @@ public static partial class SpeakerLabelEvidence
         return new SpeakerLabelAnalysis(genders, labels);
     }
 
+    /// <summary>A label names the speaker until the dialogue moves on; this far at most.</summary>
+    private const int MaximumContinuedCues = 6;
+
+    private static readonly TimeSpan MaximumLabelContinuationGap = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Hearing-impaired subtitles write the name when the speaker changes, not on every line,
+    /// so "JACLYN:" owns the lines that follow it as well. The name carries on while the
+    /// dialogue does not move on: no new label, no pause, no dash starting another turn, and
+    /// the same voice throughout, with the cue's own pitch free to stop it.
+    /// </summary>
+    public static SpeakerLabelAnalysis Continue(
+        SpeakerLabelAnalysis labels,
+        IReadOnlyList<SubtitleCue> source,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (labels.CueGender.Count == 0)
+            return labels;
+
+        var positions = new Dictionary<int, int>(source.Count);
+        for (var index = 0; index < source.Count; index++)
+            positions[source[index].Index] = index;
+
+        var continued = new Dictionary<int, SpeakerVoiceGender>();
+        foreach (var (cueId, gender) in labels.CueGender)
+        {
+            if (!positions.TryGetValue(cueId, out var start))
+                continue;
+            cueSpeakers.TryGetValue(cueId, out var owner);
+            if (string.IsNullOrWhiteSpace(owner))
+                continue;
+
+            for (var at = start + 1; at < source.Count && at - start <= MaximumContinuedCues; at++)
+            {
+                var cue = source[at];
+                if (labels.CueLabel.ContainsKey(cue.Index) || StartsAnotherTurn(cue.Text))
+                    break;
+                if (cue.Start - source[at - 1].End > MaximumLabelContinuationGap)
+                    break;
+                if (!cueSpeakers.TryGetValue(cue.Index, out var here) ||
+                    !string.Equals(here, owner, StringComparison.Ordinal))
+                    break;
+                if (ForcedPitch(cueGenderEvidence, cue.Index) is var pitch &&
+                    pitch != SpeakerVoiceGender.Unknown && pitch != gender)
+                    break;
+
+                continued[cue.Index] = gender;
+            }
+        }
+
+        return labels with { ContinuedGender = continued };
+    }
+
+    /// <summary>A dialogue dash hands the line to somebody else.</summary>
+    private static bool StartsAnotherTurn(string text) =>
+        text.TrimStart().StartsWith('-') || text.Contains("\n-", StringComparison.Ordinal);
+
     /// <summary>
     /// Labelled cues become forced cue evidence, so turn resolution (who is addressed)
     /// uses them too. A cluster the labels name repeatedly takes that name's gender for all
@@ -151,6 +223,16 @@ public static partial class SpeakerLabelEvidence
         {
             var duration = Math.Max(durations.GetValueOrDefault(cueId), 1.0);
             cues[cueId] = new CueVoiceGenderEvidence(gender, 0.99, 1.0, duration, gender, 0.99);
+        }
+
+        // A line that only carries on from the label is a shade weaker than the label itself,
+        // and it never votes on who the whole cluster is.
+        foreach (var (cueId, gender) in labels.ContinuedGender ?? new Dictionary<int, SpeakerVoiceGender>())
+        {
+            if (labels.CueGender.ContainsKey(cueId))
+                continue;
+            var duration = Math.Max(durations.GetValueOrDefault(cueId), 1.0);
+            cues[cueId] = new CueVoiceGenderEvidence(gender, ContinuedLabelConfidence, 1.0, duration, gender, ContinuedLabelConfidence);
         }
 
         var speakers = new Dictionary<string, SpeakerGenderEvidence>(speakerEvidence);
