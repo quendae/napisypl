@@ -39,3 +39,9 @@ public sealed record SubtitleAvailability(
 
     public bool CanTranslate => EnglishCues is { Count: > 0 };
 }
+
+/// <summary>Result of fitting another release's Polish subtitles onto a video.</summary>
+public sealed record PolishSyncOutcome(SubtitleSyncDecision Decision, string? OutputPath, string Detail)
+{
+    public bool Saved => OutputPath is not null;
+}

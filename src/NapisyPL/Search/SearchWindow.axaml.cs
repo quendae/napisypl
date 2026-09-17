@@ -256,6 +256,7 @@ public partial class SearchWindow : Window
             : (BadgeState.No, "Brak EN");
 
         item.CanSelect = result.CanTranslate && !result.HasPolish;
+        item.CanSyncPolish = !result.HasPolish;
         item.IsSelected = item.CanSelect;
         item.Detail = result switch
         {
@@ -381,11 +382,78 @@ public partial class SearchWindow : Window
         }
     }
 
+    private async void OnSyncOtherReleaseClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: SearchItem item } || _translating || !StorageProvider.CanOpen)
+            return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Polskie napisy z innej wersji: " + item.FileName,
+            AllowMultiple = false,
+            FileTypeFilter = [MainWindow.PolishSubtitleFileType, FilePickerFileTypes.All]
+        });
+        var polishPath = files.FirstOrDefault()?.Path.LocalPath;
+        if (polishPath is null)
+            return;
+
+        item.CanSyncPolish = false;
+        item.Polish = BadgeState.Working;
+        item.PolishText = "Dopasowuję…";
+        var finished = false;
+        var status = new Progress<string>(message =>
+        {
+            if (!finished)
+                item.Detail = message;
+        });
+
+        try
+        {
+            // The scan's English cues are this video's clock; fall back to the pipeline's search.
+            var outcome = await _services.SubtitlePipeline.SynchronizeOtherReleaseAsync(
+                item.VideoPath, polishPath, item.Availability?.EnglishCues, englishTrack: null, status, CancellationToken.None);
+            finished = true;
+            item.Detail = outcome.Detail;
+            _services.Logger.Info("other_release_sync", ("file", item.FileName), ("decision", outcome.Decision), ("saved", outcome.Saved));
+            if (outcome.Saved)
+            {
+                item.Polish = BadgeState.Yes;
+                item.PolishText = "PL dopasowane";
+                item.HasSyncedPolish = true;
+                item.CanSelect = false;
+                item.IsSelected = false;
+            }
+            else
+            {
+                ShowPolishBadge(item);
+                item.CanSyncPolish = true;
+            }
+        }
+        catch (Exception exception)
+        {
+            finished = true;
+            ShowPolishBadge(item);
+            item.CanSyncPolish = true;
+            item.Detail = "Nie udało się dopasować: " + exception.Message;
+            _services.Logger.Error("other_release_sync_failed", ("file", item.FileName), ("message", exception.Message));
+        }
+
+        SetStatus(SummaryAfterScan());
+    }
+
+    private static void ShowPolishBadge(SearchItem item) =>
+        (item.Polish, item.PolishText) = item.Availability?.Polish switch
+        {
+            PolishSubtitleState.Existing or PolishSubtitleState.Saved => (BadgeState.Yes, "PL"),
+            PolishSubtitleState.NeedsReview => (BadgeState.Review, "PL do sprawdzenia"),
+            _ => (BadgeState.No, "Brak PL")
+        };
+
     private string SummaryAfterScan()
     {
-        var polish = Items.Count(item => item.Availability?.HasPolish == true);
+        var polish = Items.Count(item => item.Availability?.HasPolish == true || item.HasSyncedPolish);
         var translatable = Items.Count(item => item.CanSelect);
-        var nothing = Items.Count(item => item.Availability is { HasPolish: false, CanTranslate: false });
+        var nothing = Items.Count(item => item.Availability is { HasPolish: false, CanTranslate: false } && !item.HasSyncedPolish);
         var parts = new List<string> { $"Polskie napisy: {polish} z {Items.Count}." };
         if (translatable > 0)
             parts.Add($"Do przetłumaczenia maszynowo: {translatable}.");

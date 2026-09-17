@@ -11,6 +11,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\phrase_lexicon.en-pl.json" />
     <EmbeddedResource Include="Resources\gender_forms.sgjp.tsv.gz" />
+    <EmbeddedResource Include="Resources\first_names.ssa.tsv.gz" />
     <None Include="Resources\gender_forms.sgjp.NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -35,6 +35,9 @@ internal static class Program
             return SingleInstance.TryForward(StartupOptions.ToArguments(), TimeSpan.FromSeconds(10)) ? 0 : 1;
         }
 
+        // Before any file dialog can pull in Windows' own, older onnxruntime.dll.
+        NapisyPL.Core.ContextResolution.SherpaOnnxNative.Preload();
+
         try
         {
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

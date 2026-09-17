@@ -178,6 +178,23 @@ public sealed class EnhancedTranslationPipeline(
                 ("cueCount", relevantCueIds.Count),
                 ("result", "success"));
 
+            // SDH speaker labels ("JACLYN:") are read from the English text and outrank audio.
+            var speakerLabels = SpeakerLabelEvidence.Analyze(sourceCues, speakers.CueGenderEvidence);
+            var (labeledCueEvidence, labeledSpeakerEvidence) = SpeakerLabelEvidence.Apply(
+                speakerLabels, sourceCues, speakers.CueSpeakers, speakers.SpeakerGenderEvidence, speakers.CueGenderEvidence);
+            speakers = speakers with
+            {
+                CueGenderEvidence = labeledCueEvidence,
+                SpeakerGenderEvidence = labeledSpeakerEvidence
+            };
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "speaker_labels"),
+                ("labelCount", speakerLabels.CueLabel.Count),
+                ("genderedLabelCount", speakerLabels.CueGender.Count),
+                ("result", "success"));
+
             status?.Report(HardVoiceTurnOnly
                 ? $"Enhanced test M/K: {directionalCueGenderCount}/{sourceCues.Count} wypowiedzi ma zaakceptowaną klasyfikację głosu — sprawdzam stabilne profile rozmówców…"
                 : $"Enhanced: {knownCueGenderCount}/{sourceCues.Count} wypowiedzi ma pewną lokalną klasyfikację głosu — poprawiam bezpieczne formy…");
@@ -190,7 +207,8 @@ public sealed class EnhancedTranslationPipeline(
                 speakers.SpeakerGenderEvidence,
                 speakers.CueGenderEvidence,
                 genderDiagnostics,
-                hardVoiceTurnOnly: HardVoiceTurnOnly);
+                hardVoiceTurnOnly: HardVoiceTurnOnly,
+                labeledCueGender: speakerLabels.CueGender);
 
             cancellationToken.ThrowIfCancellationRequested();
             status?.Report("Enhanced: końcowy Quality Pass EN↔PL — sprawdzam powtórki i artefakty…");
@@ -243,7 +261,8 @@ public sealed class EnhancedTranslationPipeline(
                     speakers.SpeakerGenderEvidence,
                     speakers.CueGenderEvidence,
                     genderDiagnostics,
-                    hardVoiceTurnOnly: HardVoiceTurnOnly);
+                    hardVoiceTurnOnly: HardVoiceTurnOnly,
+                    labeledCueGender: speakerLabels.CueGender);
             }
 
             var finalQualityIssues = FinalTranslationQualityGate.Evaluate(sourceCues, reviewed);

@@ -490,10 +490,36 @@ public sealed partial class DeterministicGenderReviewService
             ? FirstPersonPredicateMaleToFemale
             : FirstPersonPredicateFemaleToMale;
 
-        return FirstPersonPredicateRegex().Replace(
+        text = FirstPersonPredicateRegex().Replace(
             text,
             match => ReplacePredicateChain(match, map, FirstPersonPredicateMaleToFemale, FirstPersonPredicateFemaleToMale));
+        return FixAloneAgreement(text, gender);
     }
+
+    /// <summary>
+    /// "Zrobiłbym to wszystko sama" (Chance S01E06 #618): "sam/sama" meaning "alone" follows
+    /// the speaker, but only next to a first-person verb of that gender and never in
+    /// "ten sam", "ta sama", "sam na sam".
+    /// </summary>
+    private static string FixAloneAgreement(string text, SpeakerVoiceGender gender)
+    {
+        var femaleVerb = FemaleFirstPersonVerbRegex().IsMatch(text);
+        var maleVerb = MaleFirstPersonVerbRegex().IsMatch(text);
+        if (gender == SpeakerVoiceGender.Female && femaleVerb && !maleVerb)
+            return AloneRegex().Replace(text, match => match.Value == "Sam" ? "Sama" : match.Value == "sam" ? "sama" : match.Value);
+        if (gender == SpeakerVoiceGender.Male && maleVerb && !femaleVerb)
+            return AloneRegex().Replace(text, match => match.Value == "Sama" ? "Sam" : match.Value == "sama" ? "sam" : match.Value);
+        return text;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łam|łabym|nnam)\b")]
+    private static partial System.Text.RegularExpressions.Regex FemaleFirstPersonVerbRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łem|łbym|ienem)\b")]
+    private static partial System.Text.RegularExpressions.Regex MaleFirstPersonVerbRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?<!\b(?:[Tt]en|[Tt]ym|[Tt]ego|[Tt]emu|[Tt]a|[Tt]ą|[Tt]ej|[Tt]ę|[Tt]ych|[Tt]ymi|[Tt]ak|[Tt]aki|[Tt]aka|[Tt]akiej|[Nn]a)\s+)\b(?:[Ss]am|[Ss]ama)\b(?!\s+na\s+sam)")]
+    private static partial System.Text.RegularExpressions.Regex AloneRegex();
 
     /// <summary>
     /// Rewrites the predicate and any adjectives coordinated with it ("jestem stara

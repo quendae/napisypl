@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private readonly SettingsStore _settingsStore;
     private readonly DispatcherTimer _elapsedTimer;
 
+    private string _selectedProvider = MadladQualityProviderName;
     private CancellationTokenSource? _operationCancellation;
     private IReadOnlyList<SubtitleTrack> _tracks = [];
     private string? _inputPath;
@@ -68,7 +69,6 @@ public partial class MainWindow : Window
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _elapsedTimer.Tick += (_, _) => RefreshElapsedText();
 
-        ProviderComboBox.ItemsSource = ProviderNames;
         Opened += OnOpened;
         Closed += (_, _) =>
         {
@@ -83,7 +83,7 @@ public partial class MainWindow : Window
         if (!_loadingSettings)
             return;
         var settings = await _settingsStore.LoadAsync();
-        ProviderComboBox.SelectedItem = settings.Provider;
+        _selectedProvider = settings.Provider;
         ModelTextBox.Text = settings.Model;
         BaseUrlTextBox.Text = settings.BaseUrl;
         ExportTxtMenuItem.IsChecked = settings.ExportTxt;
@@ -311,19 +311,9 @@ public partial class MainWindow : Window
         RefreshReadyState();
     }
 
-    private async void OnProviderSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_loadingSettings)
-            return;
-
-        ApplyProviderUi(useDefaults: true);
-        await SaveSettingsAsync();
-        RefreshReadyState();
-    }
-
     private void ApplyProviderUi(bool useDefaults)
     {
-        var provider = ProviderComboBox.SelectedItem as string ?? "Gemini";
+        var provider = _selectedProvider;
         ModelTextBox.IsEnabled = provider != "DeepL";
         ApiKeyTextBox.IsEnabled = true;
         BaseUrlTextBox.IsEnabled = true;
@@ -365,7 +355,7 @@ public partial class MainWindow : Window
         if (_busy || (_inputPath is null && _inputFolder is null))
             return;
 
-        var providerName = ProviderComboBox.SelectedItem as string ?? "Gemini";
+        var providerName = _selectedProvider;
         var apiKey = ApiKeyTextBox.Text ?? string.Empty;
         var model = ModelTextBox.Text ?? string.Empty;
         var baseUrl = BaseUrlTextBox.Text ?? string.Empty;
@@ -634,7 +624,8 @@ public partial class MainWindow : Window
         _busy = true;
         ChooseFileButton.IsEnabled = false;
         ChooseFolderButton.IsEnabled = false;
-        ProviderComboBox.IsEnabled = false;
+        SyncOtherReleaseButton.IsEnabled = false;
+        ProviderMenuItem.IsEnabled = false;
         ModelTextBox.IsEnabled = false;
         ApiKeyTextBox.IsEnabled = false;
         BaseUrlTextBox.IsEnabled = false;
@@ -657,7 +648,8 @@ public partial class MainWindow : Window
         CancelButton.IsVisible = false;
         ChooseFileButton.IsEnabled = true;
         ChooseFolderButton.IsEnabled = true;
-        ProviderComboBox.IsEnabled = true;
+        SyncOtherReleaseButton.IsEnabled = true;
+        ProviderMenuItem.IsEnabled = true;
         ApiKeyTextBox.IsEnabled = true;
         BaseUrlTextBox.IsEnabled = true;
         RevealKeyCheckBox.IsEnabled = true;
@@ -708,7 +700,7 @@ public partial class MainWindow : Window
 
         var settings = new AppSettings
         {
-            Provider = ProviderComboBox.SelectedItem as string ?? "Gemini",
+            Provider = _selectedProvider,
             Model = ModelTextBox.Text ?? string.Empty,
             BaseUrl = BaseUrlTextBox.Text ?? string.Empty,
             SearchSubtitles = SearchSubtitlesCheckBox.IsChecked == true,

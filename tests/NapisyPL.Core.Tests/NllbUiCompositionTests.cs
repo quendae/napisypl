@@ -22,8 +22,8 @@ public sealed class NllbUiCompositionTests
     {
         var root = FindRepositoryRoot();
         var source = File.ReadAllText(Path.Combine(root, "src", "NapisyPL", "MainWindow.Argos.cs"));
-        var handlerStart = source.IndexOf("OnModernProviderSelectionChanged", StringComparison.Ordinal);
-        var handlerEnd = source.IndexOf("private void ApplyModernProviderUi", handlerStart, StringComparison.Ordinal);
+        var handlerStart = source.IndexOf("private async Task SelectProviderAsync", StringComparison.Ordinal);
+        var handlerEnd = source.IndexOf("private static string ProviderDescription", handlerStart, StringComparison.Ordinal);
         Assert.True(handlerStart >= 0 && handlerEnd > handlerStart);
 
         var handler = source[handlerStart..handlerEnd];

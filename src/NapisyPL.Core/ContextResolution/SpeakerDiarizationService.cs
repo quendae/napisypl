@@ -14,6 +14,7 @@ public sealed class SpeakerDiarizationService(
     {
         await assetManager.EnsureAvailableAsync(status, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        SherpaOnnxNative.EnsureLoaded();
 
         status?.Report("Enhanced: rozpoznaję, kto mówi w poszczególnych fragmentach…");
         var wave = await Task.Run(() => PcmWaveReader.ReadMono16(wavePath), cancellationToken);
