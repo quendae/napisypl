@@ -49,11 +49,21 @@ public static class OnlineSubtitleRanking
     {
         return candidates
             .Select(candidate => candidate with { ReleaseSimilarity = video.Similarity(ReleaseName.Parse(candidate.ReleaseName)) })
-            .Where(candidate => candidate.IsHashMatch || video.SameEpisodeAs(ReleaseName.Parse(candidate.ReleaseName)))
+            .Where(candidate => candidate.IsHashMatch || IsSameTitleAndEpisode(video, ReleaseName.Parse(candidate.ReleaseName)))
             .OrderByDescending(candidate => candidate.IsHashMatch)
             .ThenByDescending(candidate => candidate.ReleaseSimilarity)
             .ThenBy(candidate => candidate.HearingImpaired)
             .ThenByDescending(candidate => candidate.DownloadCount)
             .ToArray();
     }
+
+    /// <summary>
+    /// Text search returns look-alikes ("Extraordinary You", "Love by Chance" for "Chance"),
+    /// so a release that is not a hash match must carry the same title and episode.
+    /// </summary>
+    public static bool IsSameTitleAndEpisode(ReleaseName video, ReleaseName candidate) =>
+        video.SameEpisodeAs(candidate) &&
+        video.IsEpisode == candidate.IsEpisode &&
+        ReleaseName.NormalizeTitle(candidate.Title) is { Length: > 0 } title &&
+        title == ReleaseName.NormalizeTitle(video.Title);
 }

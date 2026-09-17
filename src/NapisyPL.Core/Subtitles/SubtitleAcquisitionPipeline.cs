@@ -475,8 +475,13 @@ public sealed partial class SubtitleAcquisitionPipeline : ITranslationPipeline
 
         // Another release of the same episode: one shift does not fit, but stretches do.
         var piecewise = _synchronization.AnalyzePiecewise(reference, cues);
-        return piecewise.Decision is SubtitleSyncDecision.Aligned or SubtitleSyncDecision.SafeToSynchronize
-            ? new PreparedPolish(piecewise.Cues, analysis, piecewise)
+        if (piecewise.Decision is SubtitleSyncDecision.Aligned or SubtitleSyncDecision.SafeToSynchronize)
+            return new PreparedPolish(piecewise.Cues, analysis, piecewise);
+
+        // Retimed by its translator (merged, stretched lines): only the starts still agree.
+        var starts = _synchronization.AnalyzeStartsAgainstReference(reference, cues);
+        return starts.Decision == SubtitleSyncDecision.SafeToSynchronize
+            ? new PreparedPolish(starts.Cues, analysis, starts)
             : new PreparedPolish(null, analysis, piecewise);
     }
 

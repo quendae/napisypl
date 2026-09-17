@@ -23,7 +23,32 @@ public sealed partial class SubtitleSynchronizationService
     /// </summary>
     public PiecewiseSubtitleSync AnalyzeAgainstSpeech(
         IReadOnlyList<SpeechSpan> speech,
+        IReadOnlyList<SubtitleCue> candidate) =>
+        // Calibrated on Chance S01 with Silero VAD and diarization: the right timing puts 38-55 %
+        // of cues on an onset, 3.0-3.8x the shifted decoys; a poorly timed episode reached 1.7x
+        // and subtitles of another episode found no alignment at all.
+        AnalyzeStarts(speech, candidate, safeRatio: 2.6, safeCoverage: 0.3);
+
+    /// <summary>
+    /// Last resort against subtitles of this release when their boundaries do not line up:
+    /// Polish translators merge lines and stretch them for reading speed, but the lines still
+    /// start where the English ones do. On Chance S01 the right Polish file started 46-97 % of
+    /// its cues on an English start (2.5-4.2x the decoys); another episode's file found no
+    /// alignment at all.
+    /// </summary>
+    public PiecewiseSubtitleSync AnalyzeStartsAgainstReference(
+        IReadOnlyList<SubtitleCue> reference,
         IReadOnlyList<SubtitleCue> candidate)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return AnalyzeStarts(reference.Select(cue => new SpeechSpan(cue.Start, cue.End)).ToArray(), candidate, safeRatio: 2.2, safeCoverage: 0.4);
+    }
+
+    private PiecewiseSubtitleSync AnalyzeStarts(
+        IReadOnlyList<SpeechSpan> speech,
+        IReadOnlyList<SubtitleCue> candidate,
+        double safeRatio,
+        double safeCoverage)
     {
         ArgumentNullException.ThrowIfNull(speech);
         ArgumentNullException.ThrowIfNull(candidate);
@@ -50,10 +75,7 @@ public sealed partial class SubtitleSynchronizationService
         var coverage = best.Matched / (double)ordered.Length;
         var decoy = best.DecoyMatched / (double)ordered.Length;
         LastSpeechDiagnostics = (coverage, decoy);
-        // Calibrated on Chance S01 with Silero VAD and diarization: the right timing puts 38-55 %
-        // of cues on an onset, 3.0-3.8x the shifted decoys; a poorly timed episode reached 1.7x
-        // and subtitles of another episode found no alignment at all.
-        var decision = coverage >= 0.3 && coverage >= decoy * 2.6 && best.Segments.Count <= MaximumSafeSegments
+        var decision = coverage >= safeCoverage && coverage >= decoy * safeRatio && best.Segments.Count <= MaximumSafeSegments
             ? SubtitleSyncDecision.SafeToSynchronize
             : coverage >= 0.2 && coverage >= decoy * 1.8
                 ? SubtitleSyncDecision.NeedsReview

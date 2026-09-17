@@ -90,10 +90,15 @@ public sealed class AppServices : IDisposable
             HttpClient, providerName, apiKey, settings.Model, settings.BaseUrl, Logger));
     }
 
-    /// <summary>SubDL and OpenSubtitles.com join the Polish search only with the user's own key.</summary>
+    /// <summary>
+    /// SubDL and OpenSubtitles.com join the Polish search only with the user's own key;
+    /// the keyless opensubtitles.org goes first while it still answers, unless switched off.
+    /// </summary>
     public async Task RefreshOnlineSourcesAsync(CancellationToken cancellationToken = default)
     {
         var sources = new List<IOnlineSubtitleSource>();
+        if ((await Settings.LoadAsync()).LegacyOpenSubtitles)
+            sources.Add(new OpenSubtitlesOrgSource(HttpClient));
         if (await LoadKeyAsync(SubDlSource.SourceName, cancellationToken) is { } subDlKey)
             sources.Add(new SubDlSource(HttpClient, subDlKey));
         if (await LoadKeyAsync(OpenSubtitlesComSource.SourceName, cancellationToken) is { } openSubtitlesKey)

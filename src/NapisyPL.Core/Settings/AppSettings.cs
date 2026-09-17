@@ -14,6 +14,9 @@ public sealed class AppSettings
     /// <summary>Fix gendered forms (zrobiłeś → zrobiłaś) from the voices in the video.</summary>
     public bool GenderCorrection { get; set; } = true;
 
+    /// <summary>Search the legacy opensubtitles.org API, which needs no key while it lasts.</summary>
+    public bool LegacyOpenSubtitles { get; set; } = true;
+
     /// <summary>Only change a form when the voice evidence is clear.</summary>
     public bool StrictVoiceEvidence { get; set; } = true;
 

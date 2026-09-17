@@ -698,8 +698,11 @@ public partial class MainWindow : Window
         if (_loadingSettings)
             return;
 
+        // Options edited in other windows are not mirrored here; carry them over.
+        var stored = await _settingsStore.LoadAsync();
         var settings = new AppSettings
         {
+            LegacyOpenSubtitles = stored.LegacyOpenSubtitles,
             Provider = _selectedProvider,
             Model = ModelTextBox.Text ?? string.Empty,
             BaseUrl = BaseUrlTextBox.Text ?? string.Empty,
