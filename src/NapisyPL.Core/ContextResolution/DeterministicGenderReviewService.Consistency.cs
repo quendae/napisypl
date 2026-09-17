@@ -167,6 +167,11 @@ public sealed partial class DeterministicGenderReviewService
             {
                 anchor = resolved;
             }
+            else if (TryGetTranslatedText(translated, candidate.Index, out var namedText) &&
+                     TryGetVocativeAddresseeGender(candidate.Text, namedText, out var named))
+            {
+                anchor = named;
+            }
             else if (EnglishVocativeNameRegex().IsMatch(candidate.Text) &&
                      TryGetTranslatedText(translated, candidate.Index, out var translatedText))
             {
@@ -344,6 +349,37 @@ public sealed partial class DeterministicGenderReviewService
         return (male, female);
     }
 
+    /// <summary>A name in the cue outranks every other addressee signal we have.</summary>
+    private const double VocativeAddresseeConfidence = 0.99;
+
+    /// <summary>
+    /// The addressee's gender when the English line names them ("But you have, Jaclyn."), which
+    /// is where Chance S01E10 #580 wrote "Przeżyłeś" to a woman. The line has to address
+    /// somebody at all, so a name without a second-person pronoun proves nothing: "Mr. Schorr."
+    /// as the tail of a narrated sentence names a third person.
+    /// The MT writes masculine by default, so masculine forms never outrank the name; two or
+    /// more feminine forms are a decision it made from context, and a name list that disagrees
+    /// with them (Andrea, Nikita, Ashley are read differently in different languages) yields.
+    /// </summary>
+    private static bool TryGetVocativeAddresseeGender(
+        string sourceText,
+        string translatedText,
+        out SpeakerVoiceGender gender)
+    {
+        gender = SpeakerVoiceGender.Unknown;
+        if (!EnglishSecondPersonPronounRegex().IsMatch(sourceText))
+            return false;
+
+        var named = VocativeAddresseeEvidence.Resolve(sourceText);
+        if (named == SpeakerVoiceGender.Unknown)
+            return false;
+        if (named == SpeakerVoiceGender.Male && InferStrongAddresseeGender(translatedText) == SpeakerVoiceGender.Female)
+            return false;
+
+        gender = named;
+        return true;
+    }
+
     /// <summary>A capitalised name addressed at the start or end of a line: "Paula, …" / "…, Paula?"</summary>
     [System.Text.RegularExpressions.GeneratedRegex(@"(?:^|\n)\p{Lu}\p{Ll}+,|,\s*\p{Lu}\p{Ll}+\s*[?!.…]*\s*$")]
     private static partial System.Text.RegularExpressions.Regex EnglishVocativeNameRegex();
@@ -473,9 +509,11 @@ public sealed partial class DeterministicGenderReviewService
             ? SecondPersonPredicateMaleToFemale
             : SecondPersonPredicateFemaleToMale;
 
-        return SecondPersonPredicateRegex().Replace(
+        text = SecondPersonPredicateRegex().Replace(
             text,
-            match => ReplacePredicateChain(match, map, SecondPersonPredicateMaleToFemale, SecondPersonPredicateFemaleToMale));
+            match => ReplacePredicateChain(match, map, SecondPersonPredicateMaleToFemale, SecondPersonPredicateFemaleToMale,
+                gender == SpeakerVoiceGender.Female));
+        return FixSplitParticiple(AddresseeSplitParticipleRegex(), text, gender);
     }
 
     private static string FixFirstPersonPredicateAgreement(
@@ -492,9 +530,54 @@ public sealed partial class DeterministicGenderReviewService
 
         text = FirstPersonPredicateRegex().Replace(
             text,
-            match => ReplacePredicateChain(match, map, FirstPersonPredicateMaleToFemale, FirstPersonPredicateFemaleToMale));
+            match => ReplacePredicateChain(match, map, FirstPersonPredicateMaleToFemale, FirstPersonPredicateFemaleToMale,
+                gender == SpeakerVoiceGender.Female));
+        text = FixSplitParticiple(SelfSplitParticipleRegex(), text, gender);
         return FixAloneAgreement(text, gender);
     }
+
+    /// <summary>
+    /// Polish puts the person on the conjunction and leaves the gender on a participle of its
+    /// own: "gdybym był", "powinienem był", "żebyś wiedział". Rewriting only the marker the
+    /// speaker's verb carries leaves the sentence half-male ("nigdy nie powinnam był"), so the
+    /// participle that belongs to it moves with it.
+    /// </summary>
+    private static string FixSplitParticiple(
+        System.Text.RegularExpressions.Regex pattern,
+        string text,
+        SpeakerVoiceGender gender)
+    {
+        if (gender == SpeakerVoiceGender.Unknown)
+            return text;
+
+        return pattern.Replace(text, match =>
+        {
+            var group = match.Groups["participle"];
+            var participle = group.Value;
+            var lower = participle.ToLowerInvariant();
+            var rewritten = gender == SpeakerVoiceGender.Female
+                ? lower.EndsWith('ł') && IsKnownPastVerb(lower, "ł") ? participle + "a" : null
+                : lower.EndsWith("ła", StringComparison.Ordinal) && IsKnownPastVerb(lower, "ła")
+                    ? participle[..^1]
+                    : null;
+            if (rewritten is null)
+                return match.Value;
+
+            var start = group.Index - match.Index;
+            return match.Value[..start] + rewritten + match.Value[(start + participle.Length)..];
+        });
+    }
+
+    /// <summary>"gdybym był", "powinnam była", "żebym wiedział" — up to two words in between.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\b(?:gdybym|żebym|abym|jakbym|bym|powinienem|powinnam)\s+(?:\p{L}+\s+){0,2}(?<participle>\p{L}+ła|\p{L}+ł)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex SelfSplitParticipleRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\b(?:gdybyś|żebyś|abyś|jakbyś|byś|powinieneś|powinnaś)\s+(?:\p{L}+\s+){0,2}(?<participle>\p{L}+ła|\p{L}+ł)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex AddresseeSplitParticipleRegex();
 
     /// <summary>
     /// "Zrobiłbym to wszystko sama" (Chance S01E06 #618): "sam/sama" meaning "alone" follows
@@ -503,20 +586,15 @@ public sealed partial class DeterministicGenderReviewService
     /// </summary>
     private static string FixAloneAgreement(string text, SpeakerVoiceGender gender)
     {
-        var femaleVerb = FemaleFirstPersonVerbRegex().IsMatch(text);
-        var maleVerb = MaleFirstPersonVerbRegex().IsMatch(text);
-        if (gender == SpeakerVoiceGender.Female && femaleVerb && !maleVerb)
+        // The speaker's own past forms decide, counted with the same lexicon the rest of the
+        // review uses, so a present tense that merely looks past ("działam") does not count.
+        var (male, female) = CountSelfMarkers(text);
+        if (gender == SpeakerVoiceGender.Female && female > 0 && male == 0)
             return AloneRegex().Replace(text, match => match.Value == "Sam" ? "Sama" : match.Value == "sam" ? "sama" : match.Value);
-        if (gender == SpeakerVoiceGender.Male && maleVerb && !femaleVerb)
+        if (gender == SpeakerVoiceGender.Male && male > 0 && female == 0)
             return AloneRegex().Replace(text, match => match.Value == "Sama" ? "Sam" : match.Value == "sama" ? "sam" : match.Value);
         return text;
     }
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łam|łabym|nnam)\b")]
-    private static partial System.Text.RegularExpressions.Regex FemaleFirstPersonVerbRegex();
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łem|łbym|ienem)\b")]
-    private static partial System.Text.RegularExpressions.Regex MaleFirstPersonVerbRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"(?<!\b(?:[Tt]en|[Tt]ym|[Tt]ego|[Tt]emu|[Tt]a|[Tt]ą|[Tt]ej|[Tt]ę|[Tt]ych|[Tt]ymi|[Tt]ak|[Tt]aki|[Tt]aka|[Tt]akiej|[Nn]a)\s+)\b(?:[Ss]am|[Ss]ama)\b(?!\s+na\s+sam)")]
     private static partial System.Text.RegularExpressions.Regex AloneRegex();
@@ -526,20 +604,47 @@ public sealed partial class DeterministicGenderReviewService
     /// i zepsuty", MPG S01E01 #14). The chain stops at the first word that is not a
     /// known predicate of either gender, so "jestem gotowa, a on gotowy" keeps "gotowy".
     /// </summary>
+    /// <summary>
+    /// The morphological lexicon lists adjectives in the positive degree only, so "starszy",
+    /// "lepszy" and every other comparative would keep the wrong ending. Polish forms them
+    /// regularly: "-szy" for a man, "-sza" for a woman.
+    /// </summary>
+    private static bool IsComparative(string lower) =>
+        lower.Length > 5 &&
+        (lower.EndsWith("szy", StringComparison.Ordinal) || lower.EndsWith("sza", StringComparison.Ordinal)) &&
+        !NotComparatives.Contains(lower);
+
+    private static string? ComparativeForm(string lower, bool toFemale) =>
+        toFemale
+            ? lower.EndsWith("szy", StringComparison.Ordinal) ? lower[..^1] + "a" : null
+            : lower.EndsWith("sza", StringComparison.Ordinal) ? lower[..^1] + "y" : null;
+
+    /// <summary>Words that end like a comparative without being one.</summary>
+    private static readonly HashSet<string> NotComparatives = new(StringComparer.Ordinal)
+    {
+        "nasza", "wasza", "kasza", "afisza", "kapelusza", "pejzaża", "towarzysza", "grosza", "kosza",
+        "klawisza", "listonosza", "malarza"
+    };
+
     private static string ReplacePredicateChain(
         System.Text.RegularExpressions.Match match,
         IReadOnlyDictionary<string, string> map,
         IReadOnlyDictionary<string, string> maleToFemale,
-        IReadOnlyDictionary<string, string> femaleToMale)
+        IReadOnlyDictionary<string, string> femaleToMale,
+        bool toFemale)
     {
         var value = match.Value;
         var edits = new List<(int Index, int Length, string Text)>();
         foreach (System.Text.RegularExpressions.Capture capture in match.Groups["predicate"].Captures)
         {
             var lower = capture.Value.ToLowerInvariant();
-            if (!maleToFemale.ContainsKey(lower) && !femaleToMale.ContainsKey(lower))
+            var comparative = IsComparative(lower);
+            if (!maleToFemale.ContainsKey(lower) && !femaleToMale.ContainsKey(lower) && !comparative)
                 break;
-            if (map.TryGetValue(lower, out var replacement))
+            var replacement = map.TryGetValue(lower, out var mapped) ? mapped
+                : comparative ? ComparativeForm(lower, toFemale)
+                : null;
+            if (replacement is not null)
                 edits.Add((capture.Index - match.Index, capture.Length, MatchCasing(capture.Value, replacement)));
         }
 
@@ -557,24 +662,24 @@ public sealed partial class DeterministicGenderReviewService
     /// "byłem tak zaniepokojona" (Leftovers S01E01 #217), "jestem już gotowy".
     /// </summary>
     private const string PredicateModifiers =
-        @"(?:(?:tak|bardzo|naprawdę|zbyt|za|całkiem|strasznie|trochę|dość|dosyć|okropnie|niesamowicie|szalenie|już|jeszcze|zawsze|nigdy|wciąż|ciągle|chyba|raczej|też|również|tylko)\s+){0,2}";
+        @"(?:(?:tak|bardzo|naprawdę|zbyt|za|całkiem|strasznie|trochę|dość|dosyć|okropnie|niesamowicie|szalenie|już|jeszcze|zawsze|nigdy|wciąż|ciągle|chyba|raczej|też|również|tylko|w\s+tym|w\s+tej|do\s+tego)\s+){0,2}";
 
     /// <summary>Up to three further predicates joined by a comma, "i", "oraz", "a" or "ale".</summary>
     private const string PredicateChain =
         @"(?:(?:\s*,\s*|\s+(?:i|oraz|a|ale)\s+)" + PredicateModifiers + @"(?<predicate>\p{L}+)){0,3}";
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\b(?:jestem|byłem|byłam|będę)\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
+        @"\b(?:jestem|byłem|byłam|będę|(?:gdybym|żebym|abym|jakbym|bym)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
         System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex FirstPersonPredicateRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\b(?:jesteś|byłeś|byłaś|będziesz)\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
+        @"\b(?:jesteś|byłeś|byłaś|będziesz|(?:gdybyś|żebyś|abyś|jakbyś|byś)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
         System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex SecondPersonPredicateRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\b(?:jestem|jesteś|byłem|byłam|byłeś|byłaś|będę|będziesz)\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)",
+        @"\b(?:jestem|jesteś|byłem|byłam|byłeś|byłaś|będę|będziesz|(?:gdyby|żeby|jakby|aby)(?:m|ś)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex PredicateCandidateRegex();
 }

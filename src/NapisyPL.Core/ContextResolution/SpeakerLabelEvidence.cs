@@ -26,6 +26,12 @@ public static partial class SpeakerLabelEvidence
     private const int MinimumAgreeingPitchCues = 2;
     private const int MinimumVotedLabelCues = 3;
 
+    /// <summary>Named cues needed before the name speaks for the whole diarized cluster.</summary>
+    private const int MinimumClusterLabelCues = 2;
+
+    /// <summary>A named cluster is as certain as the label itself.</summary>
+    private const double LabelledProfileConfidence = 0.99;
+
     private static readonly Lazy<IReadOnlyDictionary<string, SpeakerVoiceGender>> FirstNames = new(LoadFirstNames);
 
     private static readonly Dictionary<string, SpeakerVoiceGender> RoleWords = new(StringComparer.OrdinalIgnoreCase)
@@ -44,6 +50,16 @@ public static partial class SpeakerLabelEvidence
         ["princess"] = SpeakerVoiceGender.Female, ["lady"] = SpeakerVoiceGender.Female, ["mrs"] = SpeakerVoiceGender.Female,
         ["ms"] = SpeakerVoiceGender.Female, ["miss"] = SpeakerVoiceGender.Female, ["madam"] = SpeakerVoiceGender.Female,
         ["waitress"] = SpeakerVoiceGender.Female, ["actress"] = SpeakerVoiceGender.Female, ["nun"] = SpeakerVoiceGender.Female
+    };
+
+    /// <summary>
+    /// Short forms the birth register calls male only because the full male name was common a
+    /// century ago. On screen "Sam" is as often Samantha, "Alex" Alexandra, "Jess" Jessica.
+    /// The voice decides for these instead of the list.
+    /// </summary>
+    private static readonly HashSet<string> AmbiguousNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sam", "sammy", "alex", "jess", "jesse", "sasha", "jean", "lou", "mel", "bo", "nico"
     };
 
     /// <summary>Labels that look like "Word:" but name no speaker.</summary>
@@ -115,7 +131,8 @@ public static partial class SpeakerLabelEvidence
 
     /// <summary>
     /// Labelled cues become forced cue evidence, so turn resolution (who is addressed)
-    /// uses them too. A diarized profile that labels show to be two people is dropped.
+    /// uses them too. A cluster the labels name repeatedly takes that name's gender for all
+    /// of its lines; one the labels show to be two people is dropped instead.
     /// </summary>
     public static (IReadOnlyDictionary<int, CueVoiceGenderEvidence> CueEvidence,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> SpeakerEvidence) Apply(
@@ -137,21 +154,56 @@ public static partial class SpeakerLabelEvidence
         }
 
         var speakers = new Dictionary<string, SpeakerGenderEvidence>(speakerEvidence);
-        foreach (var (speaker, profile) in speakerEvidence)
+        foreach (var (speaker, labelled) in GroupLabelsBySpeaker(labels, cueSpeakers))
         {
-            if (profile.Gender == SpeakerVoiceGender.Unknown)
+            var male = labelled.Count(gender => gender == SpeakerVoiceGender.Male);
+            var female = labelled.Count(gender => gender == SpeakerVoiceGender.Female);
+            speakerEvidence.TryGetValue(speaker, out var profile);
+
+            // The labels name the same person often enough to stand for the whole voice:
+            // every line of this cluster is theirs, not only the ones carrying the label.
+            if (male >= MinimumClusterLabelCues && female == 0)
+            {
+                speakers[speaker] = NameProfile(SpeakerVoiceGender.Male, male, profile);
                 continue;
-            var labelled = labels.CueGender
-                .Where(pair => cueSpeakers.TryGetValue(pair.Key, out var label) && label == speaker)
-                .Select(pair => pair.Value)
-                .ToArray();
-            var agreeing = labelled.Count(gender => gender == profile.Gender);
-            var opposite = labelled.Length - agreeing;
+            }
+
+            if (female >= MinimumClusterLabelCues && male == 0)
+            {
+                speakers[speaker] = NameProfile(SpeakerVoiceGender.Female, female, profile);
+                continue;
+            }
+
+            // Two names of opposite gender in one cluster: diarization merged two people.
+            if (profile is null || profile.Gender == SpeakerVoiceGender.Unknown)
+                continue;
+            var agreeing = profile.Gender == SpeakerVoiceGender.Male ? male : female;
+            var opposite = labelled.Count - agreeing;
             if (opposite >= 2 && opposite >= agreeing)
                 speakers[speaker] = new SpeakerGenderEvidence(SpeakerVoiceGender.Unknown, 0, profile.SampleCount);
         }
 
         return (cues, speakers);
+    }
+
+    private static SpeakerGenderEvidence NameProfile(SpeakerVoiceGender gender, int labelledCues, SpeakerGenderEvidence? profile) =>
+        new(gender, LabelledProfileConfidence, Math.Max(profile?.SampleCount ?? 0, labelledCues));
+
+    private static Dictionary<string, List<SpeakerVoiceGender>> GroupLabelsBySpeaker(
+        SpeakerLabelAnalysis labels,
+        IReadOnlyDictionary<int, string?> cueSpeakers)
+    {
+        var grouped = new Dictionary<string, List<SpeakerVoiceGender>>(StringComparer.Ordinal);
+        foreach (var (cueId, gender) in labels.CueGender)
+        {
+            if (!cueSpeakers.TryGetValue(cueId, out var speaker) || string.IsNullOrWhiteSpace(speaker))
+                continue;
+            if (!grouped.TryGetValue(speaker!, out var list))
+                grouped[speaker!] = list = [];
+            list.Add(gender);
+        }
+
+        return grouped;
     }
 
     public static SpeakerVoiceGender GenderOfLabel(string label)
@@ -167,7 +219,8 @@ public static partial class SpeakerLabelEvidence
                 return role;
         }
 
-        return FirstNames.Value.TryGetValue(words[0].ToLowerInvariant(), out var gender)
+        return !AmbiguousNames.Contains(words[0]) &&
+               FirstNames.Value.TryGetValue(words[0].ToLowerInvariant(), out var gender)
             ? gender
             : SpeakerVoiceGender.Unknown;
     }
