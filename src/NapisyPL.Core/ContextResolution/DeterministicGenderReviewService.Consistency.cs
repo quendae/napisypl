@@ -503,20 +503,15 @@ public sealed partial class DeterministicGenderReviewService
     /// </summary>
     private static string FixAloneAgreement(string text, SpeakerVoiceGender gender)
     {
-        var femaleVerb = FemaleFirstPersonVerbRegex().IsMatch(text);
-        var maleVerb = MaleFirstPersonVerbRegex().IsMatch(text);
-        if (gender == SpeakerVoiceGender.Female && femaleVerb && !maleVerb)
+        // The speaker's own past forms decide, counted with the same lexicon the rest of the
+        // review uses, so a present tense that merely looks past ("działam") does not count.
+        var (male, female) = CountSelfMarkers(text);
+        if (gender == SpeakerVoiceGender.Female && female > 0 && male == 0)
             return AloneRegex().Replace(text, match => match.Value == "Sam" ? "Sama" : match.Value == "sam" ? "sama" : match.Value);
-        if (gender == SpeakerVoiceGender.Male && maleVerb && !femaleVerb)
+        if (gender == SpeakerVoiceGender.Male && male > 0 && female == 0)
             return AloneRegex().Replace(text, match => match.Value == "Sama" ? "Sam" : match.Value == "sama" ? "sam" : match.Value);
         return text;
     }
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łam|łabym|nnam)\b")]
-    private static partial System.Text.RegularExpressions.Regex FemaleFirstPersonVerbRegex();
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b\p{L}+(?:łem|łbym|ienem)\b")]
-    private static partial System.Text.RegularExpressions.Regex MaleFirstPersonVerbRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"(?<!\b(?:[Tt]en|[Tt]ym|[Tt]ego|[Tt]emu|[Tt]a|[Tt]ą|[Tt]ej|[Tt]ę|[Tt]ych|[Tt]ymi|[Tt]ak|[Tt]aki|[Tt]aka|[Tt]akiej|[Nn]a)\s+)\b(?:[Ss]am|[Ss]ama)\b(?!\s+na\s+sam)")]
     private static partial System.Text.RegularExpressions.Regex AloneRegex();
