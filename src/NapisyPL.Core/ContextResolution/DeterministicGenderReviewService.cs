@@ -477,12 +477,23 @@ public sealed partial class DeterministicGenderReviewService
     internal static string FixSpeakerAgreement(string text, SpeakerVoiceGender gender) =>
         FixSpeakerAgreement(sourceText: null, text, gender);
 
+    /// <summary>
+    /// The line repeats someone else's words, so the gender in them is theirs, not the speaker's.
+    /// A subtitle often carries only half of the quotation - Chance S01E09 #478 closes a quote its
+    /// previous cue opened ("Come with me, / I found you, you're safe now,") - so an odd number of
+    /// quotation marks counts as being inside one.
+    /// </summary>
+    private static bool QuotesSomeoneElse(string sourceText) =>
+        EnglishQuotedFirstPersonRegex().IsMatch(sourceText) ||
+        (sourceText.Count(character => character is '"' or '“' or '”') % 2 == 1 &&
+         EnglishFirstPersonPronounRegex().IsMatch(sourceText));
+
     private static string FixSpeakerAgreement(
         string? sourceText,
         string text,
         SpeakerVoiceGender gender)
     {
-        if (sourceText is not null && EnglishQuotedFirstPersonRegex().IsMatch(sourceText))
+        if (sourceText is not null && QuotesSomeoneElse(sourceText))
             return text;
 
         // Polish present-tense forms such as "wysyłam" can look exactly like a

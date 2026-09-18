@@ -608,7 +608,7 @@ public sealed partial class DeterministicGenderReviewService
         string text,
         SpeakerVoiceGender gender)
     {
-        if (gender == SpeakerVoiceGender.Unknown || EnglishQuotedFirstPersonRegex().IsMatch(sourceText))
+        if (gender == SpeakerVoiceGender.Unknown || QuotesSomeoneElse(sourceText))
             return text;
 
         var map = gender == SpeakerVoiceGender.Female
@@ -756,12 +756,12 @@ public sealed partial class DeterministicGenderReviewService
         @"(?:(?:\s*,\s*|\s+(?:i|oraz|a|ale)\s+)" + PredicateModifiers + @"(?<predicate>\p{L}+)){0,3}";
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\b(?:jestem|byłem|byłam|będę|(?:gdybym|żebym|abym|jakbym|bym)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
+        @"\b(?:jestem|byłem|byłam|będę|zostałem|zostałam|zostanę|(?:chciałem|chciałam|mogłem|mogłam|musiałem|musiałam|powinienem|powinnam|wolałem|wolałam)\s+(?:być|zostać)|(?:gdybym|żebym|abym|jakbym|bym)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
         System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex FirstPersonPredicateRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(
-        @"\b(?:jesteś|byłeś|byłaś|będziesz|(?:gdybyś|żebyś|abyś|jakbyś|byś)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
+        @"\b(?:jesteś|byłeś|byłaś|będziesz|zostałeś|zostałaś|zostaniesz|(?:chciałeś|chciałaś|mogłeś|mogłaś|musiałeś|musiałaś|powinieneś|powinnaś|wolałeś|wolałaś)\s+(?:być|zostać)|(?:gdybyś|żebyś|abyś|jakbyś|byś)\s+(?:był|była))\s+" + PredicateModifiers + @"(?<predicate>\p{L}+)" + PredicateChain,
         System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex SecondPersonPredicateRegex();
 

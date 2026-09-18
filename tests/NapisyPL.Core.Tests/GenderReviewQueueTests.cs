@@ -77,6 +77,20 @@ public sealed class GenderReviewQueueTests
             profile: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.95, 4)));
 
     [Fact]
+    public void ALineTheSubtitlesNameTheSpeakerOfIsNotAsked() =>
+        // "Chance:" stands two lines up and the Polish agrees with it; a voice reading of the
+        // scene cannot outvote a name written into the subtitles (Chance S01E10 #312).
+        Assert.Empty(DeterministicGenderReviewService.CollectOpenQuestions(
+            [new SubtitleCue(1, TimeSpan.Zero, TimeSpan.FromSeconds(2), "I was scared, D.")],
+            [Cue(1, "Bałem się, D.")],
+            [Cue(1, "Bałem się, D.")],
+            new Dictionary<int, string?> { [1] = "SPEAKER_01" },
+            new Dictionary<string, SpeakerGenderEvidence>
+                { ["SPEAKER_01"] = new(SpeakerVoiceGender.Female, 0.85, 5) },
+            new Dictionary<int, CueVoiceGenderEvidence>(),
+            new Dictionary<int, SpeakerVoiceGender> { [1] = SpeakerVoiceGender.Male }));
+
+    [Fact]
     public async Task TheQuestionsSurviveARoundTripAndVanishWhenAnswered()
     {
         var directory = Directory.CreateTempSubdirectory("subflow-review");

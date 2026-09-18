@@ -100,6 +100,15 @@ public sealed class NamedSpeakerAndCompoundFormTests
         "Gdybym wiedziała, nie pytałabym.")]
     // Comparatives are missing from the morphological lexicon, so the regular ending decides.
     [InlineData("I'm the best.", "Jestem najlepszy.", "Jestem najlepsza.")]
+    // A modal keeps the person, "być" hands the gender to what follows.
+    [InlineData("I'm sorry. I don't mean to be rude.", "Przepraszam. Nie chciałem być niegrzeczny.",
+        "Przepraszam. Nie chciałam być niegrzeczna.")]
+    // The passive: "zostać" carries the person, the participle after it carries the gender.
+    [InlineData("Besides, I'm not the one who got hit in the head.",
+        "Poza tym, to nie ja zostałem trafiony w głowę.",
+        "Poza tym, to nie ja zostałam trafiona w głowę.")]
+    [InlineData("I got fired last week.", "Zostałem zwolniony w zeszłym tygodniu.",
+        "Zostałam zwolniona w zeszłym tygodniu.")]
     public void CompoundSelfFormsFollowTheSpeaker(string english, string masculine, string feminine) =>
         Assert.Equal(feminine, ReviewSelf(english, masculine, SpeakerVoiceGender.Female));
 
@@ -112,6 +121,20 @@ public sealed class NamedSpeakerAndCompoundFormTests
         "Powinnaś była zadzwonić, Jaclyn.")]
     public void CompoundAddresseeFormsFollowTheListener(string english, string masculine, string feminine) =>
         Assert.Equal(feminine, ReviewSelf(english, masculine, SpeakerVoiceGender.Male));
+
+    [Fact]
+    public void BecomingSomethingIsNotAParticiple() =>
+        // "zostałem lekarzem" is a noun in the instrumental; only the verb moves.
+        Assert.Equal("Zostałam lekarzem.", ReviewSelf("I became a doctor.", "Zostałem lekarzem.", SpeakerVoiceGender.Female));
+
+    [Fact]
+    public void HalfAQuotationIsStillAQuotation() =>
+        // The previous cue opened the quote; these are the wife's words, not the speaker's
+        // (Chance S01E09 #478).
+        Assert.Equal(
+            "Znalazłam cię, jesteś teraz bezpieczny”, ciągnąc ją.",
+            ReviewSelf("I found you, you're safe now,” pulling on her.",
+                "Znalazłam cię, jesteś teraz bezpieczny”, ciągnąc ją.", SpeakerVoiceGender.Male));
 
     [Fact]
     public void APossessivePronounIsNotAComparative() =>

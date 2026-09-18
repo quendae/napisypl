@@ -448,7 +448,8 @@ public sealed class EnhancedTranslationPipeline(
             if (AskAboutUncertainLines)
             {
                 var openQuestions = DeterministicGenderReviewService.CollectOpenQuestions(
-                    sourceCues, translated, reviewed, speakers.CueSpeakers, speakers.SpeakerGenderEvidence, speakers.CueGenderEvidence);
+                    sourceCues, translated, reviewed, speakers.CueSpeakers, speakers.SpeakerGenderEvidence,
+                    speakers.CueGenderEvidence, speakerLabels.AllCueGender);
                 await GenderReviewQueue.WriteAsync(
                     new GenderReviewQueueFile(inputPath, srtOutput, openQuestions), cancellationToken);
                 logger?.Info(
