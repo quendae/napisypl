@@ -11,7 +11,8 @@ public sealed record GenderReviewCandidate(
     string English,
     string Current,
     string Proposed,
-    string Reason);
+    string Reason,
+    string? Voice = null);
 
 public sealed partial class DeterministicGenderReviewService
 {
@@ -83,8 +84,13 @@ public sealed partial class DeterministicGenderReviewService
             if (string.Equals(proposed, cue.Text, StringComparison.Ordinal))
                 continue;
 
+            // One voice asked the same thing over and over is one decision, not seven: Chance
+            // S01E05 asks ten times and seven of them are the same person, all pointing one way.
+            var voice = cueSpeakers.TryGetValue(cue.Index, out var speaker) && !string.IsNullOrWhiteSpace(speaker)
+                ? speaker + "|" + heard
+                : null;
             questions.Add(new GenderReviewCandidate(
-                cue.Index, sourceCue.Start, sourceCue.End, sourceCue.Text, cue.Text, proposed, reason));
+                cue.Index, sourceCue.Start, sourceCue.End, sourceCue.Text, cue.Text, proposed, reason, voice));
         }
 
         return questions;

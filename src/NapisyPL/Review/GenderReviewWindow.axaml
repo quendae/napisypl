@@ -30,52 +30,82 @@
     </Border>
 
     <ScrollViewer Padding="24,16">
-      <ItemsControl x:Name="QuestionList">
+      <ItemsControl x:Name="GroupList">
         <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="review:GenderReviewItem">
+          <DataTemplate x:DataType="review:GenderReviewGroup">
             <Border Classes="card" Margin="0,0,0,12">
-              <StackPanel Spacing="10">
+              <StackPanel Spacing="12">
 
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <!-- One voice, one decision. A lone question carries its own heading instead. -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding IsShared}">
                   <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding Timecode}" Classes="title" />
-                    <TextBlock Text="{Binding Reason}" Classes="hint" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Title}" Classes="title" />
+                    <TextBlock Text="{Binding Note}" Classes="hint" TextWrapping="Wrap" />
                   </StackPanel>
-                  <Button Grid.Column="1" Classes="quiet" Content="Posłuchaj" VerticalAlignment="Top"
-                          Click="OnPlayClick" CommandParameter="{Binding}"
-                          AutomationProperties.Name="Odtwórz tę kwestię z filmu" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                              VerticalAlignment="Top" IsVisible="{Binding IsShared}">
+                    <Button Classes="quiet" Content="Zostaw wszystkie" Click="OnKeepGroupClick"
+                            CommandParameter="{Binding}"
+                            AutomationProperties.Name="Zostaw wszystkie kwestie tego głosu bez zmian" />
+                    <Button Classes="primary" Content="Zmień wszystkie" Click="OnAcceptGroupClick"
+                            CommandParameter="{Binding}"
+                            AutomationProperties.Name="Zmień wszystkie kwestie tego głosu" />
+                  </StackPanel>
                 </Grid>
 
-                <TextBlock Text="{Binding English}" Classes="hint" TextWrapping="Wrap" FontStyle="Italic" />
+                <ItemsControl ItemsSource="{Binding Items}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="review:GenderReviewItem">
+                      <Border Padding="0,12,0,0" BorderThickness="0,1,0,0"
+                              BorderBrush="{DynamicResource BorderBrushApp}">
+                        <StackPanel Spacing="8">
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                  <Border Padding="12,10" CornerRadius="6"
-                          Background="{DynamicResource SurfaceBrush}"
-                          BorderBrush="{DynamicResource BorderBrushApp}"
-                          BorderThickness="1">
-                    <StackPanel Spacing="4">
-                      <TextBlock Text="Zostaw" Classes="hint" />
-                      <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
-                                 IsVisible="{Binding KeptCurrent}" />
-                      <TextBlock Text="{Binding Current}" TextWrapping="Wrap" />
-                      <Button Classes="quiet" Content="Zostaw tak" HorizontalAlignment="Stretch"
-                              Click="OnKeepClick" CommandParameter="{Binding}" />
-                    </StackPanel>
-                  </Border>
-                  <Border Grid.Column="1" Padding="12,10" CornerRadius="6"
-                          Background="{DynamicResource SurfaceBrush}"
-                          BorderBrush="{DynamicResource BorderBrushApp}"
-                          BorderThickness="1">
-                    <StackPanel Spacing="4">
-                      <TextBlock Text="Zmień na" Classes="hint" />
-                      <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
-                                 IsVisible="{Binding TookProposal}" />
-                      <TextBlock Text="{Binding Proposed}" TextWrapping="Wrap" />
-                      <Button Classes="primary" Content="Zmień" HorizontalAlignment="Stretch"
-                              Click="OnAcceptClick" CommandParameter="{Binding}" />
-                    </StackPanel>
-                  </Border>
-                </Grid>
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <StackPanel Spacing="2">
+                              <TextBlock Text="{Binding Timecode}" Classes="hint" />
+                              <TextBlock Text="{Binding Reason}" Classes="hint" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="quiet" Content="Posłuchaj" VerticalAlignment="Top"
+                                    Click="OnPlayClick" CommandParameter="{Binding}"
+                                    AutomationProperties.Name="Odtwórz tę kwestię z filmu" />
+                          </Grid>
+
+                          <TextBlock Text="{Binding English}" Classes="hint" TextWrapping="Wrap" FontStyle="Italic" />
+
+                          <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                            <Border Padding="12,10" CornerRadius="6"
+                                    Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrushApp}"
+                                    BorderThickness="1">
+                              <StackPanel Spacing="4">
+                                <TextBlock Text="Zostaw" Classes="hint" />
+                                <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
+                                           IsVisible="{Binding KeptCurrent}" />
+                                <TextBlock Text="{Binding Current}" TextWrapping="Wrap" />
+                                <Button Classes="quiet" Content="Zostaw tak" HorizontalAlignment="Stretch"
+                                        Click="OnKeepClick" CommandParameter="{Binding}" />
+                              </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Padding="12,10" CornerRadius="6"
+                                    Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrushApp}"
+                                    BorderThickness="1">
+                              <StackPanel Spacing="4">
+                                <TextBlock Text="Zmień na" Classes="hint" />
+                                <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
+                                           IsVisible="{Binding TookProposal}" />
+                                <TextBlock Text="{Binding Proposed}" TextWrapping="Wrap" />
+                                <Button Classes="primary" Content="Zmień" HorizontalAlignment="Stretch"
+                                        Click="OnAcceptClick" CommandParameter="{Binding}" />
+                              </StackPanel>
+                            </Border>
+                          </Grid>
+
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
               </StackPanel>
             </Border>
