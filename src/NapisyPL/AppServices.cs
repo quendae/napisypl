@@ -39,6 +39,9 @@ public sealed class AppServices : IDisposable
     }
 
     private readonly FfmpegManager _ffmpegManager;
+
+    /// <summary>Also used by the review screen to cut the seconds of audio one cue covers.</summary>
+    public FfmpegManager Ffmpeg => _ffmpegManager;
     private readonly ProcessRunner _processRunner;
 
     public static AppServices Shared => SharedInstance.Value;

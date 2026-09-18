@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:review="using:NapisyPL.Review"
+        x:Class="NapisyPL.Review.GenderReviewWindow"
+        x:DataType="review:GenderReviewWindow"
+        Title="SubFlow · niepewne kwestie"
+        Icon="/Assets/subflow.ico"
+        Width="760" Height="620"
+        MinWidth="620" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+
+    <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,0,0,1" Padding="24,18">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Kto to mówi?" FontSize="22" FontWeight="SemiBold" />
+        <TextBlock x:Name="SummaryText" Classes="hint" TextWrapping="Wrap" LineHeight="20"
+                   Text="Przy tych kwestiach głos w filmie brzmi inaczej, niż sugeruje polski tekst. Posłuchaj i zdecyduj." />
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrushApp}" BorderThickness="0,1,0,0" Padding="24,14">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+        <TextBlock x:Name="StatusText" Classes="hint" VerticalAlignment="Center" TextWrapping="Wrap" />
+        <Button Grid.Column="1" Classes="quiet" Content="Zamknij" Click="OnCloseClick" IsCancel="True" />
+        <Button x:Name="SaveButton" Grid.Column="2" Classes="primary" Content="Zapisz napisy"
+                Click="OnSaveClick" IsDefault="True" />
+      </Grid>
+    </Border>
+
+    <ScrollViewer Padding="24,16">
+      <ItemsControl x:Name="QuestionList">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="review:GenderReviewItem">
+            <Border Classes="card" Margin="0,0,0,12">
+              <StackPanel Spacing="10">
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Timecode}" Classes="title" />
+                    <TextBlock Text="{Binding Reason}" Classes="hint" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="quiet" Content="Posłuchaj" VerticalAlignment="Top"
+                          Click="OnPlayClick" CommandParameter="{Binding}"
+                          AutomationProperties.Name="Odtwórz tę kwestię z filmu" />
+                </Grid>
+
+                <TextBlock Text="{Binding English}" Classes="hint" TextWrapping="Wrap" FontStyle="Italic" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                  <Border Padding="12,10" CornerRadius="6"
+                          Background="{DynamicResource SurfaceBrush}"
+                          BorderBrush="{DynamicResource BorderBrushApp}"
+                          BorderThickness="1">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="Zostaw" Classes="hint" />
+                      <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
+                                 IsVisible="{Binding KeptCurrent}" />
+                      <TextBlock Text="{Binding Current}" TextWrapping="Wrap" />
+                      <Button Classes="quiet" Content="Zostaw tak" HorizontalAlignment="Stretch"
+                              Click="OnKeepClick" CommandParameter="{Binding}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Grid.Column="1" Padding="12,10" CornerRadius="6"
+                          Background="{DynamicResource SurfaceBrush}"
+                          BorderBrush="{DynamicResource BorderBrushApp}"
+                          BorderThickness="1">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="Zmień na" Classes="hint" />
+                      <TextBlock Text="wybrane" Classes="hint" FontWeight="SemiBold"
+                                 IsVisible="{Binding TookProposal}" />
+                      <TextBlock Text="{Binding Proposed}" TextWrapping="Wrap" />
+                      <Button Classes="primary" Content="Zmień" HorizontalAlignment="Stretch"
+                              Click="OnAcceptClick" CommandParameter="{Binding}" />
+                    </StackPanel>
+                  </Border>
+                </Grid>
+
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

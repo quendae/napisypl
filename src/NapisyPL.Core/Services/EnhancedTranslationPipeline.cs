@@ -440,6 +440,18 @@ public sealed class EnhancedTranslationPipeline(
                     : $"Enhanced: Quality Pass OK, zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
 
+            // What the review could not settle goes next to the subtitles, for a person to answer.
+            var openQuestions = DeterministicGenderReviewService.CollectOpenQuestions(
+                sourceCues, translated, reviewed, speakers.CueSpeakers, speakers.SpeakerGenderEvidence, speakers.CueGenderEvidence);
+            await GenderReviewQueue.WriteAsync(
+                new GenderReviewQueueFile(inputPath, srtOutput, openQuestions), cancellationToken);
+            logger?.Info(
+                "enhanced_phase",
+                ("file", file),
+                ("stage", "gender_questions"),
+                ("questionCount", openQuestions.Count),
+                ("result", "success"));
+
             string? txtOutput = null;
             if (exportTxt)
             {

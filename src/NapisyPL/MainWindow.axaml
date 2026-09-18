@@ -107,7 +107,7 @@
           </Grid>
         </Border>
 
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="12">
           <Button x:Name="TranslateButton" Classes="primary" Content="Pobierz napisy / tłumacz"
                   Click="OnTranslateClick" IsEnabled="False" MinWidth="210" />
           <Button x:Name="CancelButton" Grid.Column="1" Classes="quiet" Content="Anuluj"
@@ -119,6 +119,9 @@
           </StackPanel>
           <Button x:Name="OpenFolderButton" Grid.Column="3" Classes="quiet" Content="Pokaż plik"
                   Click="OnOpenFolderClick" IsVisible="False" />
+          <Button x:Name="GenderReviewButton" Grid.Column="4" Classes="primary" Content="Sprawdź niepewne"
+                  Click="OnGenderReviewClick" IsVisible="False"
+                  ToolTip.Tip="Kwestie, przy których głos w filmie brzmi inaczej niż polski tekst" />
         </Grid>
       </StackPanel>
     </Border>
