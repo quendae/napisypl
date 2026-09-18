@@ -110,8 +110,11 @@ public sealed class AppServices : IDisposable
         SubtitlePipeline.OnlineSources = sources;
     }
 
-    public static string UserAgent =>
-        "SubFlow v" + (typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
+    /// <summary>The version the installer stamped on this build ("1.0.0").</summary>
+    public static string Version =>
+        typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
+    public static string UserAgent => "SubFlow v" + Version;
 
     private async Task<string?> LoadKeyAsync(string name, CancellationToken cancellationToken)
     {

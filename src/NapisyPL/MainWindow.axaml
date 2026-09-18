@@ -95,6 +95,13 @@
                   <Path Classes="icon" Data="{StaticResource IconFile}" Width="16" Height="16" />
                 </MenuItem.Icon>
               </MenuItem>
+              <Separator />
+              <!-- Information, not an action: readable, but nothing to click. -->
+              <MenuItem IsHitTestVisible="False" Focusable="False">
+                <MenuItem.Header>
+                  <TextBlock x:Name="VersionText" Classes="hint" />
+                </MenuItem.Header>
+              </MenuItem>
             </MenuFlyout>
           </Button.Flyout>
         </Button>

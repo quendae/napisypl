@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         _folderBatch = _services.FolderBatch;
 
         InitializeComponent();
+        VersionText.Text = "SubFlow " + AppServices.Version;
         CompleteEnhancedControlInitialization();
         Shell.DarkTitleBar.Apply(this);
 
