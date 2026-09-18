@@ -212,4 +212,46 @@ public sealed class NamedSpeakerAndCompoundFormTests
         // One name plus the lines under it is still one name.
         Assert.False(speakers.ContainsKey("SPEAKER_01"));
     }
+
+    private static IReadOnlyList<SubtitleCue> ReviewRun(
+        (int Id, string English, string Polish)[] cues,
+        IReadOnlyDictionary<int, SpeakerVoiceGender> labels) =>
+        new DeterministicGenderReviewService().Review(
+            cues.Select(c => Cue(c.Id, c.English)).ToArray(),
+            cues.Select(c => Cue(c.Id, c.Polish)).ToArray(),
+            OneVoice(cues.Select(c => c.Id).ToArray()),
+            new Dictionary<string, SpeakerGenderEvidence>(),
+            new Dictionary<int, CueVoiceGenderEvidence>(),
+            diagnostics: null,
+            hardVoiceTurnOnly: true,
+            labeledCueGender: labels);
+
+    [Fact]
+    public void ADecisionAboutTheSpeakerCoversTheRestOfHerTurn()
+    {
+        // Rectify S01E04 #597: the same woman, four lines from the cue that settled her.
+        var reviewed = ReviewRun(
+            [(1, "I was there.", "Byłem tam."), (2, "I told them everything.", "Powiedziałem im wszystko.")],
+            new Dictionary<int, SpeakerVoiceGender> { [1] = SpeakerVoiceGender.Female });
+
+        Assert.Equal("Byłam tam.", reviewed[0].Text);
+        Assert.Equal("Powiedziałam im wszystko.", reviewed[1].Text);
+    }
+
+    [Fact]
+    public void ANameOfTheOtherGenderInTheSameTurnStopsIt()
+    {
+        var reviewed = ReviewRun(
+            [(1, "I was there.", "Byłem tam."),
+             (2, "I told them everything.", "Powiedziałem im wszystko."),
+             (3, "I drove.", "Prowadziłem.")],
+            new Dictionary<int, SpeakerVoiceGender>
+            {
+                [1] = SpeakerVoiceGender.Female,
+                [3] = SpeakerVoiceGender.Male
+            });
+
+        // Two names disagree about this voice, so the line between them is left alone.
+        Assert.Equal("Powiedziałem im wszystko.", reviewed[1].Text);
+    }
 }

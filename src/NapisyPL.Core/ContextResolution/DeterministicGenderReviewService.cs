@@ -116,6 +116,7 @@ public sealed partial class DeterministicGenderReviewService
         var result = new List<SubtitleCue>(translated.Count);
         var localCueGender = cueGenderEvidence ?? new Dictionary<int, CueVoiceGenderEvidence>();
         var resolvedAddresseeGender = new Dictionary<int, SpeakerVoiceGender>();
+        var resolvedSelfGender = new Dictionary<int, SpeakerVoiceGender>();
 
         foreach (var cue in translated)
         {
@@ -210,6 +211,7 @@ public sealed partial class DeterministicGenderReviewService
                     targetGender = currentSelfGender;
                     confidence = currentSelfConfidence;
                     gatePassed = true;
+                    resolvedSelfGender[cue.Index] = currentSelfGender;
                 }
 
                 var runSelfChanged = false;
@@ -467,7 +469,9 @@ public sealed partial class DeterministicGenderReviewService
             result.Add(changed ? cue with { Text = text } : cue);
         }
 
-        return result;
+        return hardVoiceTurnOnly
+            ? SpreadSelfGenderOverRuns(source, sourceById, result, cueSpeakers, localCueGender, resolvedSelfGender, labeledCueGender)
+            : result;
     }
 
     internal static string FixSpeakerAgreement(string text, SpeakerVoiceGender gender) =>

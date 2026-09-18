@@ -249,11 +249,97 @@ public sealed partial class DeterministicGenderReviewService
     /// speaker label, with no gap over three seconds and no confident pitch that
     /// disagrees with this cue's own.
     /// </summary>
+    /// <summary>
+    /// A cue that settled who is speaking settles it for the rest of that stretch of talk.
+    /// Rectify S01E04: #601 measured female and was corrected, #597 — the same woman, four
+    /// lines earlier in the same scene — kept "Otworzyłem", because a decision reached only
+    /// the cue that produced it. The run breaks on a pause, another voice or a dash, and a
+    /// stretch reachable from two decisions that disagree is left alone.
+    /// </summary>
+    private static IReadOnlyList<SubtitleCue> SpreadSelfGenderOverRuns(
+        IReadOnlyList<SubtitleCue> source,
+        IReadOnlyDictionary<int, SubtitleCue> sourceById,
+        List<SubtitleCue> reviewed,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        IReadOnlyDictionary<int, SpeakerVoiceGender> resolvedSelfGender,
+        IReadOnlyDictionary<int, SpeakerVoiceGender>? labeledCueGender)
+    {
+        if (resolvedSelfGender.Count == 0)
+            return reviewed;
+
+        var spread = new Dictionary<int, SpeakerVoiceGender>();
+        var conflicting = new HashSet<int>();
+        foreach (var (cueId, gender) in resolvedSelfGender)
+        {
+            var run = SelfGenderRun(source, cueSpeakers, cueGenderEvidence, cueId);
+
+            // Chance S01E10 #308: the audio calls this stretch female and the label three
+            // lines up calls the speaker Chance. A name somebody wrote down beats a pitch
+            // that a second voice or a bad boundary can throw off, so the measurement does
+            // not get to speak for the neighbourhood it contradicts.
+            // The pitch that contradicts the label is exactly what ends the run above, so the
+            // label is looked for without that stop: the whole stretch of one voice is asked.
+            if (labeledCueGender is not null &&
+                SameSpeakerRun(source, cueSpeakers, cueGenderEvidence, cueId, MaximumSelfGenderRunHops, stopOnContradictingPitch: false)
+                    .Any(other => labeledCueGender.TryGetValue(other.Index, out var labelled) &&
+                                  labelled != SpeakerVoiceGender.Unknown && labelled != gender))
+            {
+                continue;
+            }
+
+            foreach (var cue in run)
+            {
+                if (resolvedSelfGender.ContainsKey(cue.Index))
+                    continue;
+                if (spread.TryGetValue(cue.Index, out var already) && already != gender)
+                    conflicting.Add(cue.Index);
+                spread[cue.Index] = gender;
+            }
+        }
+
+        for (var index = 0; index < reviewed.Count; index++)
+        {
+            var cue = reviewed[index];
+            if (conflicting.Contains(cue.Index) ||
+                !spread.TryGetValue(cue.Index, out var gender) ||
+                !sourceById.TryGetValue(cue.Index, out var sourceCue) ||
+                HasMultipleDialogueLines(sourceCue.Text) ||
+                HasMultipleDialogueLines(cue.Text))
+            {
+                continue;
+            }
+
+            var text = FixSpeakerAgreement(sourceCue.Text, cue.Text, gender);
+            text = FixFirstPersonPredicateAgreement(sourceCue.Text, text, gender);
+            if (!string.Equals(text, cue.Text, StringComparison.Ordinal))
+                reviewed[index] = cue with { Text = text };
+        }
+
+        return reviewed;
+    }
+
+    /// <summary>
+    /// The same run <see cref="SameSpeakerRun"/> walks, without its two-cue limit: a decision
+    /// about who is talking holds as long as the talking does.
+    /// </summary>
+    private static List<SubtitleCue> SelfGenderRun(
+        IReadOnlyList<SubtitleCue> source,
+        IReadOnlyDictionary<int, string?> cueSpeakers,
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        int cueId) =>
+        SameSpeakerRun(source, cueSpeakers, cueGenderEvidence, cueId, MaximumSelfGenderRunHops);
+
+    /// <summary>One scene's worth of lines, not a whole episode.</summary>
+    private const int MaximumSelfGenderRunHops = 6;
+
     private static List<SubtitleCue> SameSpeakerRun(
         IReadOnlyList<SubtitleCue> source,
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
-        int cueId)
+        int cueId,
+        int maximumHops = MaximumRunHops,
+        bool stopOnContradictingPitch = true)
     {
         var run = new List<SubtitleCue>();
         var position = CuePositionIndex.Find(source, cueId);
@@ -268,7 +354,7 @@ public sealed partial class DeterministicGenderReviewService
         foreach (var step in new[] { -1, 1 })
         {
             var previous = source[position];
-            for (var hop = 1; hop <= MaximumRunHops; hop++)
+            for (var hop = 1; hop <= maximumHops; hop++)
             {
                 var index = position + step * hop;
                 if (index < 0 || index >= source.Count)
@@ -279,7 +365,8 @@ public sealed partial class DeterministicGenderReviewService
                 if (second.Start - first.End > MaximumContinuationGap ||
                     !cueSpeakers.TryGetValue(candidate.Index, out var candidateSpeaker) ||
                     !string.Equals(candidateSpeaker, speaker, StringComparison.Ordinal) ||
-                    (currentPitch != SpeakerVoiceGender.Unknown &&
+                    (stopOnContradictingPitch &&
+                     currentPitch != SpeakerVoiceGender.Unknown &&
                      HardVoiceTurnResolver.TryGetForcedGender(cueGenderEvidence, candidate.Index, out var candidatePitch, out _) &&
                      candidatePitch != currentPitch))
                 {
