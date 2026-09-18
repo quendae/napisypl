@@ -30,7 +30,8 @@ public sealed partial class DeterministicGenderReviewService
         IReadOnlyList<SubtitleCue> reviewed,
         IReadOnlyDictionary<int, string?> cueSpeakers,
         IReadOnlyDictionary<string, SpeakerGenderEvidence> speakerGenderEvidence,
-        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence)
+        IReadOnlyDictionary<int, CueVoiceGenderEvidence> cueGenderEvidence,
+        IReadOnlyDictionary<int, SpeakerVoiceGender>? labeledCueGender = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(reviewed);
@@ -61,6 +62,15 @@ public sealed partial class DeterministicGenderReviewService
                 : SpeakerVoiceGender.Unknown;
             if (written == SpeakerVoiceGender.Unknown)
                 continue;
+
+            // The subtitles name this speaker ("Chance:", a few lines up) and the Polish already
+            // agrees with the name. A voice reading cannot outvote that, so there is nothing to ask.
+            if (labeledCueGender is not null &&
+                labeledCueGender.TryGetValue(cue.Index, out var labeled) &&
+                labeled == written)
+            {
+                continue;
+            }
 
             if (!TryGetQuestionableVoice(cueSpeakers, speakerGenderEvidence, cueGenderEvidence, cue.Index, out var heard, out var reason) ||
                 heard == written)
