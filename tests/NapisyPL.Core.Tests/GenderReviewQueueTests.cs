@@ -77,6 +77,29 @@ public sealed class GenderReviewQueueTests
             profile: new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.95, 4)));
 
     [Fact]
+    public void QuestionsFromOneVoicePointingOneWayShareAGroup()
+    {
+        var source = new[]
+        {
+            new SubtitleCue(1, TimeSpan.Zero, TimeSpan.FromSeconds(2), "I told them."),
+            new SubtitleCue(2, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(6), "I stayed here."),
+            new SubtitleCue(3, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(10), "I went home.")
+        };
+        var polish = new[] { Cue(1, "Powiedziałem im."), Cue(2, "Byłem tutaj."), Cue(3, "Poszedłem do domu.") };
+        var female = new SpeakerGenderEvidence(SpeakerVoiceGender.Female, 0.78, 6);
+
+        var questions = DeterministicGenderReviewService.CollectOpenQuestions(
+            source, polish, polish,
+            new Dictionary<int, string?> { [1] = "SPEAKER_03", [2] = "SPEAKER_03", [3] = "SPEAKER_07" },
+            new Dictionary<string, SpeakerGenderEvidence> { ["SPEAKER_03"] = female, ["SPEAKER_07"] = female },
+            new Dictionary<int, CueVoiceGenderEvidence>());
+
+        Assert.Equal(3, questions.Count);
+        Assert.Equal(questions[0].Voice, questions[1].Voice);
+        Assert.NotEqual(questions[1].Voice, questions[2].Voice);
+    }
+
+    [Fact]
     public void ALineTheSubtitlesNameTheSpeakerOfIsNotAsked() =>
         // "Chance:" stands two lines up and the Polish agrees with it; a voice reading of the
         // scene cannot outvote a name written into the subtitles (Chance S01E10 #312).

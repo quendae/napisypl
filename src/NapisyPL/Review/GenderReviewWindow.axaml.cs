@@ -18,7 +18,9 @@ public partial class GenderReviewWindow : Window
     private readonly GenderReviewQueueFile _queue;
     private readonly CuePlayer _player;
 
-    public ObservableCollection<GenderReviewItem> Questions { get; } = [];
+    public ObservableCollection<GenderReviewGroup> Groups { get; } = [];
+
+    private IEnumerable<GenderReviewItem> Questions => Groups.SelectMany(group => group.Items);
 
     public GenderReviewWindow(GenderReviewQueueFile queue)
     {
@@ -29,17 +31,27 @@ public partial class GenderReviewWindow : Window
         InitializeComponent();
         Shell.DarkTitleBar.Apply(this);
 
-        foreach (var candidate in queue.Cues)
-            Questions.Add(new GenderReviewItem(candidate));
-        QuestionList.ItemsSource = Questions;
-        SummaryText.Text = $"{Questions.Count} {Plural(Questions.Count)} do rozstrzygnięcia w pliku " +
+        // Questions from one voice, all pointing the same way, are one decision. Anything the
+        // diarization could not put a voice on stands alone.
+        var grouped = queue.Cues
+            .Select((candidate, order) => (Item: new GenderReviewItem(candidate), Order: order))
+            .GroupBy(entry => entry.Item.Candidate.Voice ?? "#" + entry.Item.CueId)
+            .OrderBy(group => group.Min(entry => entry.Order));
+        foreach (var group in grouped)
+            Groups.Add(new GenderReviewGroup([.. group.Select(entry => entry.Item)]));
+        GroupList.ItemsSource = Groups;
+
+        var count = queue.Cues.Count;
+        SummaryText.Text = $"{count} {GenderReviewGroup.Plural(count)} do rozstrzygnięcia w pliku " +
                            $"{Path.GetFileName(queue.SubtitlePath)}. Przy każdej z nich głos w filmie brzmi inaczej, " +
-                           "niż sugeruje polski tekst.";
+                           "niż sugeruje polski tekst." +
+                           (Groups.Count < count
+                               ? $" Mówi je {Groups.Count} {(Groups.Count == 1 ? "głos" : "głosy")}, więc da się " +
+                                 "odpowiedzieć za całą grupę naraz."
+                               : string.Empty);
 
         Closed += (_, _) => _player.Dispose();
     }
-
-    private static string Plural(int count) => count == 1 ? "kwestia" : "kwestii";
 
     private async void OnPlayClick(object? sender, RoutedEventArgs e)
     {
@@ -62,16 +74,35 @@ public partial class GenderReviewWindow : Window
 
     private void OnAcceptClick(object? sender, RoutedEventArgs e) => Answer(sender, accepted: true);
 
+    private void OnKeepGroupClick(object? sender, RoutedEventArgs e) => AnswerGroup(sender, accepted: false);
+
+    private void OnAcceptGroupClick(object? sender, RoutedEventArgs e) => AnswerGroup(sender, accepted: true);
+
     private void Answer(object? sender, bool accepted)
     {
         if (sender is Button { CommandParameter: GenderReviewItem item })
         {
             item.Accepted = accepted;
-            var answered = Questions.Count(question => question.IsAnswered);
-            StatusText.Text = answered == Questions.Count
-                ? "Wszystkie kwestie rozstrzygnięte."
-                : $"Rozstrzygnięto {answered} z {Questions.Count}.";
+            ReportProgress();
         }
+    }
+
+    private void AnswerGroup(object? sender, bool accepted)
+    {
+        if (sender is Button { CommandParameter: GenderReviewGroup group })
+        {
+            group.Answer(accepted);
+            ReportProgress();
+        }
+    }
+
+    private void ReportProgress()
+    {
+        var total = Questions.Count();
+        var answered = Questions.Count(question => question.IsAnswered);
+        StatusText.Text = answered == total
+            ? "Wszystkie kwestie rozstrzygnięte."
+            : $"Rozstrzygnięto {answered} z {total}.";
     }
 
     /// <summary>Writes the accepted wordings back into the subtitle file and closes the queue.</summary>
