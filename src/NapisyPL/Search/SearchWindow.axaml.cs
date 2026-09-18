@@ -296,7 +296,7 @@ public partial class SearchWindow : Window
             acquired = true;
 
             var settings = await _services.Settings.LoadAsync();
-            _services.ApplyGenderCorrection(settings.GenderCorrection, settings.StrictVoiceEvidence);
+            _services.ApplyGenderCorrection(settings.GenderCorrection, settings.StrictVoiceEvidence, settings.AskAboutUncertainLines);
             var provider = await _services.CreateProviderFromSettingsAsync(token);
 
             var done = 0;

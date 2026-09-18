@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using NapisyPL.Core.ContextResolution;
 using NapisyPL.Core.Diagnostics;
 using NapisyPL.Core.Models;
 using NapisyPL.Core.Services;
@@ -90,6 +91,7 @@ public partial class MainWindow : Window
         SearchSubtitlesCheckBox.IsChecked = settings.SearchSubtitles;
         EnhancedMenuItem.IsChecked = settings.GenderCorrection;
         HardVoiceMenuItem.IsChecked = settings.StrictVoiceEvidence;
+        AskUncertainMenuItem.IsChecked = settings.AskAboutUncertainLines;
         ApplyGenderCorrectionOptions();
         _loadingSettings = false;
         ApplyProviderUi(useDefaults: false);
@@ -235,6 +237,11 @@ public partial class MainWindow : Window
 
         _inputPath = path;
         SelectedFileText.Text = Path.GetFileName(path);
+
+        // Questions left over from an earlier run of this very file can still be answered.
+        await ShowGenderQuestionsAsync(Path.Combine(
+            Path.GetDirectoryName(path) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(path) + ".pl.srt"));
 
         if (!TranslationPipeline.VideoExtensions.Contains(Path.GetExtension(path)))
         {
@@ -454,6 +461,31 @@ public partial class MainWindow : Window
             result.RequiresReview ? StatusKind.Error : StatusKind.Success);
         OpenFolderButton.Content = "Pokaż plik";
         OpenFolderButton.IsVisible = true;
+        await ShowGenderQuestionsAsync(result.PrimaryOutputPath);
+    }
+
+    private GenderReviewQueueFile? _genderQuestions;
+
+    /// <summary>Offers the lines the review could not settle, if this run left any.</summary>
+    private async Task ShowGenderQuestionsAsync(string subtitlePath)
+    {
+        _genderQuestions = AskUncertainMenuItem.IsChecked
+            ? await GenderReviewQueue.ReadAsync(subtitlePath)
+            : null;
+        GenderReviewButton.IsVisible = _genderQuestions is not null;
+        if (_genderQuestions is not null)
+            GenderReviewButton.Content = $"Sprawdź niepewne ({_genderQuestions.Cues.Count})";
+    }
+
+    private async void OnGenderReviewClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_genderQuestions is null)
+            return;
+
+        var changed = await new Review.GenderReviewWindow(_genderQuestions).ShowDialog<int>(this);
+        await ShowGenderQuestionsAsync(_genderQuestions.SubtitlePath);
+        if (changed > 0)
+            SetStatus($"Poprawiono {changed} kwestii w {Path.GetFileName(_genderQuestions?.SubtitlePath ?? string.Empty)}.", StatusKind.Success);
     }
 
     private async Task TranslateFolderAsync(ITranslationProvider provider)
@@ -709,6 +741,7 @@ public partial class MainWindow : Window
             SearchSubtitles = SearchSubtitlesCheckBox.IsChecked == true,
             GenderCorrection = EnhancedMenuItem.IsChecked,
             StrictVoiceEvidence = HardVoiceMenuItem.IsChecked,
+            AskAboutUncertainLines = AskUncertainMenuItem.IsChecked,
             ExportTxt = ExportTxtMenuItem.IsChecked
         };
         await _settingsStore.SaveAsync(settings);

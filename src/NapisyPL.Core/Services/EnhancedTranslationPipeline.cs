@@ -19,6 +19,9 @@ public sealed class EnhancedTranslationPipeline(
 {
     public bool HardVoiceTurnOnly { get; set; }
 
+    /// <summary>Leave the lines the review could not settle for a person instead of letting them stand.</summary>
+    public bool AskAboutUncertainLines { get; set; } = true;
+
     public async Task<TranslationResult> TranslateAsync(
         string inputPath,
         SubtitleTrack? selectedTrack,
@@ -439,6 +442,22 @@ public sealed class EnhancedTranslationPipeline(
                     ? $"Enhanced test M/K: Quality Pass OK, zapisuję wynik — zmieniono {changedCount} kwestii…"
                     : $"Enhanced: Quality Pass OK, zapisuję wynik — deterministyczny korektor zmienił {changedCount} kwestii…");
             await writer.WriteSrtAsync(srtOutput, reviewed, cancellationToken);
+
+            // What the review could not settle goes next to the subtitles, for a person to answer -
+            // unless the person asked to keep whatever the review decided on its own.
+            if (AskAboutUncertainLines)
+            {
+                var openQuestions = DeterministicGenderReviewService.CollectOpenQuestions(
+                    sourceCues, translated, reviewed, speakers.CueSpeakers, speakers.SpeakerGenderEvidence, speakers.CueGenderEvidence);
+                await GenderReviewQueue.WriteAsync(
+                    new GenderReviewQueueFile(inputPath, srtOutput, openQuestions), cancellationToken);
+                logger?.Info(
+                    "enhanced_phase",
+                    ("file", file),
+                    ("stage", "gender_questions"),
+                    ("questionCount", openQuestions.Count),
+                    ("result", "success"));
+            }
 
             string? txtOutput = null;
             if (exportTxt)

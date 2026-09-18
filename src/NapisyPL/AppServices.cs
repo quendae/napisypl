@@ -39,6 +39,9 @@ public sealed class AppServices : IDisposable
     }
 
     private readonly FfmpegManager _ffmpegManager;
+
+    /// <summary>Also used by the review screen to cut the seconds of audio one cue covers.</summary>
+    public FfmpegManager Ffmpeg => _ffmpegManager;
     private readonly ProcessRunner _processRunner;
 
     public static AppServices Shared => SharedInstance.Value;
@@ -60,12 +63,13 @@ public sealed class AppServices : IDisposable
     public SemaphoreSlim TranslationGate { get; } = new(1, 1);
 
     /// <summary>Applies the gender-correction options to the shared translation pipeline.</summary>
-    public void ApplyGenderCorrection(bool enabled, bool strictVoiceEvidence)
+    public void ApplyGenderCorrection(bool enabled, bool strictVoiceEvidence, bool askAboutUncertainLines = true)
     {
         if (enabled)
         {
             EnsureEnhancedPipeline();
             EnhancedPipeline!.HardVoiceTurnOnly = strictVoiceEvidence;
+            EnhancedPipeline.AskAboutUncertainLines = askAboutUncertainLines;
         }
 
         Pipeline.UseEnhanced = enabled;

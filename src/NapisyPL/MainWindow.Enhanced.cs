@@ -41,6 +41,21 @@ public partial class MainWindow
             await SaveSettingsAsync();
         };
 
+        AskUncertainMenuItem.PropertyChanged += async (_, change) =>
+        {
+            if (change.Property != MenuItem.IsCheckedProperty || _loadingSettings)
+                return;
+
+            ApplyGenderCorrectionOptions();
+            if (!AskUncertainMenuItem.IsChecked)
+                GenderReviewButton.IsVisible = false;
+            SetStatus(AskUncertainMenuItem.IsChecked
+                    ? "Niepewne kwestie trafią do ciebie po tłumaczeniu."
+                    : "Niepewne kwestie zostają tak, jak rozstrzygnął je algorytm.",
+                StatusKind.Normal);
+            await SaveSettingsAsync();
+        };
+
         ExportTxtMenuItem.PropertyChanged += (_, change) =>
         {
             if (change.Property == MenuItem.IsCheckedProperty && _inputFolder is not null)
@@ -97,5 +112,6 @@ public partial class MainWindow
     }
 
     private void ApplyGenderCorrectionOptions() =>
-        _services.ApplyGenderCorrection(EnhancedMenuItem.IsChecked, HardVoiceMenuItem.IsChecked);
+        _services.ApplyGenderCorrection(
+            EnhancedMenuItem.IsChecked, HardVoiceMenuItem.IsChecked, AskUncertainMenuItem.IsChecked);
 }

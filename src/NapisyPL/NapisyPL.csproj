@@ -17,6 +17,8 @@
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <!-- System.Media.SoundPlayer: plays the WAV clip cut for one cue on the review screen. -->
+    <PackageReference Include="System.Windows.Extensions" Version="9.0.0" />
     <ProjectReference Include="../NapisyPL.Core/NapisyPL.Core.csproj" />
   </ItemGroup>
 </Project>
