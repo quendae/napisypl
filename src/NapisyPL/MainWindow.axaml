@@ -64,6 +64,15 @@
                   </StackPanel>
                 </MenuItem.Header>
               </MenuItem>
+              <MenuItem x:Name="AskUncertainMenuItem" ToggleType="CheckBox" IsChecked="True">
+                <MenuItem.Header>
+                  <StackPanel Spacing="2" MaxWidth="300">
+                    <TextBlock Text="Pytaj o niepewne kwestie" FontWeight="SemiBold" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="Kwestie, przy których głos i tekst się nie zgadzają, rozstrzygasz sam — z odsłuchem. Wyłączone: zostaje decyzja algorytmu." />
+                  </StackPanel>
+                </MenuItem.Header>
+              </MenuItem>
               <Separator />
               <MenuItem x:Name="ExplorerMenuItem" ToggleType="CheckBox">
                 <MenuItem.Header>

@@ -20,6 +20,9 @@ public sealed class AppSettings
     /// <summary>Only change a form when the voice evidence is clear.</summary>
     public bool StrictVoiceEvidence { get; set; } = true;
 
+    /// <summary>Collect the lines the review could not settle and let a person decide them.</summary>
+    public bool AskAboutUncertainLines { get; set; } = true;
+
     // Output format is intentionally session-only. Persisting this flag made TXT
     // unexpectedly re-enable on a later launch even when the user did not select it.
     [JsonIgnore]

@@ -63,12 +63,13 @@ public sealed class AppServices : IDisposable
     public SemaphoreSlim TranslationGate { get; } = new(1, 1);
 
     /// <summary>Applies the gender-correction options to the shared translation pipeline.</summary>
-    public void ApplyGenderCorrection(bool enabled, bool strictVoiceEvidence)
+    public void ApplyGenderCorrection(bool enabled, bool strictVoiceEvidence, bool askAboutUncertainLines = true)
     {
         if (enabled)
         {
             EnsureEnhancedPipeline();
             EnhancedPipeline!.HardVoiceTurnOnly = strictVoiceEvidence;
+            EnhancedPipeline.AskAboutUncertainLines = askAboutUncertainLines;
         }
 
         Pipeline.UseEnhanced = enabled;
